@@ -26,6 +26,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
 
 export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const pageInputRef = React.useRef<HTMLInputElement | null>(null);
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(1);
@@ -43,27 +44,28 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     setPage((prev) => Math.min(pageCount, prev + 1));
   }, [pageCount]);
 
-  const commitPageInput = React.useCallback(() => {
-    const trimmed = pageInputValue.trim();
-    if (!/^\d+$/.test(trimmed)) {
-      setPageInputError('Enter a whole page number.');
-      return;
-    }
+  const tryJumpToPage = React.useCallback(
+    (rawValue: string): boolean => {
+      const trimmed = rawValue.trim();
+      if (!/^\d+$/.test(trimmed)) {
+        setPageInputError('Enter a whole page number.');
+        return false;
+      }
 
-    const parsed = Number.parseInt(trimmed, 10);
-    if (!Number.isInteger(parsed)) {
-      setPageInputError('Enter a valid page number.');
-      return;
-    }
+      const parsed = Number.parseInt(trimmed, 10);
+      if (!Number.isInteger(parsed)) {
+        setPageInputError('Enter a valid page number.');
+        return false;
+      }
 
-    if (parsed < 1 || parsed > pageCount) {
-      setPageInputError(`Page must be between 1 and ${pageCount}.`);
-      return;
-    }
-
-    setPage(parsed);
-    setPageInputError(null);
-  }, [pageInputValue, pageCount]);
+      const clamped = Math.min(pageCount, Math.max(1, parsed));
+      setPage(clamped);
+      setPageInputError(null);
+      setPageInputValue(String(clamped));
+      return true;
+    },
+    [pageCount]
+  );
 
   React.useEffect(() => {
     let canceled = false;
@@ -145,6 +147,62 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     setPageInputValue(String(page));
   }, [page]);
 
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      const isTextInput =
+        activeElement?.tagName === 'INPUT' ||
+        activeElement?.tagName === 'TEXTAREA' ||
+        activeElement?.isContentEditable === true;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        pageInputRef.current?.focus();
+        pageInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        if (activeElement === pageInputRef.current) {
+          pageInputRef.current.blur();
+        }
+        return;
+      }
+
+      if (isTextInput) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        goPrev();
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        goNext();
+        return;
+      }
+
+      if (event.key === 'Home') {
+        event.preventDefault();
+        setPage(1);
+        return;
+      }
+
+      if (event.key === 'End') {
+        event.preventDefault();
+        setPage(pageCount);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [goNext, goPrev, pageCount]);
+
   return (
     <Card className="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
       <CardHeader className="space-y-3">
@@ -175,28 +233,46 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             Next
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {pageCount}
-          </span>
-          <div className="ml-2 flex items-center gap-2">
+          <div className="flex items-center gap-2 rounded-md border px-2 py-1">
             <label htmlFor="page-input" className="text-sm text-muted-foreground">
               Page
             </label>
             <Input
+              ref={pageInputRef}
               id="page-input"
               value={pageInputValue}
-              onChange={(event) => setPageInputValue(event.target.value)}
+              onChange={(event) => {
+                setPageInputValue(event.target.value.replace(/\D+/g, ''));
+                setPageInputError(null);
+              }}
+              onFocus={(event) => event.currentTarget.select()}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  commitPageInput();
+                  const ok = tryJumpToPage(pageInputValue);
+                  if (ok) {
+                    event.currentTarget.blur();
+                  }
                 }
               }}
-              onBlur={commitPageInput}
+              onBlur={() => {
+                const trimmed = pageInputValue.trim();
+                if (trimmed.length === 0) {
+                  setPageInputValue(String(page));
+                  setPageInputError(null);
+                  return;
+                }
+
+                const ok = tryJumpToPage(trimmed);
+                if (!ok) {
+                  setPageInputValue(String(page));
+                }
+              }}
               aria-label="Page number"
               className="h-8 w-20"
               inputMode="numeric"
             />
+            <span className="text-sm text-muted-foreground">/ {pageCount}</span>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
@@ -220,26 +296,36 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             </Button>
           </div>
         </div>
-        {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
+        <div className="min-h-5">
+          {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
+        </div>
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/20">
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {!error ? (
-          <div className="relative flex w-full items-center justify-center py-4">
+          <div className="group relative flex w-full items-center justify-center py-4">
             <button
               type="button"
-              className="absolute bottom-0 left-0 top-0 z-20 w-1/5 cursor-pointer bg-gradient-to-r from-black/5 to-transparent transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Previous page"
+              title="Previous page"
               onClick={goPrev}
               disabled={loading || rendering || page <= 1}
-            />
+            >
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
+              <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+            </button>
             <button
               type="button"
-              className="absolute bottom-0 right-0 top-0 z-20 w-1/5 cursor-pointer bg-gradient-to-l from-black/5 to-transparent transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Next page"
+              title="Next page"
               onClick={goNext}
               disabled={loading || rendering || page >= pageCount}
-            />
+            >
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
+              <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+            </button>
             {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
             <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
           </div>
