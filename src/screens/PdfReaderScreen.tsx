@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 
@@ -28,9 +29,41 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(1);
+  const [pageInputValue, setPageInputValue] = React.useState('1');
+  const [pageInputError, setPageInputError] = React.useState<string | null>(null);
   const [scale, setScale] = React.useState(1);
   const [rendering, setRendering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const goPrev = React.useCallback(() => {
+    setPage((prev) => Math.max(1, prev - 1));
+  }, []);
+
+  const goNext = React.useCallback(() => {
+    setPage((prev) => Math.min(pageCount, prev + 1));
+  }, [pageCount]);
+
+  const commitPageInput = React.useCallback(() => {
+    const trimmed = pageInputValue.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      setPageInputError('Enter a whole page number.');
+      return;
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isInteger(parsed)) {
+      setPageInputError('Enter a valid page number.');
+      return;
+    }
+
+    if (parsed < 1 || parsed > pageCount) {
+      setPageInputError(`Page must be between 1 and ${pageCount}.`);
+      return;
+    }
+
+    setPage(parsed);
+    setPageInputError(null);
+  }, [pageInputValue, pageCount]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -108,6 +141,10 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     };
   }, [doc, page, scale]);
 
+  React.useEffect(() => {
+    setPageInputValue(String(page));
+  }, [page]);
+
   return (
     <Card className="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
       <CardHeader className="space-y-3">
@@ -122,7 +159,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            onClick={goPrev}
             disabled={loading || rendering || page <= 1}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -132,7 +169,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setPage((prev) => Math.min(pageCount, prev + 1))}
+            onClick={goNext}
             disabled={loading || rendering || page >= pageCount}
           >
             Next
@@ -141,6 +178,26 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           <span className="text-sm text-muted-foreground">
             Page {page} of {pageCount}
           </span>
+          <div className="ml-2 flex items-center gap-2">
+            <label htmlFor="page-input" className="text-sm text-muted-foreground">
+              Page
+            </label>
+            <Input
+              id="page-input"
+              value={pageInputValue}
+              onChange={(event) => setPageInputValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitPageInput();
+                }
+              }}
+              onBlur={commitPageInput}
+              aria-label="Page number"
+              className="h-8 w-20"
+              inputMode="numeric"
+            />
+          </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
               type="button"
@@ -163,11 +220,26 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             </Button>
           </div>
         </div>
+        {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
       </CardHeader>
       <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/20">
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {!error ? (
-          <div className="flex items-center justify-center py-4">
+          <div className="relative flex w-full items-center justify-center py-4">
+            <button
+              type="button"
+              className="absolute bottom-0 left-0 top-0 z-20 w-1/5 cursor-pointer bg-gradient-to-r from-black/5 to-transparent transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Previous page"
+              onClick={goPrev}
+              disabled={loading || rendering || page <= 1}
+            />
+            <button
+              type="button"
+              className="absolute bottom-0 right-0 top-0 z-20 w-1/5 cursor-pointer bg-gradient-to-l from-black/5 to-transparent transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Next page"
+              onClick={goNext}
+              disabled={loading || rendering || page >= pageCount}
+            />
             {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
             <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
           </div>
