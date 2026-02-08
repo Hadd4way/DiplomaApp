@@ -8,8 +8,11 @@ import type {
   SignUpRequest,
   User
 } from '../shared/ipc';
+import { AppShell } from '@/components/AppShell';
 import { AuthCard } from '@/components/auth-card';
-import { LibraryCard } from '@/components/library-card';
+import type { AppView } from '@/components/Sidebar';
+import { LibraryScreen } from '@/screens/LibraryScreen';
+import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 
 const SESSION_TOKEN_KEY = 'auth.session.token';
 const SESSION_INVALID_ERROR = 'Session is invalid or expired.';
@@ -35,6 +38,7 @@ export default function App() {
   const [user, setUser] = React.useState<User | null>(null);
   const [token, setToken] = React.useState<string | null>(null);
   const [books, setBooks] = React.useState<Book[]>([]);
+  const [currentView, setCurrentView] = React.useState<AppView>('library');
 
   const clearSession = React.useCallback((nextError: string | null = null) => {
     localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -221,18 +225,41 @@ export default function App() {
   }
 
   if (user) {
+    const renderView = () => {
+      if (currentView === 'library') {
+        return (
+          <LibraryScreen
+            user={user}
+            books={books}
+            loading={loading}
+            error={error}
+            onAddSample={onAddSampleBook}
+            onReload={onReloadBooks}
+          />
+        );
+      }
+
+      if (currentView === 'import') {
+        return <PlaceholderScreen title="Import" />;
+      }
+
+      if (currentView === 'notes') {
+        return <PlaceholderScreen title="Notes" />;
+      }
+
+      return <PlaceholderScreen title="Settings" />;
+    };
+
     return (
-      <main className="min-h-screen bg-background px-4 py-10 text-foreground">
-        <LibraryCard
-          user={user}
-          books={books}
-          loading={loading}
-          error={error}
-          onAddSample={onAddSampleBook}
-          onReload={onReloadBooks}
-          onSignOut={onSignOut}
-        />
-      </main>
+      <AppShell
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        user={user}
+        loading={loading}
+        onSignOut={onSignOut}
+      >
+        {renderView()}
+      </AppShell>
     );
   }
 

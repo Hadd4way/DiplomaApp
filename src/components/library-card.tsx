@@ -11,7 +11,6 @@ type Props = {
   error: string | null;
   onAddSample: () => void;
   onReload: () => void;
-  onSignOut: () => void;
 };
 
 const headerDateFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -27,8 +26,7 @@ export function LibraryCard({
   loading,
   error,
   onAddSample,
-  onReload,
-  onSignOut
+  onReload
 }: Props) {
   return (
     <Card className="mx-auto w-full max-w-6xl">
@@ -47,9 +45,6 @@ export function LibraryCard({
             </Button>
             <Button type="button" variant="outline" onClick={onReload} disabled={loading}>
               Reload
-            </Button>
-            <Button type="button" variant="outline" onClick={onSignOut} disabled={loading}>
-              Log out
             </Button>
           </div>
         </div>
