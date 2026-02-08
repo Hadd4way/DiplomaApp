@@ -1,5 +1,7 @@
 import React from 'react';
 import type { AuthResult, PingResponse, SignInRequest, SignUpRequest, User } from '../shared/ipc';
+import { AuthCard } from '@/components/auth-card';
+import { HomeCard } from '@/components/home-card';
 
 const SESSION_TOKEN_KEY = 'auth.session.token';
 
@@ -141,113 +143,47 @@ export default function App() {
 
   if (booting) {
     return (
-      <main>
-        <h1>Loading...</h1>
+      <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+        <div className="mx-auto w-full max-w-md">
+          <p className="text-sm text-muted-foreground">Loading session...</p>
+        </div>
       </main>
     );
   }
 
   if (user) {
     return (
-      <main>
-        <h1>Home</h1>
-        <p>
-          Logged in as {user.displayName} ({user.email})
-        </p>
-        <div className="row">
-          <button type="button" onClick={onPing} disabled={loading}>
-            {loading ? 'Please wait...' : 'Ping main process'}
-          </button>
-          <button type="button" onClick={onSignOut} disabled={loading}>
-            Log out
-          </button>
-        </div>
-        {pingResult && <pre>{JSON.stringify(pingResult, null, 2)}</pre>}
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
+      <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+        <HomeCard
+          user={user}
+          loading={loading}
+          error={error}
+          pingResult={pingResult}
+          onPing={onPing}
+          onSignOut={onSignOut}
+        />
       </main>
     );
   }
 
   return (
-    <main>
-      <h1>Authentication</h1>
-
-      <div className="tabs">
-        <button
-          type="button"
-          className={authMode === 'signIn' ? 'active' : ''}
-          onClick={() => {
-            setAuthMode('signIn');
-            setError(null);
-          }}
-          disabled={loading}
-        >
-          Sign in
-        </button>
-        <button
-          type="button"
-          className={authMode === 'signUp' ? 'active' : ''}
-          onClick={() => {
-            setAuthMode('signUp');
-            setError(null);
-          }}
-          disabled={loading}
-        >
-          Sign up
-        </button>
-      </div>
-
-      <form onSubmit={onSubmitAuth}>
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          autoComplete="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          required
-        />
-
-        {authMode === 'signUp' && (
-          <>
-            <label htmlFor="displayName">Display name</label>
-            <input
-              id="displayName"
-              type="text"
-              autoComplete="name"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              required
-            />
-          </>
-        )}
-
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          minLength={8}
-          required
-        />
-
-        <button type="submit" disabled={loading}>
-          {loading ? 'Please wait...' : authMode === 'signUp' ? 'Create account' : 'Sign in'}
-        </button>
-      </form>
-
-      {error && (
-        <p role="alert" className="error">
-          {error}
-        </p>
-      )}
+    <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+      <AuthCard
+        mode={authMode}
+        email={email}
+        displayName={displayName}
+        password={password}
+        loading={loading}
+        error={error}
+        onModeChange={(mode) => {
+          setAuthMode(mode);
+          setError(null);
+        }}
+        onEmailChange={setEmail}
+        onDisplayNameChange={setDisplayName}
+        onPasswordChange={setPassword}
+        onSubmit={onSubmitAuth}
+      />
     </main>
   );
 }
-
