@@ -5,6 +5,8 @@
   "description": "Minimal Electron + Vite + React + TypeScript desktop app.",
   "main": "dist-electron/electron/main.js",
   "scripts": {
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild:native": "electron-builder install-app-deps",
     "dev": "npm run build:electron && concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite",
     "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
@@ -24,10 +26,13 @@
     }
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^11.8.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",

@@ -1,6 +1,15 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { IPC_CHANNELS, type PingResponse } from '../shared/ipc';
+import {
+  IPC_CHANNELS,
+  type GetCurrentUserRequest,
+  type PingResponse,
+  type SignInRequest,
+  type SignOutRequest,
+  type SignUpRequest
+} from '../shared/ipc';
+import { getDatabase } from './db';
+import { getCurrentUser, signIn, signOut, signUp } from './auth';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,6 +39,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const db = getDatabase(app.getPath('userData'));
+
   ipcMain.handle(IPC_CHANNELS.ping, (): PingResponse => ({
     ok: true,
     message: 'pong',
@@ -39,6 +50,13 @@ app.whenReady().then(() => {
       chrome: process.versions.chrome
     }
   }));
+
+  ipcMain.handle(IPC_CHANNELS.authSignUp, (_event, payload: SignUpRequest) => signUp(db, payload));
+  ipcMain.handle(IPC_CHANNELS.authSignIn, (_event, payload: SignInRequest) => signIn(db, payload));
+  ipcMain.handle(IPC_CHANNELS.authGetCurrentUser, (_event, payload: GetCurrentUserRequest) =>
+    getCurrentUser(db, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.authSignOut, (_event, payload: SignOutRequest) => signOut(db, payload));
 
   createWindow();
 

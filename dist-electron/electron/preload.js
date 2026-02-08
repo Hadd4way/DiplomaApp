@@ -3,7 +3,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const ipc_1 = require("../shared/ipc");
 const api = {
-    ping: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.ping)
+    ping: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.ping),
+    auth: {
+        signUp: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authSignUp, payload),
+        signIn: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authSignIn, payload),
+        getCurrentUser: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authGetCurrentUser, payload),
+        signOut: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authSignOut, payload)
+    }
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);
-electron_1.contextBridge.exposeInMainWorld('electronAPI', api);
