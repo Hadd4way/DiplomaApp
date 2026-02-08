@@ -9,6 +9,7 @@ type Props = {
   books: Book[];
   loading: boolean;
   error: string | null;
+  onReveal: (bookId: string) => void;
   onImport: () => void;
   onAddSample: () => void;
   onReload: () => void;
@@ -26,6 +27,7 @@ export function LibraryCard({
   books,
   loading,
   error,
+  onReveal,
   onImport,
   onAddSample,
   onReload
@@ -70,7 +72,7 @@ export function LibraryCard({
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {books.map((book) => (
               <li key={book.id} className="h-full">
-                <BookCard book={book} />
+                <BookCard book={book} onReveal={onReveal} loading={loading} />
               </li>
             ))}
           </ul>

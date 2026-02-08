@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { dialog, type BrowserWindow, type OpenDialogOptions } from 'electron';
+import { dialog, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
 import type Database from 'better-sqlite3';
 import type {
   Book,
@@ -10,6 +10,8 @@ import type {
   BooksAddSampleResult,
   BooksImportRequest,
   BooksImportResult,
+  BooksRevealRequest,
+  BooksRevealResult,
   BooksListRequest,
   BooksListResult
 } from '../shared/ipc';
@@ -46,6 +48,15 @@ function extensionToFormat(fileExtension: string): BookFormat | null {
     return 'epub';
   }
   return null;
+}
+
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function listBooks(db: Database.Database, payload: BooksListRequest): BooksListResult {
@@ -174,4 +185,47 @@ export async function importBook(
   }
 
   return { ok: true, book };
+}
+
+export async function revealBook(
+  db: Database.Database,
+  payload: BooksRevealRequest,
+  userDataPath: string
+): Promise<BooksRevealResult> {
+  const session = resolveSessionUserId(db, payload.token);
+  if (!session.ok) {
+    return session;
+  }
+
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const bookRow = db
+    .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+    .get(bookId, session.userId) as { id: string; file_path: string | null } | undefined;
+
+  if (!bookRow) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const fallbackFolderPath = path.join(userDataPath, 'books', bookId);
+  const dbFilePath = bookRow.file_path?.trim() || null;
+
+  if (dbFilePath && (await pathExists(dbFilePath))) {
+    shell.showItemInFolder(dbFilePath);
+    return { ok: true };
+  }
+
+  if (!(await pathExists(fallbackFolderPath))) {
+    return { ok: false, error: 'Book file or folder is missing.' };
+  }
+
+  const openError = await shell.openPath(fallbackFolderPath);
+  if (openError) {
+    return { ok: false, error: 'Failed to open book folder.' };
+  }
+
+  return { ok: true };
 }

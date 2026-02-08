@@ -5,6 +5,7 @@ import type {
   BooksAddSampleResult,
   BooksImportResult,
   BooksListResult,
+  BooksRevealResult,
   SignInRequest,
   SignUpRequest,
   User
@@ -51,7 +52,9 @@ export default function App() {
   }, []);
 
   const withSessionHandling = React.useCallback(
-    (result: BooksListResult | BooksAddSampleResult | BooksImportResult): typeof result => {
+    (
+      result: BooksListResult | BooksAddSampleResult | BooksImportResult | BooksRevealResult
+    ): typeof result => {
       if (!result.ok && result.error === SESSION_INVALID_ERROR) {
         clearSession(result.error);
       }
@@ -242,6 +245,29 @@ export default function App() {
     }
   };
 
+  const onRevealBook = async (bookId: string) => {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const api = getRendererApi();
+      const result = withSessionHandling(await api.books.reveal({ token, bookId }));
+      if (!result.ok) {
+        if (result.error !== SESSION_INVALID_ERROR) {
+          setError(result.error);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (booting) {
     return (
       <main className="min-h-screen bg-background px-4 py-10 text-foreground">
@@ -261,6 +287,7 @@ export default function App() {
             books={books}
             loading={loading}
             error={error}
+            onReveal={onRevealBook}
             onImport={onImportBook}
             onAddSample={onAddSampleBook}
             onReload={onReloadBooks}

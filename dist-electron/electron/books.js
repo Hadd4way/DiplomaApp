@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.listBooks = listBooks;
 exports.addSampleBook = addSampleBook;
 exports.importBook = importBook;
+exports.revealBook = revealBook;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
@@ -31,6 +32,15 @@ function extensionToFormat(fileExtension) {
         return 'epub';
     }
     return null;
+}
+async function pathExists(targetPath) {
+    try {
+        await promises_1.default.access(targetPath);
+        return true;
+    }
+    catch {
+        return false;
+    }
 }
 function listBooks(db, payload) {
     const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
@@ -129,4 +139,34 @@ async function importBook(db, payload, userDataPath, ownerWindow) {
         return { ok: false, error: 'Failed to save imported book metadata.' };
     }
     return { ok: true, book };
+}
+async function revealBook(db, payload, userDataPath) {
+    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const bookRow = db
+        .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, session.userId);
+    if (!bookRow) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const fallbackFolderPath = node_path_1.default.join(userDataPath, 'books', bookId);
+    const dbFilePath = bookRow.file_path?.trim() || null;
+    if (dbFilePath && (await pathExists(dbFilePath))) {
+        electron_1.shell.showItemInFolder(dbFilePath);
+        return { ok: true };
+    }
+    if (!(await pathExists(fallbackFolderPath))) {
+        return { ok: false, error: 'Book file or folder is missing.' };
+    }
+    const openError = await electron_1.shell.openPath(fallbackFolderPath);
+    if (openError) {
+        return { ok: false, error: 'Failed to open book folder.' };
+    }
+    return { ok: true };
 }
