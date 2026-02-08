@@ -3,7 +3,6 @@ import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 
@@ -15,6 +14,19 @@ type Props = {
   loading: boolean;
   onBack: () => void;
 };
+
+type ScaleMode = 'fitWidth' | 'manual';
+
+function clampScale(nextScale: number): number {
+  return Math.min(2.5, Math.max(0.5, nextScale));
+}
+
+function computeFitWidthScale(basePageWidth: number, availableWidth: number): number {
+  if (basePageWidth <= 0 || availableWidth <= 0) {
+    return 1;
+  }
+  return clampScale(availableWidth / basePageWidth);
+}
 
 function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
@@ -43,12 +55,16 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
 export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const readerViewportRef = React.useRef<HTMLElement | null>(null);
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(1);
   const [pageInputValue, setPageInputValue] = React.useState('1');
   const [pageInputError, setPageInputError] = React.useState<string | null>(null);
   const [scale, setScale] = React.useState(1);
+  const [scaleMode, setScaleMode] = React.useState<ScaleMode>('fitWidth');
+  const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
+  const [viewportWidth, setViewportWidth] = React.useState(0);
   const [rendering, setRendering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
@@ -119,7 +135,70 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [base64]);
 
   React.useEffect(() => {
+    const viewportElement = readerViewportRef.current;
+    if (!viewportElement) {
+      return;
+    }
+
+    const updateWidth = () => {
+      setViewportWidth(viewportElement.clientWidth);
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) {
+          return;
+        }
+        setViewportWidth(entry.contentRect.width);
+      });
+      observer.observe(viewportElement);
+      return () => {
+        observer.disconnect();
+      };
+    }
+
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
+
+  React.useEffect(() => {
     let canceled = false;
+
+    const applyFitWidthScale = async () => {
+      if (!doc || scaleMode !== 'fitWidth' || viewportWidth <= 0) {
+        return;
+      }
+
+      try {
+        const pdfPage = await doc.getPage(page);
+        if (canceled) {
+          return;
+        }
+
+        const baseViewport = pdfPage.getViewport({ scale: 1 });
+        const availableWidth = Math.max(1, viewportWidth - 48);
+        const nextScale = computeFitWidthScale(baseViewport.width, availableWidth);
+        setScale((prev) => (Math.abs(prev - nextScale) < 0.001 ? prev : nextScale));
+      } catch {
+        // Keep current scale on fit-width calculation failures.
+      }
+    };
+
+    void applyFitWidthScale();
+
+    return () => {
+      canceled = true;
+    };
+  }, [doc, page, scaleMode, viewportWidth]);
+
+  React.useEffect(() => {
+    let canceled = false;
+    let renderTask: { cancel: () => void; promise: Promise<void> } | null = null;
 
     const renderPage = async () => {
       if (!doc || !canvasRef.current) {
@@ -142,16 +221,22 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           return;
         }
 
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        await pdfPage.render({ canvasContext: context, viewport }).promise;
-      } catch {
-        if (!canceled) {
-          setError('Failed to render PDF page.');
-        }
-      } finally {
-        if (!canceled) {
-          setRendering(false);
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          setCanvasWidth(viewport.width);
+          renderTask = pdfPage.render({ canvasContext: context, viewport });
+          await renderTask.promise;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const normalized = message.toLowerCase();
+          const isCanceled =
+            normalized.includes('cancel') || normalized.includes('multiple render() operations');
+          if (!canceled && !isCanceled) {
+            setError('Failed to render PDF page.');
+          }
+        } finally {
+          if (!canceled) {
+            setRendering(false);
         }
       }
     };
@@ -159,6 +244,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     void renderPage();
     return () => {
       canceled = true;
+      renderTask?.cancel();
     };
   }, [doc, page, scale]);
 
@@ -297,9 +383,9 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [goNext, goPrev, pageCount]);
 
   return (
-    <Card className="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
-      <CardHeader className="space-y-1.5 pb-2">
-        <div className="grid grid-cols-3 items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <header className="h-16 shrink-0 border-b bg-background">
+        <div className="grid h-full grid-cols-3 items-center gap-2 px-4">
           <Button
             type="button"
             variant="outline"
@@ -310,13 +396,16 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           >
             Back to Library
           </Button>
-          <CardTitle className="text-center text-lg">{title}</CardTitle>
+          <h1 className="truncate px-2 text-center text-lg font-semibold">{title}</h1>
           <div className="ml-auto flex items-center gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setScale((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(1))))}
+              onClick={() => {
+                setScaleMode('manual');
+                setScale((prev) => clampScale(Number((prev - 0.1).toFixed(1))));
+              }}
               disabled={loading || rendering}
               aria-label="Zoom out"
             >
@@ -325,9 +414,22 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             <span className="w-14 text-center text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
             <Button
               type="button"
+              variant={scaleMode === 'fitWidth' ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setScaleMode('fitWidth')}
+              disabled={loading || rendering}
+              aria-label="Fit to width"
+            >
+              Fit
+            </Button>
+            <Button
+              type="button"
               variant="outline"
               size="sm"
-              onClick={() => setScale((prev) => Math.min(3, Number((prev + 0.1).toFixed(1))))}
+              onClick={() => {
+                setScaleMode('manual');
+                setScale((prev) => clampScale(Number((prev + 0.1).toFixed(1))));
+              }}
               disabled={loading || rendering}
               aria-label="Zoom in"
             >
@@ -335,10 +437,10 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             </Button>
           </div>
         </div>
-      </CardHeader>
+      </header>
 
-      <CardContent className="min-h-0 flex-1 p-4 pt-0">
-        <div className="flex h-full min-h-0 gap-4">
+      <main className="flex flex-1 min-h-0">
+        <div className="h-full w-[280px] shrink-0 border-r bg-background">
           <PdfSidebar
             numPages={pageCount}
             pageInputRef={pageInputRef}
@@ -381,12 +483,17 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
               setPageInputError(null);
             }}
           />
+        </div>
 
-          <section className="flex min-h-0 flex-1 flex-col items-center overflow-auto rounded-md bg-muted/20">
-            <div className="flex w-full max-w-5xl flex-1 flex-col items-center justify-center">
+        <section ref={readerViewportRef} className="h-full min-w-0 flex-1 overflow-auto bg-muted/20">
+          <div className="flex min-h-full w-full justify-center p-6">
+            <div
+              className="group relative flex items-start justify-center"
+              style={{ width: canvasWidth > 0 ? `${canvasWidth}px` : 'auto', maxWidth: '100%' }}
+            >
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
               {!error ? (
-                <div className="group relative flex w-full items-center justify-center py-4">
+                <>
                   <button
                     type="button"
                     className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -411,36 +518,30 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
                   </button>
                   {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
                   <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
-                </div>
+                </>
               ) : null}
             </div>
+          </div>
+        </section>
+      </main>
 
-            <div className="w-full max-w-5xl px-2 pb-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={goPrev}
-                  disabled={loading || rendering || page <= 1}
-                >
-                  <ChevronLeft className="mr-1 h-4 w-4" />
-                  Prev
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={goNext}
-                  disabled={loading || rendering || page >= pageCount}
-                >
-                  Next
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </section>
+      <footer className="h-16 shrink-0 border-t bg-background">
+        <div className="flex h-full items-center justify-between px-4">
+          <Button type="button" variant="outline" onClick={goPrev} disabled={loading || rendering || page <= 1}>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Prev
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={goNext}
+            disabled={loading || rendering || page >= pageCount}
+          >
+            Next
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
         </div>
-      </CardContent>
-    </Card>
+      </footer>
+    </div>
   );
 }
-

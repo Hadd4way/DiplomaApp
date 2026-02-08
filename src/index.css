@@ -3,6 +3,12 @@
 @tailwind utilities;
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   :root {
     --background: 210 40% 98%;
     --foreground: 222.2 47.4% 11.2%;
@@ -27,6 +33,6 @@
   }
 
   body {
-    @apply m-0 bg-background font-sans text-foreground antialiased;
+    @apply m-0 overflow-hidden bg-background font-sans text-foreground antialiased;
   }
 }

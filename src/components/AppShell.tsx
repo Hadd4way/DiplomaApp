@@ -20,7 +20,7 @@ export function AppShell({
   children
 }: Props) {
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
       <Sidebar
         currentView={currentView}
         onViewChange={onViewChange}
@@ -28,8 +28,7 @@ export function AppShell({
         loading={loading}
         onSignOut={onSignOut}
       />
-      <main className="flex-1 p-6">{children}</main>
+      <main className="flex min-h-0 flex-1 overflow-hidden p-6">{children}</main>
     </div>
   );
 }
-

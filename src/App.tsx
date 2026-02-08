@@ -349,7 +349,7 @@ export default function App() {
 
   if (booting) {
     return (
-      <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+      <main className="h-full overflow-auto bg-background px-4 py-10 text-foreground">
         <div className="mx-auto w-full max-w-md">
           <p className="text-sm text-muted-foreground">Loading session...</p>
         </div>
@@ -445,7 +445,7 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 py-10 text-foreground">
+    <main className="h-full overflow-auto bg-background px-4 py-10 text-foreground">
       <AuthCard
         mode={authMode}
         email={email}
