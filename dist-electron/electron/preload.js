@@ -12,7 +12,8 @@ const api = {
     },
     books: {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList, payload),
-        addSample: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample, payload)
+        addSample: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample, payload),
+        import: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksImport, payload)
     }
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);

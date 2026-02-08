@@ -9,6 +9,7 @@ type Props = {
   books: Book[];
   loading: boolean;
   error: string | null;
+  onImport: () => void;
   onAddSample: () => void;
   onReload: () => void;
 };
@@ -25,6 +26,7 @@ export function LibraryCard({
   books,
   loading,
   error,
+  onImport,
   onAddSample,
   onReload
 }: Props) {
@@ -40,6 +42,9 @@ export function LibraryCard({
           </div>
 
           <div className="flex flex-wrap gap-2 sm:justify-end">
+            <Button type="button" variant="outline" onClick={onImport} disabled={loading}>
+              Import book
+            </Button>
             <Button type="button" onClick={onAddSample} disabled={loading}>
               {loading ? 'Please wait...' : 'Add sample book'}
             </Button>
@@ -52,9 +57,14 @@ export function LibraryCard({
         {books.length === 0 ? (
           <div className="flex min-h-56 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-muted/20 p-6 text-center">
             <p className="text-sm text-muted-foreground">No books yet. Add a sample book or import one.</p>
-            <Button type="button" onClick={onAddSample} disabled={loading}>
-              {loading ? 'Please wait...' : 'Add sample book'}
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button type="button" variant="outline" onClick={onImport} disabled={loading}>
+                Import book
+              </Button>
+              <Button type="button" onClick={onAddSample} disabled={loading}>
+                {loading ? 'Please wait...' : 'Add sample book'}
+              </Button>
+            </div>
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

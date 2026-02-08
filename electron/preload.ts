@@ -11,7 +11,8 @@ const api: RendererApi = {
   },
   books: {
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksList, payload),
-    addSample: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample, payload)
+    addSample: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample, payload),
+    import: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksImport, payload)
   }
 };
 

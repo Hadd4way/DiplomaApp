@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import {
   type BooksAddSampleRequest,
+  type BooksImportRequest,
   type BooksListRequest,
   IPC_CHANNELS,
   type GetCurrentUserRequest,
@@ -12,7 +13,7 @@ import {
 } from '../shared/ipc';
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
-import { addSampleBook, listBooks } from './books';
+import { addSampleBook, importBook, listBooks } from './books';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -63,6 +64,9 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.booksList, (_event, payload: BooksListRequest) => listBooks(db, payload));
   ipcMain.handle(IPC_CHANNELS.booksAddSample, (_event, payload: BooksAddSampleRequest) =>
     addSampleBook(db, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.booksImport, (_event, payload: BooksImportRequest) =>
+    importBook(db, payload, app.getPath('userData'), mainWindow)
   );
 
   createWindow();

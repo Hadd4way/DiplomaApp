@@ -3,6 +3,7 @@ import type {
   AuthResult,
   Book,
   BooksAddSampleResult,
+  BooksImportResult,
   BooksListResult,
   SignInRequest,
   SignUpRequest,
@@ -50,7 +51,7 @@ export default function App() {
   }, []);
 
   const withSessionHandling = React.useCallback(
-    (result: BooksListResult | BooksAddSampleResult): typeof result => {
+    (result: BooksListResult | BooksAddSampleResult | BooksImportResult): typeof result => {
       if (!result.ok && result.error === SESSION_INVALID_ERROR) {
         clearSession(result.error);
       }
@@ -214,6 +215,33 @@ export default function App() {
     }
   };
 
+  const onImportBook = async () => {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const api = getRendererApi();
+      const result = withSessionHandling(await api.books.import({ token }));
+      if (!result.ok) {
+        if (result.error !== SESSION_INVALID_ERROR) {
+          setError(result.error);
+        }
+        return;
+      }
+
+      setCurrentView('library');
+      await loadBooks(token);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (booting) {
     return (
       <main className="min-h-screen bg-background px-4 py-10 text-foreground">
@@ -233,6 +261,7 @@ export default function App() {
             books={books}
             loading={loading}
             error={error}
+            onImport={onImportBook}
             onAddSample={onAddSampleBook}
             onReload={onReloadBooks}
           />
@@ -240,7 +269,14 @@ export default function App() {
       }
 
       if (currentView === 'import') {
-        return <PlaceholderScreen title="Import" />;
+        return (
+          <PlaceholderScreen
+            title="Import"
+            actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB'}
+            actionDisabled={loading}
+            onAction={onImportBook}
+          />
+        );
       }
 
       if (currentView === 'notes') {
@@ -284,4 +320,3 @@ export default function App() {
     </main>
   );
 }
-

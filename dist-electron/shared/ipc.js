@@ -8,5 +8,6 @@ exports.IPC_CHANNELS = {
     authGetCurrentUser: 'auth:get-current-user',
     authSignOut: 'auth:sign-out',
     booksList: 'books:list',
-    booksAddSample: 'books:add-sample'
+    booksAddSample: 'books:add-sample',
+    booksImport: 'books:import'
 };
