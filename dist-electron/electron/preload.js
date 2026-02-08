@@ -14,7 +14,8 @@ const api = {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList, payload),
         addSample: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample, payload),
         import: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksImport, payload),
-        reveal: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksReveal, payload)
+        reveal: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksReveal, payload),
+        delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksDelete, payload)
     }
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);

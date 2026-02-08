@@ -8,6 +8,8 @@ import type {
   BookFormat,
   BooksAddSampleRequest,
   BooksAddSampleResult,
+  BooksDeleteRequest,
+  BooksDeleteResult,
   BooksImportRequest,
   BooksImportResult,
   BooksRevealRequest,
@@ -225,6 +227,60 @@ export async function revealBook(
   const openError = await shell.openPath(fallbackFolderPath);
   if (openError) {
     return { ok: false, error: 'Failed to open book folder.' };
+  }
+
+  return { ok: true };
+}
+
+export async function deleteBook(
+  db: Database.Database,
+  payload: BooksDeleteRequest,
+  userDataPath: string
+): Promise<BooksDeleteResult> {
+  const session = resolveSessionUserId(db, payload.token);
+  if (!session.ok) {
+    return session;
+  }
+
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const bookRow = db
+    .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+    .get(bookId, session.userId) as { id: string; file_path: string | null } | undefined;
+
+  if (!bookRow) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const preferredFolderPath = path.join(userDataPath, 'books', bookId);
+  const normalizedPreferredFolder = path.resolve(preferredFolderPath);
+
+  const filePath = bookRow.file_path?.trim() || null;
+  if (filePath) {
+    const normalizedFilePath = path.resolve(filePath);
+    if (!normalizedFilePath.startsWith(normalizedPreferredFolder + path.sep)) {
+      // Ignore unexpected external path and still operate on the managed storage folder.
+    }
+  }
+
+  try {
+    await fs.rm(preferredFolderPath, { recursive: true, force: true });
+  } catch {
+    return {
+      ok: false,
+      error: 'Failed to delete local files. Close any app using this file and try again.'
+    };
+  }
+
+  const deleteResult = db
+    .prepare('DELETE FROM books WHERE id = ? AND user_id = ?')
+    .run(bookId, session.userId);
+
+  if (deleteResult.changes === 0) {
+    return { ok: false, error: 'Book not found' };
   }
 
   return { ok: true };

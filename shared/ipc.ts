@@ -7,7 +7,8 @@ export const IPC_CHANNELS = {
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
-  booksReveal: 'books:reveal'
+  booksReveal: 'books:reveal',
+  booksDelete: 'books:delete'
 } as const;
 
 export type PingResponse = {
@@ -47,6 +48,7 @@ export type BooksListResult = { ok: true; books: Book[] } | AuthError;
 export type BooksAddSampleResult = { ok: true; book: Book } | AuthError;
 export type BooksImportResult = { ok: true; book: Book } | AuthError;
 export type BooksRevealResult = { ok: true } | AuthError;
+export type BooksDeleteResult = { ok: true } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -84,6 +86,11 @@ export type BooksRevealRequest = {
   bookId: string;
 };
 
+export type BooksDeleteRequest = {
+  token: string;
+  bookId: string;
+};
+
 export interface RendererAuthApi {
   signUp: (payload: SignUpRequest) => Promise<AuthResult>;
   signIn: (payload: SignInRequest) => Promise<AuthResult>;
@@ -96,6 +103,7 @@ export interface RendererBooksApi {
   addSample: (payload: BooksAddSampleRequest) => Promise<BooksAddSampleResult>;
   import: (payload: BooksImportRequest) => Promise<BooksImportResult>;
   reveal: (payload: BooksRevealRequest) => Promise<BooksRevealResult>;
+  delete: (payload: BooksDeleteRequest) => Promise<BooksDeleteResult>;
 }
 
 export interface RendererApi {

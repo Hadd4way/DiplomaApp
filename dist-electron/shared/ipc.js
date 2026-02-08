@@ -10,5 +10,6 @@ exports.IPC_CHANNELS = {
     booksList: 'books:list',
     booksAddSample: 'books:add-sample',
     booksImport: 'books:import',
-    booksReveal: 'books:reveal'
+    booksReveal: 'books:reveal',
+    booksDelete: 'books:delete'
 };

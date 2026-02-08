@@ -7,6 +7,7 @@ exports.listBooks = listBooks;
 exports.addSampleBook = addSampleBook;
 exports.importBook = importBook;
 exports.revealBook = revealBook;
+exports.deleteBook = deleteBook;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
@@ -167,6 +168,47 @@ async function revealBook(db, payload, userDataPath) {
     const openError = await electron_1.shell.openPath(fallbackFolderPath);
     if (openError) {
         return { ok: false, error: 'Failed to open book folder.' };
+    }
+    return { ok: true };
+}
+async function deleteBook(db, payload, userDataPath) {
+    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const bookRow = db
+        .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, session.userId);
+    if (!bookRow) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const preferredFolderPath = node_path_1.default.join(userDataPath, 'books', bookId);
+    const normalizedPreferredFolder = node_path_1.default.resolve(preferredFolderPath);
+    const filePath = bookRow.file_path?.trim() || null;
+    if (filePath) {
+        const normalizedFilePath = node_path_1.default.resolve(filePath);
+        if (!normalizedFilePath.startsWith(normalizedPreferredFolder + node_path_1.default.sep)) {
+            // Ignore unexpected external path and still operate on the managed storage folder.
+        }
+    }
+    try {
+        await promises_1.default.rm(preferredFolderPath, { recursive: true, force: true });
+    }
+    catch {
+        return {
+            ok: false,
+            error: 'Failed to delete local files. Close any app using this file and try again.'
+        };
+    }
+    const deleteResult = db
+        .prepare('DELETE FROM books WHERE id = ? AND user_id = ?')
+        .run(bookId, session.userId);
+    if (deleteResult.changes === 0) {
+        return { ok: false, error: 'Book not found' };
     }
     return { ok: true };
 }
