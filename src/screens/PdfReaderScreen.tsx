@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
+import { type PdfOutlineItem } from '@/components/outline-tree';
+import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 
@@ -24,6 +25,21 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.map((item) => {
+    const node = item as { title?: string; dest?: unknown; items?: unknown };
+    return {
+      title: node.title ?? '',
+      dest: node.dest,
+      items: normalizeOutlineItems(node.items)
+    };
+  });
+}
+
 export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -35,6 +51,9 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [scale, setScale] = React.useState(1);
   const [rendering, setRendering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
+  const [outlineLoading, setOutlineLoading] = React.useState(false);
+  const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
 
   const goPrev = React.useCallback(() => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -148,6 +167,80 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [page]);
 
   React.useEffect(() => {
+    let canceled = false;
+
+    const loadOutline = async () => {
+      if (!doc) {
+        setOutlineItems([]);
+        return;
+      }
+
+      setOutlineLoading(true);
+      outlinePageCacheRef.current.clear();
+      try {
+        const outline = await doc.getOutline();
+        if (!canceled) {
+          setOutlineItems(normalizeOutlineItems(outline));
+        }
+      } catch {
+        if (!canceled) {
+          setOutlineItems([]);
+        }
+      } finally {
+        if (!canceled) {
+          setOutlineLoading(false);
+        }
+      }
+    };
+
+    void loadOutline();
+    return () => {
+      canceled = true;
+    };
+  }, [doc]);
+
+  const resolveOutlineItemPage = React.useCallback(
+    async (item: PdfOutlineItem, key: string): Promise<number | null> => {
+      if (!doc) {
+        return null;
+      }
+
+      const cached = outlinePageCacheRef.current.get(key);
+      if (cached) {
+        return cached;
+      }
+
+      let destArray: unknown[] | null = null;
+      if (typeof item.dest === 'string') {
+        destArray = (await doc.getDestination(item.dest)) as unknown[] | null;
+      } else if (Array.isArray(item.dest)) {
+        destArray = item.dest as unknown[];
+      } else {
+        return null;
+      }
+
+      if (!destArray || destArray.length === 0) {
+        return null;
+      }
+
+      const pageRef = destArray[0];
+      if (!pageRef) {
+        return null;
+      }
+
+      try {
+        const pageIndex = await doc.getPageIndex(pageRef as Parameters<PDFDocumentProxy['getPageIndex']>[0]);
+        const pageNumber = pageIndex + 1;
+        outlinePageCacheRef.current.set(key, pageNumber);
+        return pageNumber;
+      } catch {
+        return null;
+      }
+    },
+    [doc]
+  );
+
+  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement as HTMLElement | null;
       const isTextInput =
@@ -242,113 +335,112 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             </Button>
           </div>
         </div>
-
-        <div className="flex flex-col items-center gap-0">
-          <div className="flex items-center gap-2 rounded-md border px-2 py-1">
-            <label htmlFor="page-input" className="text-sm text-muted-foreground">
-              Page
-            </label>
-            <Input
-              ref={pageInputRef}
-              id="page-input"
-              value={pageInputValue}
-              onChange={(event) => {
-                setPageInputValue(event.target.value.replace(/\D+/g, ''));
-                setPageInputError(null);
-              }}
-              onFocus={(event) => event.currentTarget.select()}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  const ok = tryJumpToPage(pageInputValue);
-                  if (ok) {
-                    event.currentTarget.blur();
-                  }
-                }
-              }}
-              onBlur={() => {
-                const trimmed = pageInputValue.trim();
-                if (trimmed.length === 0) {
-                  setPageInputValue(String(page));
-                  setPageInputError(null);
-                  return;
-                }
-
-                const ok = tryJumpToPage(trimmed);
-                if (!ok) {
-                  setPageInputValue(String(page));
-                }
-              }}
-              aria-label="Page number"
-              className="h-8 w-20"
-              inputMode="numeric"
-            />
-            <span className="text-sm text-muted-foreground">/ {pageCount}</span>
-          </div>
-          <div className="min-h-3">
-            {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
-          </div>
-        </div>
       </CardHeader>
 
       <CardContent className="min-h-0 flex-1 p-4 pt-0">
-        <section className="flex h-full min-h-0 flex-col items-center overflow-auto rounded-md bg-muted/20">
-          <div className="flex w-full max-w-5xl flex-1 flex-col items-center justify-center">
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            {!error ? (
-              <div className="group relative flex w-full items-center justify-center py-4">
-                <button
+        <div className="flex h-full min-h-0 gap-4">
+          <PdfSidebar
+            numPages={pageCount}
+            pageInputRef={pageInputRef}
+            pageInputValue={pageInputValue}
+            pageInputError={pageInputError}
+            loading={loading}
+            rendering={rendering}
+            onPageInputChange={(value) => {
+              setPageInputValue(value.replace(/\D+/g, ''));
+              setPageInputError(null);
+            }}
+            onPageInputFocus={() => {
+              pageInputRef.current?.select();
+            }}
+            onPageInputEnter={() => {
+              pageInputRef.current?.blur();
+            }}
+            onPageInputBlur={() => {
+              const trimmed = pageInputValue.trim();
+              if (trimmed.length === 0) {
+                setPageInputValue(String(page));
+                setPageInputError(null);
+                return;
+              }
+
+              const ok = tryJumpToPage(trimmed);
+              if (!ok) {
+                setPageInputValue(String(page));
+              }
+            }}
+            onJumpToPage={tryJumpToPage}
+            outlineItems={outlineItems}
+            outlineLoading={outlineLoading}
+            onOutlineSelect={async (item, key) => {
+              const resolvedPage = await resolveOutlineItemPage(item, key);
+              if (!resolvedPage) {
+                return;
+              }
+              setPage(resolvedPage);
+              setPageInputError(null);
+            }}
+          />
+
+          <section className="flex min-h-0 flex-1 flex-col items-center overflow-auto rounded-md bg-muted/20">
+            <div className="flex w-full max-w-5xl flex-1 flex-col items-center justify-center">
+              {error ? <p className="text-sm text-destructive">{error}</p> : null}
+              {!error ? (
+                <div className="group relative flex w-full items-center justify-center py-4">
+                  <button
+                    type="button"
+                    className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Previous page"
+                    title="Previous page"
+                    onClick={goPrev}
+                    disabled={loading || rendering || page <= 1}
+                  >
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
+                    <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                  </button>
+                  <button
+                    type="button"
+                    className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Next page"
+                    title="Next page"
+                    onClick={goNext}
+                    disabled={loading || rendering || page >= pageCount}
+                  >
+                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
+                    <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                  </button>
+                  {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
+                  <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="w-full max-w-5xl px-2 pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Button
                   type="button"
-                  className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Previous page"
-                  title="Previous page"
+                  variant="outline"
                   onClick={goPrev}
                   disabled={loading || rendering || page <= 1}
                 >
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
-                  <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
-                </button>
-                <button
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Prev
+                </Button>
+                <Button
                   type="button"
-                  className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Next page"
-                  title="Next page"
+                  variant="outline"
                   onClick={goNext}
                   disabled={loading || rendering || page >= pageCount}
                 >
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
-                  <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
-                </button>
-                {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
-                <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
+                  Next
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
               </div>
-            ) : null}
-          </div>
-
-          <div className="w-full max-w-5xl px-2 pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={goPrev}
-                disabled={loading || rendering || page <= 1}
-              >
-                <ChevronLeft className="mr-1 h-4 w-4" />
-                Prev
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={goNext}
-                disabled={loading || rendering || page >= pageCount}
-              >
-                Next
-                <ChevronRight className="ml-1 h-4 w-4" />
-              </Button>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </CardContent>
     </Card>
   );
 }
+
