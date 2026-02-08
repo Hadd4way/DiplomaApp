@@ -1,9 +1,3 @@
-export {};
+import '../shared/ipc';
 
-declare global {
-  interface Window {
-    electronAPI: {
-      ping: () => string;
-    };
-  }
-}
+export {};

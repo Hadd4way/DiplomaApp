@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Minimal Electron + Vite + React + TypeScript desktop app.",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite",
