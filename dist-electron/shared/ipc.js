@@ -11,5 +11,6 @@ exports.IPC_CHANNELS = {
     booksAddSample: 'books:add-sample',
     booksImport: 'books:import',
     booksReveal: 'books:reveal',
-    booksDelete: 'books:delete'
+    booksDelete: 'books:delete',
+    booksGetPdfData: 'books:get-pdf-data'
 };

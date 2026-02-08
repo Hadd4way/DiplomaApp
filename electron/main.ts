@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   type BooksAddSampleRequest,
   type BooksDeleteRequest,
+  type BooksGetPdfDataRequest,
   type BooksImportRequest,
   type BooksRevealRequest,
   type BooksListRequest,
@@ -15,7 +16,7 @@ import {
 } from '../shared/ipc';
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
-import { addSampleBook, deleteBook, importBook, listBooks, revealBook } from './books';
+import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBook } from './books';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -75,6 +76,9 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.booksDelete, (_event, payload: BooksDeleteRequest) =>
     deleteBook(db, payload, app.getPath('userData'))
+  );
+  ipcMain.handle(IPC_CHANNELS.booksGetPdfData, (_event, payload: BooksGetPdfDataRequest) =>
+    getPdfData(db, payload)
   );
 
   createWindow();

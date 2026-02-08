@@ -14,7 +14,8 @@ const api: RendererApi = {
     addSample: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample, payload),
     import: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksImport, payload),
     reveal: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksReveal, payload),
-    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload)
+    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
+    getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload)
   }
 };
 

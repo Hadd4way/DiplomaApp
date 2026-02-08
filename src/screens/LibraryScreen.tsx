@@ -6,6 +6,7 @@ type Props = {
   books: Book[];
   loading: boolean;
   error: string | null;
+  onOpen: (book: Book) => void;
   onReveal: (bookId: string) => void;
   onDelete: (bookId: string) => void;
   onImport: () => void;
@@ -18,6 +19,7 @@ export function LibraryScreen({
   books,
   loading,
   error,
+  onOpen,
   onReveal,
   onDelete,
   onImport,
@@ -30,6 +32,7 @@ export function LibraryScreen({
       books={books}
       loading={loading}
       error={error}
+      onOpen={onOpen}
       onReveal={onReveal}
       onDelete={onDelete}
       onImport={onImport}

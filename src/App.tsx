@@ -4,6 +4,7 @@ import type {
   Book,
   BooksAddSampleResult,
   BooksDeleteResult,
+  BooksGetPdfDataResult,
   BooksImportResult,
   BooksListResult,
   BooksRevealResult,
@@ -15,6 +16,7 @@ import { AppShell } from '@/components/AppShell';
 import { AuthCard } from '@/components/auth-card';
 import type { AppView } from '@/components/Sidebar';
 import { LibraryScreen } from '@/screens/LibraryScreen';
+import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 
 const SESSION_TOKEN_KEY = 'auth.session.token';
@@ -42,12 +44,16 @@ export default function App() {
   const [token, setToken] = React.useState<string | null>(null);
   const [books, setBooks] = React.useState<Book[]>([]);
   const [currentView, setCurrentView] = React.useState<AppView>('library');
+  const [activeBook, setActiveBook] = React.useState<Book | null>(null);
+  const [activePdfData, setActivePdfData] = React.useState<{ base64: string; title: string } | null>(null);
 
   const clearSession = React.useCallback((nextError: string | null = null) => {
     localStorage.removeItem(SESSION_TOKEN_KEY);
     setToken(null);
     setUser(null);
     setBooks([]);
+    setActiveBook(null);
+    setActivePdfData(null);
     setPassword('');
     setError(nextError);
   }, []);
@@ -60,6 +66,7 @@ export default function App() {
         | BooksImportResult
         | BooksRevealResult
         | BooksDeleteResult
+        | BooksGetPdfDataResult
     ): typeof result => {
       if (!result.ok && result.error === SESSION_INVALID_ERROR) {
         clearSession(result.error);
@@ -251,6 +258,46 @@ export default function App() {
     }
   };
 
+  const onOpenBook = async (book: Book) => {
+    if (book.format === 'epub') {
+      setActiveBook(book);
+      setActivePdfData(null);
+      setError(null);
+      return;
+    }
+
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const api = getRendererApi();
+      const result = withSessionHandling(await api.books.getPdfData({ token, bookId: book.id }));
+      if (!result.ok) {
+        if (result.error !== SESSION_INVALID_ERROR) {
+          setError(result.error);
+        }
+        return;
+      }
+
+      setActiveBook(book);
+      setActivePdfData({ base64: result.base64, title: result.title });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onBackToLibrary = () => {
+    setActiveBook(null);
+    setActivePdfData(null);
+    setCurrentView('library');
+  };
+
   const onRevealBook = async (bookId: string) => {
     if (!token) {
       return;
@@ -313,12 +360,46 @@ export default function App() {
   if (user) {
     const renderView = () => {
       if (currentView === 'library') {
+        if (activeBook && activeBook.format === 'pdf') {
+          if (!activePdfData) {
+            return (
+              <PlaceholderScreen
+                title="PDF Reader"
+                description="Loading PDF..."
+                actionLabel="Back to Library"
+                onAction={onBackToLibrary}
+              />
+            );
+          }
+
+          return (
+            <PdfReaderScreen
+              title={activePdfData.title || activeBook.title}
+              base64={activePdfData.base64}
+              loading={loading}
+              onBack={onBackToLibrary}
+            />
+          );
+        }
+
+        if (activeBook && activeBook.format === 'epub') {
+          return (
+            <PlaceholderScreen
+              title="EPUB Reader"
+              description="EPUB reader coming soon."
+              actionLabel="Back to Library"
+              onAction={onBackToLibrary}
+            />
+          );
+        }
+
         return (
           <LibraryScreen
             user={user}
             books={books}
             loading={loading}
             error={error}
+            onOpen={onOpenBook}
             onReveal={onRevealBook}
             onDelete={onDeleteBook}
             onImport={onImportBook}
@@ -349,7 +430,11 @@ export default function App() {
     return (
       <AppShell
         currentView={currentView}
-        onViewChange={setCurrentView}
+        onViewChange={(view) => {
+          setCurrentView(view);
+          setActiveBook(null);
+          setActivePdfData(null);
+        }}
         user={user}
         loading={loading}
         onSignOut={onSignOut}

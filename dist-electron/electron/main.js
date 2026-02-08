@@ -52,6 +52,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksImport, (_event, payload) => (0, books_1.importBook)(db, payload, electron_1.app.getPath('userData'), mainWindow));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksReveal, (_event, payload) => (0, books_1.revealBook)(db, payload, electron_1.app.getPath('userData')));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksDelete, (_event, payload) => (0, books_1.deleteBook)(db, payload, electron_1.app.getPath('userData')));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetPdfData, (_event, payload) => (0, books_1.getPdfData)(db, payload));
     createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {
