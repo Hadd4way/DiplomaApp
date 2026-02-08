@@ -3,7 +3,9 @@ export const IPC_CHANNELS = {
   authSignUp: 'auth:sign-up',
   authSignIn: 'auth:sign-in',
   authGetCurrentUser: 'auth:get-current-user',
-  authSignOut: 'auth:sign-out'
+  authSignOut: 'auth:sign-out',
+  booksList: 'books:list',
+  booksAddSample: 'books:add-sample'
 } as const;
 
 export type PingResponse = {
@@ -23,10 +25,24 @@ export type User = {
   createdAt: number;
 };
 
+export type BookFormat = 'pdf' | 'epub';
+
+export type Book = {
+  id: string;
+  userId: string;
+  title: string;
+  author?: string | null;
+  format: BookFormat;
+  filePath?: string | null;
+  createdAt: number;
+};
+
 export type AuthError = { ok: false; error: string };
 export type AuthResult = { ok: true; token: string; user: User } | AuthError;
 export type GetCurrentUserResult = { ok: true; user: User } | AuthError;
 export type SignOutResult = { ok: true } | AuthError;
+export type BooksListResult = { ok: true; books: Book[] } | AuthError;
+export type BooksAddSampleResult = { ok: true; book: Book } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -47,6 +63,14 @@ export type SignOutRequest = {
   token: string;
 };
 
+export type BooksListRequest = {
+  token: string;
+};
+
+export type BooksAddSampleRequest = {
+  token: string;
+};
+
 export interface RendererAuthApi {
   signUp: (payload: SignUpRequest) => Promise<AuthResult>;
   signIn: (payload: SignInRequest) => Promise<AuthResult>;
@@ -54,9 +78,15 @@ export interface RendererAuthApi {
   signOut: (payload: SignOutRequest) => Promise<SignOutResult>;
 }
 
+export interface RendererBooksApi {
+  list: (payload: BooksListRequest) => Promise<BooksListResult>;
+  addSample: (payload: BooksAddSampleRequest) => Promise<BooksAddSampleResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
+  books: RendererBooksApi;
 }
 
 declare global {

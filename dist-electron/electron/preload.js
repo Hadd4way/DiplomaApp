@@ -9,6 +9,10 @@ const api = {
         signIn: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authSignIn, payload),
         getCurrentUser: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authGetCurrentUser, payload),
         signOut: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.authSignOut, payload)
+    },
+    books: {
+        list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList, payload),
+        addSample: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample, payload)
     }
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);

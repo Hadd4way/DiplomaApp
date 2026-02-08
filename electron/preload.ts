@@ -8,6 +8,10 @@ const api: RendererApi = {
     signIn: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authSignIn, payload),
     getCurrentUser: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authGetCurrentUser, payload),
     signOut: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authSignOut, payload)
+  },
+  books: {
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksList, payload),
+    addSample: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample, payload)
   }
 };
 

@@ -1,9 +1,18 @@
 import React from 'react';
-import type { AuthResult, PingResponse, SignInRequest, SignUpRequest, User } from '../shared/ipc';
+import type {
+  AuthResult,
+  Book,
+  BooksAddSampleResult,
+  BooksListResult,
+  SignInRequest,
+  SignUpRequest,
+  User
+} from '../shared/ipc';
 import { AuthCard } from '@/components/auth-card';
-import { HomeCard } from '@/components/home-card';
+import { LibraryCard } from '@/components/library-card';
 
 const SESSION_TOKEN_KEY = 'auth.session.token';
+const SESSION_INVALID_ERROR = 'Session is invalid or expired.';
 
 type AuthMode = 'signIn' | 'signUp';
 
@@ -25,7 +34,43 @@ export default function App() {
   const [error, setError] = React.useState<string | null>(null);
   const [user, setUser] = React.useState<User | null>(null);
   const [token, setToken] = React.useState<string | null>(null);
-  const [pingResult, setPingResult] = React.useState<PingResponse | null>(null);
+  const [books, setBooks] = React.useState<Book[]>([]);
+
+  const clearSession = React.useCallback((nextError: string | null = null) => {
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+    setToken(null);
+    setUser(null);
+    setBooks([]);
+    setPassword('');
+    setError(nextError);
+  }, []);
+
+  const withSessionHandling = React.useCallback(
+    (result: BooksListResult | BooksAddSampleResult): typeof result => {
+      if (!result.ok && result.error === SESSION_INVALID_ERROR) {
+        clearSession(result.error);
+      }
+      return result;
+    },
+    [clearSession]
+  );
+
+  const loadBooks = React.useCallback(
+    async (activeToken: string) => {
+      const api = getRendererApi();
+      const result = withSessionHandling(await api.books.list({ token: activeToken }));
+      if (!result.ok) {
+        if (result.error !== SESSION_INVALID_ERROR) {
+          setError(result.error);
+        }
+        return false;
+      }
+
+      setBooks(result.books);
+      return true;
+    },
+    [withSessionHandling]
+  );
 
   React.useEffect(() => {
     const tryAutoLogin = async () => {
@@ -37,25 +82,26 @@ export default function App() {
 
       try {
         const api = getRendererApi();
-        const result = await api.auth.getCurrentUser({ token: existingToken });
+        const authResult = await api.auth.getCurrentUser({ token: existingToken });
 
-        if (result.ok) {
-          setToken(existingToken);
-          setUser(result.user);
-        } else {
-          localStorage.removeItem(SESSION_TOKEN_KEY);
+        if (!authResult.ok) {
+          clearSession(null);
+          return;
         }
+
+        setToken(existingToken);
+        setUser(authResult.user);
+        await loadBooks(existingToken);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        setError(message);
-        localStorage.removeItem(SESSION_TOKEN_KEY);
+        clearSession(message);
       } finally {
         setBooting(false);
       }
     };
 
     void tryAutoLogin();
-  }, []);
+  }, [clearSession, loadBooks]);
 
   const onSubmitAuth = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -90,7 +136,7 @@ export default function App() {
       setToken(result.token);
       setUser(result.user);
       setPassword('');
-      setPingResult(null);
+      await loadBooks(result.token);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -116,23 +162,46 @@ export default function App() {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
     } finally {
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-      setToken(null);
-      setUser(null);
-      setPingResult(null);
-      setPassword('');
+      clearSession(null);
       setLoading(false);
     }
   };
 
-  const onPing = async () => {
+  const onReloadBooks = async () => {
+    if (!token) {
+      return;
+    }
+
     setLoading(true);
     setError(null);
+    try {
+      await loadBooks(token);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const onAddSampleBook = async () => {
+    if (!token) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
     try {
       const api = getRendererApi();
-      const result = await api.ping();
-      setPingResult(result);
+      const result = withSessionHandling(await api.books.addSample({ token }));
+      if (!result.ok) {
+        if (result.error !== SESSION_INVALID_ERROR) {
+          setError(result.error);
+        }
+        return;
+      }
+
+      await loadBooks(token);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -154,12 +223,13 @@ export default function App() {
   if (user) {
     return (
       <main className="min-h-screen bg-background px-4 py-10 text-foreground">
-        <HomeCard
+        <LibraryCard
           user={user}
+          books={books}
           loading={loading}
           error={error}
-          pingResult={pingResult}
-          onPing={onPing}
+          onAddSample={onAddSampleBook}
+          onReload={onReloadBooks}
           onSignOut={onSignOut}
         />
       </main>
@@ -187,3 +257,4 @@ export default function App() {
     </main>
   );
 }
+

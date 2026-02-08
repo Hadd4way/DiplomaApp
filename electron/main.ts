@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import {
+  type BooksAddSampleRequest,
+  type BooksListRequest,
   IPC_CHANNELS,
   type GetCurrentUserRequest,
   type PingResponse,
@@ -10,6 +12,7 @@ import {
 } from '../shared/ipc';
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
+import { addSampleBook, listBooks } from './books';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -57,6 +60,10 @@ app.whenReady().then(() => {
     getCurrentUser(db, payload)
   );
   ipcMain.handle(IPC_CHANNELS.authSignOut, (_event, payload: SignOutRequest) => signOut(db, payload));
+  ipcMain.handle(IPC_CHANNELS.booksList, (_event, payload: BooksListRequest) => listBooks(db, payload));
+  ipcMain.handle(IPC_CHANNELS.booksAddSample, (_event, payload: BooksAddSampleRequest) =>
+    addSampleBook(db, payload)
+  );
 
   createWindow();
 

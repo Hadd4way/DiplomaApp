@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.resolveSessionUserId = resolveSessionUserId;
 exports.signUp = signUp;
 exports.signIn = signIn;
 exports.getCurrentUser = getCurrentUser;
@@ -25,6 +26,24 @@ function toUser(row) {
 }
 function cleanupExpiredSessions(db, now) {
     db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+}
+function resolveSessionUserId(db, tokenInput) {
+    const token = tokenInput?.trim();
+    if (!token) {
+        return { ok: false, error: 'Missing session token.' };
+    }
+    const now = Date.now();
+    cleanupExpiredSessions(db, now);
+    const sessionRow = db
+        .prepare('SELECT user_id, expires_at FROM sessions WHERE token = ? LIMIT 1')
+        .get(token);
+    if (!sessionRow || sessionRow.expires_at <= now) {
+        if (sessionRow) {
+            db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+        }
+        return { ok: false, error: 'Session is invalid or expired.' };
+    }
+    return { ok: true, userId: sessionRow.user_id };
 }
 function validateSignUpInput(payload) {
     const email = normalizeEmail(payload.email);
@@ -114,11 +133,10 @@ async function signIn(db, payload) {
 }
 function getCurrentUser(db, payload) {
     const token = payload.token?.trim();
-    if (!token) {
-        return { ok: false, error: 'Missing session token.' };
+    const session = resolveSessionUserId(db, token);
+    if (!session.ok) {
+        return session;
     }
-    const now = Date.now();
-    cleanupExpiredSessions(db, now);
     const sessionRow = db
         .prepare(`SELECT
          users.id AS user_id,
@@ -132,10 +150,6 @@ function getCurrentUser(db, payload) {
        LIMIT 1`)
         .get(token);
     if (!sessionRow) {
-        return { ok: false, error: 'Session is invalid or expired.' };
-    }
-    if (sessionRow.expires_at <= now) {
-        db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
         return { ok: false, error: 'Session is invalid or expired.' };
     }
     return {

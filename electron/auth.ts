@@ -32,6 +32,11 @@ type SessionUserRow = {
   expires_at: number;
 };
 
+type SessionRow = {
+  user_id: string;
+  expires_at: number;
+};
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -47,6 +52,32 @@ function toUser(row: { id: string; email: string; display_name: string; created_
 
 function cleanupExpiredSessions(db: Database.Database, now: number) {
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+}
+
+export function resolveSessionUserId(
+  db: Database.Database,
+  tokenInput: string | undefined
+): { ok: true; userId: string } | { ok: false; error: string } {
+  const token = tokenInput?.trim();
+  if (!token) {
+    return { ok: false, error: 'Missing session token.' };
+  }
+
+  const now = Date.now();
+  cleanupExpiredSessions(db, now);
+
+  const sessionRow = db
+    .prepare('SELECT user_id, expires_at FROM sessions WHERE token = ? LIMIT 1')
+    .get(token) as SessionRow | undefined;
+
+  if (!sessionRow || sessionRow.expires_at <= now) {
+    if (sessionRow) {
+      db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+    }
+    return { ok: false, error: 'Session is invalid or expired.' };
+  }
+
+  return { ok: true, userId: sessionRow.user_id };
 }
 
 function validateSignUpInput(payload: SignUpRequest): string | null {
@@ -168,12 +199,10 @@ export function getCurrentUser(
   payload: GetCurrentUserRequest
 ): GetCurrentUserResult {
   const token = payload.token?.trim();
-  if (!token) {
-    return { ok: false, error: 'Missing session token.' };
+  const session = resolveSessionUserId(db, token);
+  if (!session.ok) {
+    return session;
   }
-
-  const now = Date.now();
-  cleanupExpiredSessions(db, now);
 
   const sessionRow = db
     .prepare(
@@ -191,11 +220,6 @@ export function getCurrentUser(
     .get(token) as SessionUserRow | undefined;
 
   if (!sessionRow) {
-    return { ok: false, error: 'Session is invalid or expired.' };
-  }
-
-  if (sessionRow.expires_at <= now) {
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return { ok: false, error: 'Session is invalid or expired.' };
   }
 
@@ -219,4 +243,3 @@ export function signOut(db: Database.Database, payload: SignOutRequest): SignOut
   db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   return { ok: true };
 }
-
