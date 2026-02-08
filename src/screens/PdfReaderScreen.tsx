@@ -205,34 +205,45 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
 
   return (
     <Card className="mx-auto flex h-[calc(100vh-3rem)] w-full max-w-6xl flex-col">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={onBack} disabled={loading}>
+      <CardHeader className="space-y-1.5 pb-2">
+        <div className="grid grid-cols-3 items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-self-start px-2.5"
+            onClick={onBack}
+            disabled={loading}
+          >
             Back to Library
           </Button>
-          <CardTitle className="text-lg">{title}</CardTitle>
+          <CardTitle className="text-center text-lg">{title}</CardTitle>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setScale((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(1))))}
+              disabled={loading || rendering}
+              aria-label="Zoom out"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <span className="w-14 text-center text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setScale((prev) => Math.min(3, Number((prev + 0.1).toFixed(1))))}
+              disabled={loading || rendering}
+              aria-label="Zoom in"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={goPrev}
-            disabled={loading || rendering || page <= 1}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Prev
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={loading || rendering || page >= pageCount}
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+
+        <div className="flex flex-col items-center gap-0">
           <div className="flex items-center gap-2 rounded-md border px-2 py-1">
             <label htmlFor="page-input" className="text-sm text-muted-foreground">
               Page
@@ -274,62 +285,69 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             />
             <span className="text-sm text-muted-foreground">/ {pageCount}</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setScale((prev) => Math.max(0.5, Number((prev - 0.1).toFixed(1))))}
-              disabled={loading || rendering}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <span className="w-14 text-center text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setScale((prev) => Math.min(3, Number((prev + 0.1).toFixed(1))))}
-              disabled={loading || rendering}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
+          <div className="min-h-3">
+            {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
           </div>
-        </div>
-        <div className="min-h-5">
-          {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
         </div>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-muted/20">
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {!error ? (
-          <div className="group relative flex w-full items-center justify-center py-4">
-            <button
-              type="button"
-              className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Previous page"
-              title="Previous page"
-              onClick={goPrev}
-              disabled={loading || rendering || page <= 1}
-            >
-              <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
-              <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
-            </button>
-            <button
-              type="button"
-              className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Next page"
-              title="Next page"
-              onClick={goNext}
-              disabled={loading || rendering || page >= pageCount}
-            >
-              <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
-              <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
-            </button>
-            {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
-            <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
+
+      <CardContent className="min-h-0 flex-1 p-4 pt-0">
+        <section className="flex h-full min-h-0 flex-col items-center overflow-auto rounded-md bg-muted/20">
+          <div className="flex w-full max-w-5xl flex-1 flex-col items-center justify-center">
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            {!error ? (
+              <div className="group relative flex w-full items-center justify-center py-4">
+                <button
+                  type="button"
+                  className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Previous page"
+                  title="Previous page"
+                  onClick={goPrev}
+                  disabled={loading || rendering || page <= 1}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
+                  <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                </button>
+                <button
+                  type="button"
+                  className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Next page"
+                  title="Next page"
+                  onClick={goNext}
+                  disabled={loading || rendering || page >= pageCount}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
+                  <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                </button>
+                {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
+                <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
+              </div>
+            ) : null}
           </div>
-        ) : null}
+
+          <div className="w-full max-w-5xl px-2 pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={goPrev}
+                disabled={loading || rendering || page <= 1}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Prev
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={goNext}
+                disabled={loading || rendering || page >= pageCount}
+              >
+                Next
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </section>
       </CardContent>
     </Card>
   );
