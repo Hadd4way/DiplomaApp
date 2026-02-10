@@ -9,6 +9,7 @@ type Props = {
   loading: boolean;
   onSignOut: () => void;
   children: ReactNode;
+  contentClassName?: string;
 };
 
 export function AppShell({
@@ -17,7 +18,8 @@ export function AppShell({
   user,
   loading,
   onSignOut,
-  children
+  children,
+  contentClassName
 }: Props) {
   return (
     <div className="flex h-full min-h-0 overflow-hidden bg-background text-foreground">
@@ -28,7 +30,9 @@ export function AppShell({
         loading={loading}
         onSignOut={onSignOut}
       />
-      <main className="flex min-h-0 flex-1 overflow-hidden p-6">{children}</main>
+      <main className={['flex min-h-0 flex-1 overflow-hidden', contentClassName ?? 'p-6'].join(' ')}>
+        {children}
+      </main>
     </div>
   );
 }

@@ -358,6 +358,8 @@ export default function App() {
   }
 
   if (user) {
+    const isPdfReaderView = currentView === 'library' && activeBook?.format === 'pdf' && Boolean(activePdfData);
+
     const renderView = () => {
       if (currentView === 'library') {
         if (activeBook && activeBook.format === 'pdf') {
@@ -438,6 +440,7 @@ export default function App() {
         user={user}
         loading={loading}
         onSignOut={onSignOut}
+        contentClassName={isPdfReaderView ? '' : 'p-6'}
       >
         {renderView()}
       </AppShell>

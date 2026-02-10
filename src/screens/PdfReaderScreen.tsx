@@ -1,8 +1,17 @@
 import * as React from 'react';
-import { ChevronLeft, ChevronRight, Minus, Plus } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ListTree,
+  Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus
+} from 'lucide-react';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 
@@ -63,12 +72,14 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [pageInputError, setPageInputError] = React.useState<string | null>(null);
   const [scale, setScale] = React.useState(1);
   const [scaleMode, setScaleMode] = React.useState<ScaleMode>('fitWidth');
+  const [fitWidthReady, setFitWidthReady] = React.useState(false);
   const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
   const [viewportWidth, setViewportWidth] = React.useState(0);
   const [rendering, setRendering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
   const [outlineLoading, setOutlineLoading] = React.useState(false);
+  const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
 
   const goPrev = React.useCallback(() => {
@@ -108,6 +119,10 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     const loadDocument = async () => {
       setError(null);
       setRendering(true);
+      setScaleMode('fitWidth');
+      setScale(1);
+      setFitWidthReady(false);
+      setCanvasWidth(0);
       try {
         const data = base64ToUint8Array(base64);
         const loadedDoc = await getDocument({ data }).promise;
@@ -170,7 +185,16 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     let canceled = false;
 
     const applyFitWidthScale = async () => {
-      if (!doc || scaleMode !== 'fitWidth' || viewportWidth <= 0) {
+      if (!doc) {
+        return;
+      }
+
+      if (scaleMode !== 'fitWidth') {
+        setFitWidthReady(true);
+        return;
+      }
+
+      if (viewportWidth <= 0) {
         return;
       }
 
@@ -181,11 +205,11 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         }
 
         const baseViewport = pdfPage.getViewport({ scale: 1 });
-        const availableWidth = Math.max(1, viewportWidth - 48);
-        const nextScale = computeFitWidthScale(baseViewport.width, availableWidth);
+        const nextScale = computeFitWidthScale(baseViewport.width, Math.max(1, viewportWidth - 72));
         setScale((prev) => (Math.abs(prev - nextScale) < 0.001 ? prev : nextScale));
+        setFitWidthReady(true);
       } catch {
-        // Keep current scale on fit-width calculation failures.
+        setFitWidthReady(true);
       }
     };
 
@@ -205,6 +229,10 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         return;
       }
 
+      if (scaleMode === 'fitWidth' && !fitWidthReady) {
+        return;
+      }
+
       setRendering(true);
       setError(null);
       try {
@@ -221,22 +249,21 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           return;
         }
 
-          canvas.width = Math.floor(viewport.width);
-          canvas.height = Math.floor(viewport.height);
-          setCanvasWidth(viewport.width);
-          renderTask = pdfPage.render({ canvasContext: context, viewport });
-          await renderTask.promise;
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const normalized = message.toLowerCase();
-          const isCanceled =
-            normalized.includes('cancel') || normalized.includes('multiple render() operations');
-          if (!canceled && !isCanceled) {
-            setError('Failed to render PDF page.');
-          }
-        } finally {
-          if (!canceled) {
-            setRendering(false);
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        setCanvasWidth(viewport.width);
+        renderTask = pdfPage.render({ canvasContext: context, viewport });
+        await renderTask.promise;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const normalized = message.toLowerCase();
+        const isCanceled = normalized.includes('cancel') || normalized.includes('multiple render() operations');
+        if (!canceled && !isCanceled) {
+          setError('Failed to render PDF page.');
+        }
+      } finally {
+        if (!canceled) {
+          setRendering(false);
         }
       }
     };
@@ -246,7 +273,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
       canceled = true;
       renderTask?.cancel();
     };
-  }, [doc, page, scale]);
+  }, [doc, fitWidthReady, page, scale, scaleMode]);
 
   React.useEffect(() => {
     setPageInputValue(String(page));
@@ -343,7 +370,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
 
       if (event.key === 'Escape') {
         if (activeElement === pageInputRef.current) {
-          pageInputRef.current.blur();
+          pageInputRef.current?.blur();
         }
         return;
       }
@@ -383,21 +410,68 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [goNext, goPrev, pageCount]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      <header className="h-16 shrink-0 border-b bg-background">
-        <div className="grid h-full grid-cols-3 items-center gap-2 px-4">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="justify-self-start px-2.5"
-            onClick={onBack}
-            disabled={loading}
-          >
-            Back to Library
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f3f5f7]">
+      <header className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="flex h-14 items-center gap-2 px-3">
+          <Button type="button" variant="outline" size="sm" onClick={onBack} disabled={loading}>
+            Back
           </Button>
-          <h1 className="truncate px-2 text-center text-lg font-semibold">{title}</h1>
-          <div className="ml-auto flex items-center gap-2">
+
+          <div className="min-w-0 max-w-[320px] flex-1 px-2">
+            <p className="truncate text-sm font-semibold text-slate-800">{title}</p>
+          </div>
+
+          <div className="ml-auto flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1 py-1">
+            <Button type="button" variant="outline" size="sm" onClick={goPrev} disabled={loading || page <= 1}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Input
+              ref={pageInputRef}
+              value={pageInputValue}
+              onChange={(event) => {
+                setPageInputValue(event.target.value.replace(/\D+/g, ''));
+                setPageInputError(null);
+              }}
+              onFocus={() => pageInputRef.current?.select()}
+              onBlur={() => {
+                const trimmed = pageInputValue.trim();
+                if (trimmed.length === 0) {
+                  setPageInputValue(String(page));
+                  setPageInputError(null);
+                  return;
+                }
+                const ok = tryJumpToPage(trimmed);
+                if (!ok) {
+                  setPageInputValue(String(page));
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const ok = tryJumpToPage(pageInputValue);
+                  if (ok) {
+                    pageInputRef.current?.blur();
+                  }
+                }
+              }}
+              className="h-8 w-14 border-slate-300 text-center text-sm"
+              disabled={loading || rendering}
+              aria-label="Page number"
+              inputMode="numeric"
+            />
+            <span className="px-1 text-xs text-slate-600">/ {pageCount}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={goNext}
+              disabled={loading || page >= pageCount}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="ml-2 flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-1 py-1">
             <Button
               type="button"
               variant="outline"
@@ -411,16 +485,29 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
             >
               <Minus className="h-4 w-4" />
             </Button>
-            <span className="w-14 text-center text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
+            <span className="w-16 text-center text-xs font-medium text-slate-700">
+              {scaleMode === 'fitWidth' ? 'Fit' : `${Math.round(scale * 100)}%`}
+            </span>
             <Button
               type="button"
-              variant={scaleMode === 'fitWidth' ? 'secondary' : 'outline'}
+              variant="outline"
               size="sm"
               onClick={() => setScaleMode('fitWidth')}
               disabled={loading || rendering}
-              aria-label="Fit to width"
             >
               Fit
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setScaleMode('manual');
+                setScale(1);
+              }}
+              disabled={loading || rendering}
+            >
+              100%
             </Button>
             <Button
               type="button"
@@ -436,59 +523,43 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-2"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
+          >
+            {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </Button>
         </div>
+        {pageInputError ? <p className="px-4 pb-2 text-xs text-destructive">{pageInputError}</p> : null}
       </header>
 
-      <main className="flex flex-1 min-h-0">
-        <div className="h-full w-[280px] shrink-0 border-r bg-background">
-          <PdfSidebar
-            numPages={pageCount}
-            pageInputRef={pageInputRef}
-            pageInputValue={pageInputValue}
-            pageInputError={pageInputError}
-            loading={loading}
-            rendering={rendering}
-            onPageInputChange={(value) => {
-              setPageInputValue(value.replace(/\D+/g, ''));
-              setPageInputError(null);
-            }}
-            onPageInputFocus={() => {
-              pageInputRef.current?.select();
-            }}
-            onPageInputEnter={() => {
-              pageInputRef.current?.blur();
-            }}
-            onPageInputBlur={() => {
-              const trimmed = pageInputValue.trim();
-              if (trimmed.length === 0) {
-                setPageInputValue(String(page));
+      <main className="flex min-h-0 flex-1">
+        {sidebarOpen ? (
+          <div className="h-full w-[300px] shrink-0 border-r border-slate-200 bg-white">
+            <PdfSidebar
+              outlineItems={outlineItems}
+              outlineLoading={outlineLoading}
+              onOutlineSelect={async (item, key) => {
+                const resolvedPage = await resolveOutlineItemPage(item, key);
+                if (!resolvedPage) {
+                  return;
+                }
+                setPage(resolvedPage);
                 setPageInputError(null);
-                return;
-              }
+              }}
+            />
+          </div>
+        ) : null}
 
-              const ok = tryJumpToPage(trimmed);
-              if (!ok) {
-                setPageInputValue(String(page));
-              }
-            }}
-            onJumpToPage={tryJumpToPage}
-            outlineItems={outlineItems}
-            outlineLoading={outlineLoading}
-            onOutlineSelect={async (item, key) => {
-              const resolvedPage = await resolveOutlineItemPage(item, key);
-              if (!resolvedPage) {
-                return;
-              }
-              setPage(resolvedPage);
-              setPageInputError(null);
-            }}
-          />
-        </div>
-
-        <section ref={readerViewportRef} className="h-full min-w-0 flex-1 overflow-auto bg-muted/20">
-          <div className="flex min-h-full w-full justify-center p-6">
+        <section ref={readerViewportRef} className="min-w-0 flex-1 overflow-auto bg-[#eef1f5]">
+          <div className="relative flex min-h-full w-full items-start justify-center p-8">
             <div
-              className="group relative flex items-start justify-center"
+              className="group relative"
               style={{ width: canvasWidth > 0 ? `${canvasWidth}px` : 'auto', maxWidth: '100%' }}
             >
               {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -496,52 +567,41 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
                 <>
                   <button
                     type="button"
-                    className="absolute bottom-0 left-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Previous page"
                     title="Previous page"
                     onClick={goPrev}
                     disabled={loading || rendering || page <= 1}
                   >
-                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/10 to-transparent" />
-                    <ChevronLeft className="pointer-events-none absolute left-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                    <ChevronLeft className="h-5 w-5" />
                   </button>
                   <button
                     type="button"
-                    className="absolute bottom-0 right-0 top-0 z-20 w-[20%] cursor-pointer opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Next page"
                     title="Next page"
                     onClick={goNext}
                     disabled={loading || rendering || page >= pageCount}
                   >
-                    <span className="pointer-events-none absolute inset-0 bg-gradient-to-l from-black/10 to-transparent" />
-                    <ChevronRight className="pointer-events-none absolute right-3 top-1/2 h-6 w-6 -translate-y-1/2 text-foreground/70" />
+                    <ChevronRight className="h-5 w-5" />
                   </button>
-                  {rendering ? <p className="text-sm text-muted-foreground">Rendering...</p> : null}
-                  <canvas ref={canvasRef} className={rendering ? 'hidden' : 'block shadow-md'} />
+
+                  {rendering ? (
+                    <div className="pointer-events-none absolute right-3 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-xs text-slate-600 shadow-sm">
+                      <ListTree className="h-3.5 w-3.5" />
+                      Rendering...
+                    </div>
+                  ) : null}
+
+                  <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
+                    <canvas ref={canvasRef} className="block" />
+                  </div>
                 </>
               ) : null}
             </div>
           </div>
         </section>
       </main>
-
-      <footer className="h-16 shrink-0 border-t bg-background">
-        <div className="flex h-full items-center justify-between px-4">
-          <Button type="button" variant="outline" onClick={goPrev} disabled={loading || rendering || page <= 1}>
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Prev
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={goNext}
-            disabled={loading || rendering || page >= pageCount}
-          >
-            Next
-            <ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
-        </div>
-      </footer>
     </div>
   );
 }
