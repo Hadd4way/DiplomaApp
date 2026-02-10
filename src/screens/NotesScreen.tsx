@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type { Book, Note } from '../../shared/ipc';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,6 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
+import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 
 type Props = {
   token: string;
@@ -32,6 +34,13 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<Note | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
+  const [selectedBookId, setSelectedBookId] = React.useState<string>('all');
+  const [queryInput, setQueryInput] = React.useState('');
+  const [query, setQuery] = React.useState('');
+  const [editTarget, setEditTarget] = React.useState<Note | null>(null);
+  const [editContent, setEditContent] = React.useState('');
+  const [editLoading, setEditLoading] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
 
   const titleByBookId = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -40,6 +49,15 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     }
     return map;
   }, [books]);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(queryInput.trim());
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [queryInput]);
 
   const loadNotes = React.useCallback(async () => {
     if (!window.api) {
@@ -50,7 +68,11 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const result = await window.api.notes.list({ token });
+      const result = await window.api.notes.list({
+        token,
+        bookId: selectedBookId === 'all' ? null : selectedBookId,
+        q: query.length > 0 ? query : null
+      });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -62,7 +84,7 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [query, selectedBookId, token]);
 
   React.useEffect(() => {
     void loadNotes();
@@ -91,6 +113,45 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     }
   };
 
+  const handleOpenEdit = (note: Note) => {
+    setEditTarget(note);
+    setEditContent(note.content);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!window.api || !editTarget) {
+      return;
+    }
+
+    const content = editContent.trim();
+    if (!content) {
+      setEditError('Note content is required.');
+      return;
+    }
+
+    setEditLoading(true);
+    setEditError(null);
+    try {
+      const result = await window.api.notes.update({ token, noteId: editTarget.id, content });
+      if (!result.ok) {
+        setEditError(result.error);
+        return;
+      }
+      setNotes((prev) => {
+        const updated = prev.map((item) => (item.id === result.note.id ? result.note : item));
+        return [...updated].sort((a, b) => b.updatedAt - a.updatedAt);
+      });
+      setEditTarget(null);
+      setEditContent('');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setEditError(message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       <div className="flex items-center justify-between">
@@ -98,6 +159,26 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
         <Button type="button" variant="outline" size="sm" onClick={() => void loadNotes()} disabled={loading}>
           Refresh
         </Button>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
+        <select
+          value={selectedBookId}
+          onChange={(event) => setSelectedBookId(event.target.value)}
+          className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <option value="all">All books</option>
+          {books.map((book) => (
+            <option key={book.id} value={book.id}>
+              {book.title}
+            </option>
+          ))}
+        </select>
+        <Input
+          value={queryInput}
+          onChange={(event) => setQueryInput(event.target.value)}
+          placeholder="Search notes..."
+        />
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -117,20 +198,33 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
                 <p className="text-sm font-semibold text-slate-900">{titleByBookId.get(note.bookId) ?? 'Unknown book'}</p>
                 <p className="text-xs text-slate-600">Page {note.page}</p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setDeleteTarget(note);
-                }}
-              >
-                Delete
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleOpenEdit(note);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDeleteTarget(note);
+                  }}
+                >
+                  Delete
+                </Button>
+              </div>
             </div>
             <p className="mt-2 line-clamp-2 text-sm text-slate-700">{note.content}</p>
-            <p className="mt-2 text-xs text-slate-500">{formatDate(note.createdAt)}</p>
+            <p className="mt-2 text-xs text-slate-500">Updated {formatDate(note.updatedAt)}</p>
           </button>
         ))}
       </div>
@@ -149,6 +243,26 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <NoteEditorDialog
+        open={Boolean(editTarget)}
+        title="Edit note"
+        subtitle={
+          editTarget
+            ? `${titleByBookId.get(editTarget.bookId) ?? 'Unknown book'} - page ${editTarget.page}`
+            : undefined
+        }
+        value={editContent}
+        onValueChange={setEditContent}
+        error={editError}
+        saving={editLoading}
+        onCancel={() => {
+          setEditTarget(null);
+          setEditContent('');
+          setEditError(null);
+        }}
+        onSave={() => void handleSaveEdit()}
+      />
     </div>
   );
 }

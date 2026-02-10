@@ -13,6 +13,7 @@ type NoteRow = {
   created_at: number;
   updated_at: number;
 };
+type ListNotesFilters = { bookId?: string | null; q?: string | null };
 
 function asNonEmptyString(value: string): string | null {
   const trimmed = value.trim();
@@ -51,8 +52,9 @@ export class ReaderProgressDb {
 
   private upsertStmt: Database.Statement<[string, string, number, number]>;
   private insertNoteStmt: Database.Statement<[string, string, string, number, string, number, number]>;
-  private listNotesStmt: Database.Statement<[string], NoteRow>;
   private deleteNoteStmt: Database.Statement<[string, string]>;
+  private updateNoteStmt: Database.Statement<[string, number, string, string]>;
+  private getNoteStmt: Database.Statement<[string, string], NoteRow | undefined>;
 
   constructor(userDataPath: string) {
     fs.mkdirSync(userDataPath, { recursive: true });
@@ -96,13 +98,18 @@ export class ReaderProgressDb {
       `INSERT INTO notes (id, user_id, book_id, page, content, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
-    this.listNotesStmt = this.db.prepare(
+    this.deleteNoteStmt = this.db.prepare('DELETE FROM notes WHERE user_id = ? AND id = ?');
+    this.updateNoteStmt = this.db.prepare(
+      `UPDATE notes
+       SET content = ?, updated_at = ?
+       WHERE user_id = ? AND id = ?`
+    );
+    this.getNoteStmt = this.db.prepare(
       `SELECT id, user_id, book_id, page, content, created_at, updated_at
        FROM notes
-       WHERE user_id = ?
-       ORDER BY created_at DESC`
+       WHERE user_id = ? AND id = ?
+       LIMIT 1`
     );
-    this.deleteNoteStmt = this.db.prepare('DELETE FROM notes WHERE user_id = ? AND id = ?');
   }
 
   getLastPage(userId: string, bookId: string): number | null {
@@ -155,13 +162,34 @@ export class ReaderProgressDb {
     };
   }
 
-  listNotes(userId: string): Note[] {
+  listNotes(userId: string, filters?: ListNotesFilters): Note[] {
     const safeUserId = asNonEmptyString(userId);
     if (!safeUserId) {
       return [];
     }
 
-    const rows = this.listNotesStmt.all(safeUserId);
+    const where: string[] = ['user_id = ?'];
+    const params: Array<string> = [safeUserId];
+
+    const safeBookId = filters?.bookId ? asNonEmptyString(filters.bookId) : null;
+    if (safeBookId) {
+      where.push('book_id = ?');
+      params.push(safeBookId);
+    }
+
+    const safeQuery = filters?.q ? filters.q.trim() : '';
+    if (safeQuery.length > 0) {
+      where.push('content LIKE ?');
+      params.push(`%${safeQuery}%`);
+    }
+
+    const stmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, content, created_at, updated_at
+       FROM notes
+       WHERE ${where.join(' AND ')}
+       ORDER BY updated_at DESC`
+    );
+    const rows = stmt.all(...params) as NoteRow[];
     return rows.map(toNote);
   }
 
@@ -174,6 +202,24 @@ export class ReaderProgressDb {
 
     const result = this.deleteNoteStmt.run(safeUserId, safeNoteId);
     return result.changes > 0;
+  }
+
+  updateNote(userId: string, noteId: string, content: string): Note | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeNoteId = asNonEmptyString(noteId);
+    const safeContent = normalizeNoteContent(content);
+    if (!safeUserId || !safeNoteId || !safeContent) {
+      return null;
+    }
+
+    const now = Date.now();
+    const result = this.updateNoteStmt.run(safeContent, now, safeUserId, safeNoteId);
+    if (result.changes === 0) {
+      return null;
+    }
+
+    const row = this.getNoteStmt.get(safeUserId, safeNoteId);
+    return row ? toNote(row) : null;
   }
 }
 

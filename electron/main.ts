@@ -12,6 +12,7 @@ import {
   type NotesCreateRequest,
   type NotesDeleteRequest,
   type NotesListRequest,
+  type NotesUpdateRequest,
   type PingResponse,
   type ProgressGetLastPageRequest,
   type ProgressSetLastPageRequest,
@@ -22,7 +23,7 @@ import {
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
 import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBook } from './books';
-import { createNote, deleteNote, listNotes } from './notes';
+import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import { getReaderProgressDb } from './reader-progress-db';
 
 let mainWindow: BrowserWindow | null = null;
@@ -92,6 +93,7 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.notesCreate, (_event, payload: NotesCreateRequest) => createNote(db, progressDb, payload));
   ipcMain.handle(IPC_CHANNELS.notesList, (_event, payload: NotesListRequest) => listNotes(db, progressDb, payload));
   ipcMain.handle(IPC_CHANNELS.notesDelete, (_event, payload: NotesDeleteRequest) => deleteNote(db, progressDb, payload));
+  ipcMain.handle(IPC_CHANNELS.notesUpdate, (_event, payload: NotesUpdateRequest) => updateNote(db, progressDb, payload));
   ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
     progressDb.getLastPage(payload.userId, payload.bookId)
   );

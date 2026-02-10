@@ -12,14 +12,10 @@ import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from '@/components/ui/alert-dialog';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
+import type { Note } from '../../shared/ipc';
+import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -129,6 +125,10 @@ export function PdfReaderScreen({
   const [noteSaving, setNoteSaving] = React.useState(false);
   const [noteError, setNoteError] = React.useState<string | null>(null);
   const [noteSuccess, setNoteSuccess] = React.useState<string | null>(null);
+  const [notesPanelOpen, setNotesPanelOpen] = React.useState(false);
+  const [bookNotes, setBookNotes] = React.useState<Note[]>([]);
+  const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
+  const [bookNotesError, setBookNotesError] = React.useState<string | null>(null);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestPageRef = React.useRef(1);
@@ -158,6 +158,10 @@ export function PdfReaderScreen({
 
   const toggleContents = React.useCallback(() => {
     setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const toggleBookNotesPanel = React.useCallback(() => {
+    setNotesPanelOpen((prev) => !prev);
   }, []);
 
   const focusReader = React.useCallback(() => {
@@ -218,6 +222,7 @@ export function PdfReaderScreen({
         return;
       }
 
+      setBookNotes((prev) => [result.note, ...prev].sort((a, b) => b.updatedAt - a.updatedAt));
       setNoteOpen(false);
       setNoteContent('');
       setNoteSuccess('Note added.');
@@ -228,6 +233,43 @@ export function PdfReaderScreen({
       setNoteSaving(false);
     }
   }, [bookId, noteContent, page, token]);
+
+  const loadBookNotes = React.useCallback(async () => {
+    if (!window.api) {
+      setBookNotesError('Renderer API is unavailable. Open this app via Electron.');
+      return;
+    }
+
+    setBookNotesLoading(true);
+    setBookNotesError(null);
+    try {
+      const result = await window.api.notes.list({ token, bookId, q: null });
+      if (!result.ok) {
+        setBookNotesError(result.error);
+        return;
+      }
+      setBookNotes(result.notes);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setBookNotesError(message);
+    } finally {
+      setBookNotesLoading(false);
+    }
+  }, [bookId, token]);
+
+  React.useEffect(() => {
+    setBookNotes([]);
+    setBookNotesError(null);
+    setNotesPanelOpen(false);
+  }, [bookId]);
+
+  React.useEffect(() => {
+    if (!notesPanelOpen) {
+      return;
+    }
+
+    void loadBookNotes();
+  }, [loadBookNotes, notesPanelOpen]);
 
   React.useEffect(() => {
     latestPageRef.current = page;
@@ -630,6 +672,12 @@ export function PdfReaderScreen({
       }
 
       if (event.key === 'Escape') {
+        if (notesPanelOpen) {
+          event.preventDefault();
+          setNotesPanelOpen(false);
+          focusReader();
+          return;
+        }
         if (sidebarOpen) {
           event.preventDefault();
           setSidebarOpen(false);
@@ -718,7 +766,7 @@ export function PdfReaderScreen({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [focusReader, goNext, goPrev, openAddNote, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
+  }, [focusReader, goNext, goPrev, notesPanelOpen, openAddNote, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
 
   React.useEffect(() => {
     const viewportElement = readerViewportRef.current;
@@ -886,6 +934,17 @@ export function PdfReaderScreen({
             variant="outline"
             size="sm"
             className="ml-2"
+            onClick={toggleBookNotesPanel}
+            disabled={loading}
+          >
+            Notes
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-2"
             onClick={toggleContents}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
           >
@@ -914,7 +973,7 @@ export function PdfReaderScreen({
           </div>
         ) : null}
 
-        <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col bg-[#eef1f5]">
+        <div className="relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col bg-[#eef1f5]">
           <div ref={readerViewportRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             <div className="w-full min-h-full flex justify-center px-8 py-6">
               <div
@@ -961,39 +1020,60 @@ export function PdfReaderScreen({
               </div>
             </div>
           </div>
+
+          {notesPanelOpen ? (
+            <aside className="absolute right-3 top-3 bottom-3 z-40 flex w-[320px] flex-col rounded-lg border border-slate-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                <p className="text-sm font-semibold">Book Notes</p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setNotesPanelOpen(false)}>
+                  Close
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                {bookNotesError ? <p className="text-xs text-destructive">{bookNotesError}</p> : null}
+                {bookNotesLoading ? <p className="text-xs text-slate-600">Loading...</p> : null}
+                {!bookNotesLoading && bookNotes.length === 0 ? (
+                  <p className="text-xs text-slate-600">No notes for this book.</p>
+                ) : null}
+                {bookNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => {
+                      setPage(clampPage(note.page, pageCount));
+                      setPageInputError(null);
+                      setNotesPanelOpen(false);
+                      focusReader();
+                    }}
+                    className="w-full rounded-md border border-slate-200 p-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <p className="text-xs font-semibold text-slate-800">Page {note.page}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-700">{note.content}</p>
+                  </button>
+                ))}
+              </div>
+            </aside>
+          ) : null}
         </div>
       </main>
 
-      <AlertDialog open={noteOpen} onOpenChange={setNoteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Add note</AlertDialogTitle>
-          </AlertDialogHeader>
-          <div className="space-y-2">
-            <p className="text-sm text-slate-700">
-              {title} - page {page}
-            </p>
-            <textarea
-              value={noteContent}
-              onChange={(event) => {
-                setNoteContent(event.target.value);
-                setNoteError(null);
-              }}
-              className="min-h-28 w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="Write your note..."
-            />
-            {noteError ? <p className="text-xs text-destructive">{noteError}</p> : null}
-          </div>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setNoteOpen(false)} disabled={noteSaving}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={() => void saveNote()} disabled={noteSaving}>
-              Save
-            </Button>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
+      <NoteEditorDialog
+        open={noteOpen}
+        title="Add note"
+        subtitle={`${title} - page ${page}`}
+        value={noteContent}
+        onValueChange={(value) => {
+          setNoteContent(value);
+          setNoteError(null);
+        }}
+        error={noteError}
+        saving={noteSaving}
+        onCancel={() => {
+          setNoteOpen(false);
+          setNoteError(null);
+        }}
+        onSave={() => void saveNote()}
+      />
     </div>
   );
 }

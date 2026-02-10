@@ -13,6 +13,7 @@ export const IPC_CHANNELS = {
   notesCreate: 'notes:create',
   notesList: 'notes:list',
   notesDelete: 'notes:delete',
+  notesUpdate: 'notes:update',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -69,6 +70,7 @@ export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } 
 export type NotesCreateResult = { ok: true; note: Note } | AuthError;
 export type NotesListResult = { ok: true; notes: Note[] } | AuthError;
 export type NotesDeleteResult = { ok: true } | AuthError;
+export type NotesUpdateResult = { ok: true; note: Note } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -125,11 +127,19 @@ export type NotesCreateRequest = {
 
 export type NotesListRequest = {
   token: string;
+  bookId?: string | null;
+  q?: string | null;
 };
 
 export type NotesDeleteRequest = {
   token: string;
   noteId: string;
+};
+
+export type NotesUpdateRequest = {
+  token: string;
+  noteId: string;
+  content: string;
 };
 
 export type ProgressGetLastPageRequest = {
@@ -163,6 +173,7 @@ export interface RendererNotesApi {
   create: (payload: NotesCreateRequest) => Promise<NotesCreateResult>;
   list: (payload: NotesListRequest) => Promise<NotesListResult>;
   delete: (payload: NotesDeleteRequest) => Promise<NotesDeleteResult>;
+  update: (payload: NotesUpdateRequest) => Promise<NotesUpdateResult>;
 }
 
 export interface RendererApi {

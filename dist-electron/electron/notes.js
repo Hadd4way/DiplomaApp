@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createNote = createNote;
 exports.listNotes = listNotes;
 exports.deleteNote = deleteNote;
+exports.updateNote = updateNote;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("./auth");
 function isValidPage(page) {
@@ -51,7 +52,10 @@ function listNotes(authDb, readerDb, payload) {
     if (!session.ok) {
         return session;
     }
-    return { ok: true, notes: readerDb.listNotes(session.userId) };
+    return {
+        ok: true,
+        notes: readerDb.listNotes(session.userId, { bookId: payload.bookId ?? null, q: payload.q ?? null })
+    };
 }
 function deleteNote(authDb, readerDb, payload) {
     const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
@@ -67,4 +71,23 @@ function deleteNote(authDb, readerDb, payload) {
         return { ok: false, error: 'Note not found' };
     }
     return { ok: true };
+}
+function updateNote(authDb, readerDb, payload) {
+    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const noteId = payload.noteId?.trim();
+    if (!noteId) {
+        return { ok: false, error: 'Note not found' };
+    }
+    const content = payload.content?.trim();
+    if (!content) {
+        return { ok: false, error: 'Note content is required.' };
+    }
+    const updated = readerDb.updateNote(session.userId, noteId, content);
+    if (!updated) {
+        return { ok: false, error: 'Note not found' };
+    }
+    return { ok: true, note: updated };
 }

@@ -7,7 +7,9 @@ import type {
   NotesDeleteRequest,
   NotesDeleteResult,
   NotesListRequest,
-  NotesListResult
+  NotesListResult,
+  NotesUpdateRequest,
+  NotesUpdateResult
 } from '../shared/ipc';
 import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
@@ -77,7 +79,10 @@ export function listNotes(
     return session;
   }
 
-  return { ok: true, notes: readerDb.listNotes(session.userId) };
+  return {
+    ok: true,
+    notes: readerDb.listNotes(session.userId, { bookId: payload.bookId ?? null, q: payload.q ?? null })
+  };
 }
 
 export function deleteNote(
@@ -101,4 +106,32 @@ export function deleteNote(
   }
 
   return { ok: true };
+}
+
+export function updateNote(
+  authDb: Database.Database,
+  readerDb: ReaderProgressDb,
+  payload: NotesUpdateRequest
+): NotesUpdateResult {
+  const session = resolveSessionUserId(authDb, payload.token);
+  if (!session.ok) {
+    return session;
+  }
+
+  const noteId = payload.noteId?.trim();
+  if (!noteId) {
+    return { ok: false, error: 'Note not found' };
+  }
+
+  const content = payload.content?.trim();
+  if (!content) {
+    return { ok: false, error: 'Note content is required.' };
+  }
+
+  const updated = readerDb.updateNote(session.userId, noteId, content);
+  if (!updated) {
+    return { ok: false, error: 'Note not found' };
+  }
+
+  return { ok: true, note: updated };
 }

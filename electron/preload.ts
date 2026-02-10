@@ -20,7 +20,8 @@ const api: RendererApi = {
   notes: {
     create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesCreate, payload),
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesList, payload),
-    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesDelete, payload)
+    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesDelete, payload),
+    update: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesUpdate, payload)
   },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>

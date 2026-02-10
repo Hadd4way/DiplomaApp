@@ -60,6 +60,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesCreate, (_event, payload) => (0, notes_1.createNote)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesUpdate, (_event, payload) => (0, notes_1.updateNote)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(payload.userId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage));
     createWindow();
