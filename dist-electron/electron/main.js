@@ -10,6 +10,7 @@ const db_1 = require("./db");
 const auth_1 = require("./auth");
 const books_1 = require("./books");
 const notes_1 = require("./notes");
+const highlights_1 = require("./highlights");
 const reader_progress_db_1 = require("./reader-progress-db");
 let mainWindow = null;
 function createWindow() {
@@ -61,6 +62,8 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesUpdate, (_event, payload) => (0, notes_1.updateNote)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsList, (_event, payload) => (0, highlights_1.listHighlights)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsCreateMerged, (_event, payload) => (0, highlights_1.createMergedHighlight)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(payload.userId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage));
     createWindow();

@@ -34,7 +34,75 @@ function toNote(row) {
         updatedAt: row.updated_at
     };
 }
+function toHighlight(row) {
+    let parsedRects;
+    try {
+        parsedRects = JSON.parse(row.rects);
+    }
+    catch {
+        return null;
+    }
+    if (!Array.isArray(parsedRects)) {
+        return null;
+    }
+    const rects = parsedRects.filter((item) => {
+        if (!item || typeof item !== 'object') {
+            return false;
+        }
+        const rect = item;
+        return (typeof rect.x === 'number' &&
+            Number.isFinite(rect.x) &&
+            typeof rect.y === 'number' &&
+            Number.isFinite(rect.y) &&
+            typeof rect.w === 'number' &&
+            Number.isFinite(rect.w) &&
+            typeof rect.h === 'number' &&
+            Number.isFinite(rect.h));
+    });
+    if (rects.length === 0) {
+        return null;
+    }
+    return {
+        id: row.id,
+        userId: row.user_id,
+        bookId: row.book_id,
+        page: row.page,
+        rects,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+}
 class ReaderProgressDb {
+    ensureHighlightsSchema() {
+        const rows = this.db.prepare('PRAGMA table_info(highlights)').all();
+        if (rows.length === 0) {
+            return;
+        }
+        const columns = new Set(rows.map((row) => row.name));
+        if (!columns.has('created_at')) {
+            this.db.exec('ALTER TABLE highlights ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
+        }
+        if (!columns.has('updated_at')) {
+            this.db.exec('ALTER TABLE highlights ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0');
+        }
+        this.db.exec(`
+      UPDATE highlights
+      SET updated_at = CASE
+        WHEN updated_at IS NULL OR updated_at <= 0 THEN
+          CASE
+            WHEN created_at IS NULL OR created_at <= 0 THEN CAST(strftime('%s','now') AS INTEGER) * 1000
+            ELSE created_at
+          END
+        ELSE updated_at
+      END;
+
+      UPDATE highlights
+      SET created_at = CASE
+        WHEN created_at IS NULL OR created_at <= 0 THEN updated_at
+        ELSE created_at
+      END;
+    `);
+    }
     constructor(userDataPath) {
         node_fs_1.default.mkdirSync(userDataPath, { recursive: true });
         const dbPath = node_path_1.default.join(userDataPath, 'reader.db');
@@ -59,9 +127,21 @@ class ReaderProgressDb {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS highlights (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        page INTEGER NOT NULL,
+        rects TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_notes_user_created_at ON notes(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_notes_user_book_page ON notes(user_id, book_id, page);
+      CREATE INDEX IF NOT EXISTS idx_highlights_user_book_page ON highlights(user_id, book_id, page);
     `);
+        this.ensureHighlightsSchema();
         this.getStmt = this.db.prepare('SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1');
         this.upsertStmt = this.db.prepare(`
       INSERT INTO reading_progress (user_id, book_id, last_page, updated_at)
@@ -80,6 +160,15 @@ class ReaderProgressDb {
        FROM notes
        WHERE user_id = ? AND id = ?
        LIMIT 1`);
+        this.insertHighlightStmt = this.db.prepare(`INSERT INTO highlights (id, user_id, book_id, page, rects, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        this.deleteHighlightsByIdsStmt = this.db.prepare(`DELETE FROM highlights
+       WHERE user_id = @user_id
+         AND id IN (SELECT value FROM json_each(@ids_json))`);
+        this.listHighlightsStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND book_id = ? AND page = ?
+       ORDER BY created_at DESC`);
     }
     getLastPage(userId, bookId) {
         const safeUserId = asNonEmptyString(userId);
@@ -171,6 +260,60 @@ class ReaderProgressDb {
         }
         const row = this.getNoteStmt.get(safeUserId, safeNoteId);
         return row ? toNote(row) : null;
+    }
+    insertHighlight(userId, bookId, page, rects, id, createdAt, updatedAt) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safeId = asNonEmptyString(id);
+        const safePage = normalizeLastPage(page);
+        if (!safeUserId || !safeBookId || !safeId || !safePage || rects.length === 0) {
+            return null;
+        }
+        this.insertHighlightStmt.run(safeId, safeUserId, safeBookId, safePage, JSON.stringify(rects), Math.floor(createdAt), Math.floor(updatedAt));
+        return {
+            id: safeId,
+            userId: safeUserId,
+            bookId: safeBookId,
+            page: safePage,
+            rects,
+            createdAt: Math.floor(createdAt),
+            updatedAt: Math.floor(updatedAt)
+        };
+    }
+    listHighlights(userId, bookId, page) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safePage = normalizeLastPage(page);
+        if (!safeUserId || !safeBookId || !safePage) {
+            return [];
+        }
+        const rows = this.listHighlightsStmt.all(safeUserId, safeBookId, safePage);
+        const highlights = [];
+        for (const row of rows) {
+            const parsed = toHighlight(row);
+            if (parsed) {
+                highlights.push(parsed);
+            }
+        }
+        return highlights;
+    }
+    deleteHighlights(userId, ids) {
+        const safeUserId = asNonEmptyString(userId);
+        if (!safeUserId) {
+            return;
+        }
+        const safeIds = ids.map((id) => id.trim()).filter((id) => id.length > 0);
+        if (safeIds.length === 0) {
+            return;
+        }
+        this.deleteHighlightsByIdsStmt.run({ user_id: safeUserId, ids_json: JSON.stringify(safeIds) });
+    }
+    createMergedHighlight(userId, bookId, page, rects, id, createdAt, updatedAt, removeIds) {
+        const run = this.db.transaction(() => {
+            this.deleteHighlights(userId, removeIds);
+            return this.insertHighlight(userId, bookId, page, rects, id, createdAt, updatedAt);
+        });
+        return run();
     }
 }
 exports.ReaderProgressDb = ReaderProgressDb;

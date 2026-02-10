@@ -23,6 +23,10 @@ const api: RendererApi = {
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesDelete, payload),
     update: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesUpdate, payload)
   },
+  highlights: {
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsList, payload),
+    createMerged: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsCreateMerged, payload)
+  },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>
     ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })

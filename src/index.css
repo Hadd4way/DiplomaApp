@@ -36,3 +36,22 @@
     @apply m-0 overflow-hidden bg-background font-sans text-foreground antialiased;
   }
 }
+
+.pdf-text-layer {
+  overflow: hidden;
+  line-height: 1;
+  -webkit-text-size-adjust: none;
+}
+
+.pdf-text-layer span,
+.pdf-text-layer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer ::selection {
+  background: rgba(59, 130, 246, 0.35);
+}

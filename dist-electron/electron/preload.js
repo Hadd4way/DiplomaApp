@@ -24,6 +24,10 @@ const api = {
         delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.notesDelete, payload),
         update: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.notesUpdate, payload)
     },
+    highlights: {
+        list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsList, payload),
+        createMerged: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsCreateMerged, payload)
+    },
     getLastPage: (userId, bookId) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
     setLastPage: (userId, bookId, lastPage) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })
 };

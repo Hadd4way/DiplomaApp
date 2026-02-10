@@ -12,9 +12,9 @@ import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
+import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
-import type { Note } from '../../shared/ipc';
+import type { Highlight, HighlightRect, Note } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -45,6 +45,10 @@ function clampScale(nextScale: number): number {
   return Math.min(2.5, Math.max(0.5, nextScale));
 }
 
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
 function computeFitWidthScale(basePageWidth: number, availableWidth: number): number {
   if (basePageWidth <= 0 || availableWidth <= 0) {
     return 1;
@@ -59,6 +63,19 @@ function clampPage(nextPage: number, totalPages: number): number {
   const safeTotal = Math.max(1, Math.floor(totalPages));
   const safeNext = Math.floor(nextPage);
   return Math.min(safeTotal, Math.max(1, safeNext));
+}
+
+function normalizeSelectionRect(rect: HighlightRect): HighlightRect | null {
+  const x1 = clamp01(rect.x);
+  const y1 = clamp01(rect.y);
+  const x2 = clamp01(rect.x + rect.w);
+  const y2 = clamp01(rect.y + rect.h);
+  const w = x2 - x1;
+  const h = y2 - y1;
+  if (w <= 0 || h <= 0) {
+    return null;
+  }
+  return { x: x1, y: y1, w, h };
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -99,8 +116,9 @@ export function PdfReaderScreen({
   const readerRootRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
+  const textLayerRef = React.useRef<HTMLDivElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
-  const readerViewportRef = React.useRef<HTMLElement | null>(null);
+  const readerViewportRef = React.useRef<HTMLDivElement | null>(null);
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = React.useState(1);
   const [pageCount, setPageCount] = React.useState(1);
@@ -129,6 +147,7 @@ export function PdfReaderScreen({
   const [bookNotes, setBookNotes] = React.useState<Note[]>([]);
   const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
   const [bookNotesError, setBookNotesError] = React.useState<string | null>(null);
+  const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestPageRef = React.useRef(1);
@@ -257,11 +276,100 @@ export function PdfReaderScreen({
     }
   }, [bookId, token]);
 
+  const loadPageHighlights = React.useCallback(async () => {
+    if (!window.api) {
+      setPageHighlights([]);
+      return;
+    }
+    try {
+      const result = await window.api.highlights.list({ token, bookId, page });
+      if (!result.ok) {
+        setPageHighlights([]);
+        return;
+      }
+      setPageHighlights(result.highlights);
+    } catch {
+      setPageHighlights([]);
+    }
+  }, [bookId, page, token]);
+
+  const createHighlightFromSelection = React.useCallback(async () => {
+    if (!window.api) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return;
+    }
+
+    const stage = pageStageRef.current;
+    const textLayer = textLayerRef.current;
+    if (!stage || !textLayer) {
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const anchorNode = range.commonAncestorContainer;
+    const ancestorElement = anchorNode.nodeType === Node.ELEMENT_NODE ? (anchorNode as Element) : anchorNode.parentElement;
+    if (!ancestorElement || !textLayer.contains(ancestorElement)) {
+      return;
+    }
+
+    const pageRect = stage.getBoundingClientRect();
+    if (pageRect.width <= 0 || pageRect.height <= 0) {
+      return;
+    }
+
+    const rects: HighlightRect[] = [];
+    for (const clientRect of Array.from(range.getClientRects())) {
+      const left = Math.max(clientRect.left, pageRect.left);
+      const top = Math.max(clientRect.top, pageRect.top);
+      const right = Math.min(clientRect.right, pageRect.right);
+      const bottom = Math.min(clientRect.bottom, pageRect.bottom);
+      const width = right - left;
+      const height = bottom - top;
+      if (width <= 0 || height <= 0) {
+        continue;
+      }
+      const normalized = normalizeSelectionRect({
+        x: (left - pageRect.left) / pageRect.width,
+        y: (top - pageRect.top) / pageRect.height,
+        w: width / pageRect.width,
+        h: height / pageRect.height
+      });
+      if (!normalized) {
+        continue;
+      }
+      if (normalized.w * normalized.h < 0.00001) {
+        continue;
+      }
+      rects.push(normalized);
+    }
+
+    if (rects.length === 0) {
+      selection.removeAllRanges();
+      return;
+    }
+
+    try {
+      const result = await window.api.highlights.createMerged({ token, bookId, page, rects });
+      if (result.ok) {
+        await loadPageHighlights();
+      }
+    } finally {
+      selection.removeAllRanges();
+    }
+  }, [bookId, loadPageHighlights, page, token]);
+
   React.useEffect(() => {
     setBookNotes([]);
     setBookNotesError(null);
     setNotesPanelOpen(false);
   }, [bookId]);
+
+  React.useEffect(() => {
+    void loadPageHighlights();
+  }, [loadPageHighlights]);
 
   React.useEffect(() => {
     if (!notesPanelOpen) {
@@ -475,6 +583,7 @@ export function PdfReaderScreen({
   React.useEffect(() => {
     let canceled = false;
     let renderTask: { cancel: () => void; promise: Promise<void> } | null = null;
+    let textLayerTask: TextLayer | null = null;
 
     const renderPage = async () => {
       if (!doc || !canvasRef.current) {
@@ -506,6 +615,25 @@ export function PdfReaderScreen({
         setCanvasWidth(viewport.width);
         renderTask = pdfPage.render({ canvasContext: context, viewport });
         await renderTask.promise;
+
+        if (canceled) {
+          return;
+        }
+
+        const textLayerElement = textLayerRef.current;
+        if (textLayerElement) {
+          textLayerElement.replaceChildren();
+          const textContent = await pdfPage.getTextContent();
+          if (canceled) {
+            return;
+          }
+          textLayerTask = new TextLayer({
+            textContentSource: textContent,
+            container: textLayerElement,
+            viewport
+          });
+          await textLayerTask.render();
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const normalized = message.toLowerCase();
@@ -524,6 +652,7 @@ export function PdfReaderScreen({
     return () => {
       canceled = true;
       renderTask?.cancel();
+      textLayerTask?.cancel();
     };
   }, [doc, fitWidthReady, page, scale, scaleMode]);
 
@@ -1012,8 +1141,31 @@ export function PdfReaderScreen({
                       </div>
                     ) : null}
 
-                    <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
+                    <div className="relative overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
                       <canvas ref={canvasRef} className="block" />
+                      <div
+                        className="absolute inset-0 z-10 pdf-text-layer"
+                        ref={textLayerRef}
+                        onMouseUp={() => {
+                          void createHighlightFromSelection();
+                        }}
+                      />
+                      <div className="pointer-events-none absolute inset-0 z-[11]">
+                        {pageHighlights.map((highlight) =>
+                          highlight.rects.map((rect, index) => (
+                            <div
+                              key={`${highlight.id}:${index}`}
+                              className="absolute bg-yellow-300/45"
+                              style={{
+                                left: `${rect.x * 100}%`,
+                                top: `${rect.y * 100}%`,
+                                width: `${rect.w * 100}%`,
+                                height: `${rect.h * 100}%`
+                              }}
+                            />
+                          ))
+                        )}
+                      </div>
                     </div>
                   </>
                 ) : null}
