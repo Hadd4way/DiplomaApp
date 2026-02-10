@@ -28,6 +28,14 @@ type Props = {
 
 type ScaleMode = 'fitWidth' | 'fitPage' | 'manual';
 
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tagName = target.tagName;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || target.isContentEditable;
+}
+
 function clampScale(nextScale: number): number {
   return Math.min(2.5, Math.max(0.5, nextScale));
 }
@@ -73,6 +81,7 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
 }
 
 export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack }: Props) {
+  const readerRootRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -108,6 +117,28 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
   const goNext = React.useCallback(() => {
     setPage((prev) => Math.min(pageCount, prev + 1));
   }, [pageCount]);
+
+  const zoomIn = React.useCallback(() => {
+    setScaleMode('manual');
+    setScale((prev) => clampScale(Number((prev + 0.1).toFixed(1))));
+  }, []);
+
+  const zoomOut = React.useCallback(() => {
+    setScaleMode('manual');
+    setScale((prev) => clampScale(Number((prev - 0.1).toFixed(1))));
+  }, []);
+
+  const setFitMode = React.useCallback(() => {
+    setScaleMode('fitWidth');
+  }, []);
+
+  const toggleContents = React.useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const focusReader = React.useCallback(() => {
+    readerRootRef.current?.focus();
+  }, []);
 
   const flushLastPageSave = React.useCallback(() => {
     if (!canSaveRef.current || !window.api) {
@@ -515,13 +546,11 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const activeElement = document.activeElement as HTMLElement | null;
-      const isTextInput =
-        activeElement?.tagName === 'INPUT' ||
-        activeElement?.tagName === 'TEXTAREA' ||
-        activeElement?.isContentEditable === true;
+      const activeElement = document.activeElement;
+      const typing = isTypingTarget(event.target ?? activeElement);
+      const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'l') {
+      if (ctrlOrMeta && event.key.toLowerCase() === 'l') {
         event.preventDefault();
         pageInputRef.current?.focus();
         pageInputRef.current?.select();
@@ -529,37 +558,81 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
       }
 
       if (event.key === 'Escape') {
+        if (sidebarOpen) {
+          event.preventDefault();
+          setSidebarOpen(false);
+          focusReader();
+          return;
+        }
         if (activeElement === pageInputRef.current) {
+          event.preventDefault();
           pageInputRef.current?.blur();
+          focusReader();
         }
         return;
       }
 
-      if (isTextInput) {
+      if (typing) {
         return;
       }
 
-      if (event.key === 'ArrowLeft') {
+      if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
         event.preventDefault();
         goPrev();
+        focusReader();
         return;
       }
 
-      if (event.key === 'ArrowRight') {
+      if (event.key === 'ArrowRight' || event.key === 'PageDown') {
         event.preventDefault();
         goNext();
+        focusReader();
         return;
       }
 
       if (event.key === 'Home') {
         event.preventDefault();
         setPage(1);
+        focusReader();
         return;
       }
 
       if (event.key === 'End') {
         event.preventDefault();
         setPage(pageCount);
+        focusReader();
+        return;
+      }
+
+      if (ctrlOrMeta && (event.key === '+' || event.key === '=')) {
+        event.preventDefault();
+        zoomIn();
+        return;
+      }
+
+      if (ctrlOrMeta && event.key === '-') {
+        event.preventDefault();
+        zoomOut();
+        return;
+      }
+
+      if (ctrlOrMeta && event.key === '0') {
+        event.preventDefault();
+        setFitMode();
+        return;
+      }
+
+      if (event.key === 't' || event.key === 'T') {
+        event.preventDefault();
+        toggleContents();
+        focusReader();
+        return;
+      }
+
+      if (event.key === '/') {
+        event.preventDefault();
+        pageInputRef.current?.focus();
+        pageInputRef.current?.select();
       }
     };
 
@@ -567,10 +640,38 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [goNext, goPrev, pageCount]);
+  }, [focusReader, goNext, goPrev, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
+
+  React.useEffect(() => {
+    const viewportElement = readerViewportRef.current;
+    if (!viewportElement) {
+      return;
+    }
+
+    const handleWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+
+      event.preventDefault();
+      if (event.deltaY < 0) {
+        zoomIn();
+      } else if (event.deltaY > 0) {
+        zoomOut();
+      }
+    };
+
+    viewportElement.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      viewportElement.removeEventListener('wheel', handleWheel);
+    };
+  }, [zoomIn, zoomOut]);
 
   return (
-    <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f3f5f7]">
+    <div ref={readerRootRef} tabIndex={-1} className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f3f5f7]">
       <header className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3">
           <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={loading}>
@@ -637,8 +738,7 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
               variant="outline"
               size="sm"
               onClick={() => {
-                setScaleMode('manual');
-                setScale((prev) => clampScale(Number((prev - 0.1).toFixed(1))));
+                zoomOut();
               }}
               disabled={loading || rendering}
               aria-label="Zoom out"
@@ -683,8 +783,7 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
               variant="outline"
               size="sm"
               onClick={() => {
-                setScaleMode('manual');
-                setScale((prev) => clampScale(Number((prev + 0.1).toFixed(1))));
+                zoomIn();
               }}
               disabled={loading || rendering}
               aria-label="Zoom in"
@@ -698,7 +797,7 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
             variant="outline"
             size="sm"
             className="ml-2"
-            onClick={() => setSidebarOpen((prev) => !prev)}
+            onClick={toggleContents}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
           >
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
