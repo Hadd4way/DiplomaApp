@@ -24,7 +24,7 @@ type Props = {
   onBack: () => void;
 };
 
-type ScaleMode = 'fitWidth' | 'manual';
+type ScaleMode = 'fitWidth' | 'fitPage' | 'manual';
 
 function clampScale(nextScale: number): number {
   return Math.min(2.5, Math.max(0.5, nextScale));
@@ -76,6 +76,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [fitWidthReady, setFitWidthReady] = React.useState(false);
   const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
   const [viewportWidth, setViewportWidth] = React.useState(0);
+  const [viewportHeight, setViewportHeight] = React.useState(0);
   const [rendering, setRendering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
@@ -120,7 +121,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     const loadDocument = async () => {
       setError(null);
       setRendering(true);
-      setScaleMode('fitWidth');
+      setScaleMode('fitPage');
       setScale(1);
       setFitWidthReady(false);
       setCanvasWidth(0);
@@ -158,6 +159,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
 
     const updateWidth = () => {
       setViewportWidth(viewportElement.clientWidth);
+      setViewportHeight(viewportElement.clientHeight);
     };
 
     updateWidth();
@@ -169,6 +171,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           return;
         }
         setViewportWidth(entry.contentRect.width);
+        setViewportHeight(entry.contentRect.height);
       });
       observer.observe(viewportElement);
       return () => {
@@ -190,12 +193,12 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         return;
       }
 
-      if (scaleMode !== 'fitWidth') {
+      if (scaleMode !== 'fitWidth' && scaleMode !== 'fitPage') {
         setFitWidthReady(true);
         return;
       }
 
-      if (viewportWidth <= 0) {
+      if (viewportWidth <= 0 || viewportHeight <= 0) {
         return;
       }
 
@@ -206,7 +209,11 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         }
 
         const baseViewport = pdfPage.getViewport({ scale: 1 });
-        const nextScale = computeFitWidthScale(baseViewport.width, Math.max(1, viewportWidth - 72));
+        const availableWidth = Math.max(1, viewportWidth - 72);
+        const availableHeight = Math.max(1, viewportHeight - 48);
+        const fitWidthScale = computeFitWidthScale(baseViewport.width, availableWidth);
+        const fitPageScale = clampScale(availableHeight / Math.max(1, baseViewport.height));
+        const nextScale = scaleMode === 'fitPage' ? fitPageScale : fitWidthScale;
         setScale((prev) => (Math.abs(prev - nextScale) < 0.001 ? prev : nextScale));
         setFitWidthReady(true);
       } catch {
@@ -219,7 +226,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     return () => {
       canceled = true;
     };
-  }, [doc, page, scaleMode, viewportWidth]);
+  }, [doc, page, scaleMode, viewportHeight, viewportWidth]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -230,7 +237,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         return;
       }
 
-      if (scaleMode === 'fitWidth' && !fitWidthReady) {
+      if ((scaleMode === 'fitWidth' || scaleMode === 'fitPage') && !fitWidthReady) {
         return;
       }
 
@@ -487,7 +494,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
               <Minus className="h-4 w-4" />
             </Button>
             <span className="w-16 text-center text-xs font-medium text-slate-700">
-              {scaleMode === 'fitWidth' ? 'Fit' : `${Math.round(scale * 100)}%`}
+              {scaleMode === 'fitWidth' ? 'Fit W' : scaleMode === 'fitPage' ? 'Fit P' : `${Math.round(scale * 100)}%`}
             </span>
             <Button
               type="button"
@@ -497,6 +504,15 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
               disabled={loading || rendering}
             >
               Fit
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setScaleMode('fitPage')}
+              disabled={loading || rendering}
+            >
+              Page
             </Button>
             <Button
               type="button"
