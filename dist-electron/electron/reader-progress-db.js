@@ -19,6 +19,21 @@ function normalizeLastPage(value) {
     const page = Math.floor(value);
     return page >= 1 ? page : null;
 }
+function normalizeNoteContent(value) {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+function toNote(row) {
+    return {
+        id: row.id,
+        userId: row.user_id,
+        bookId: row.book_id,
+        page: row.page,
+        content: row.content,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+    };
+}
 class ReaderProgressDb {
     constructor(userDataPath) {
         node_fs_1.default.mkdirSync(userDataPath, { recursive: true });
@@ -33,6 +48,19 @@ class ReaderProgressDb {
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (user_id, book_id)
       );
+
+      CREATE TABLE IF NOT EXISTS notes (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        page INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_notes_user_created_at ON notes(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_notes_user_book_page ON notes(user_id, book_id, page);
     `);
         this.getStmt = this.db.prepare('SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1');
         this.upsertStmt = this.db.prepare(`
@@ -42,6 +70,13 @@ class ReaderProgressDb {
         last_page = excluded.last_page,
         updated_at = excluded.updated_at
     `);
+        this.insertNoteStmt = this.db.prepare(`INSERT INTO notes (id, user_id, book_id, page, content, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`);
+        this.listNotesStmt = this.db.prepare(`SELECT id, user_id, book_id, page, content, created_at, updated_at
+       FROM notes
+       WHERE user_id = ?
+       ORDER BY created_at DESC`);
+        this.deleteNoteStmt = this.db.prepare('DELETE FROM notes WHERE user_id = ? AND id = ?');
     }
     getLastPage(userId, bookId) {
         const safeUserId = asNonEmptyString(userId);
@@ -63,6 +98,45 @@ class ReaderProgressDb {
             return;
         }
         this.upsertStmt.run(safeUserId, safeBookId, safeLastPage, Date.now());
+    }
+    createNote(note) {
+        const safeUserId = asNonEmptyString(note.userId);
+        const safeBookId = asNonEmptyString(note.bookId);
+        const safePage = normalizeLastPage(note.page);
+        const safeContent = normalizeNoteContent(note.content);
+        const safeId = asNonEmptyString(note.id);
+        if (!safeUserId || !safeBookId || !safePage || !safeContent || !safeId) {
+            return null;
+        }
+        const now = Number.isFinite(note.updatedAt) ? Math.floor(note.updatedAt) : Date.now();
+        const createdAt = Number.isFinite(note.createdAt) ? Math.floor(note.createdAt) : now;
+        this.insertNoteStmt.run(safeId, safeUserId, safeBookId, safePage, safeContent, createdAt, now);
+        return {
+            id: safeId,
+            userId: safeUserId,
+            bookId: safeBookId,
+            page: safePage,
+            content: safeContent,
+            createdAt,
+            updatedAt: now
+        };
+    }
+    listNotes(userId) {
+        const safeUserId = asNonEmptyString(userId);
+        if (!safeUserId) {
+            return [];
+        }
+        const rows = this.listNotesStmt.all(safeUserId);
+        return rows.map(toNote);
+    }
+    deleteNote(userId, noteId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeNoteId = asNonEmptyString(noteId);
+        if (!safeUserId || !safeNoteId) {
+            return false;
+        }
+        const result = this.deleteNoteStmt.run(safeUserId, safeNoteId);
+        return result.changes > 0;
     }
 }
 exports.ReaderProgressDb = ReaderProgressDb;

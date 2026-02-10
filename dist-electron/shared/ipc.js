@@ -13,6 +13,9 @@ exports.IPC_CHANNELS = {
     booksReveal: 'books:reveal',
     booksDelete: 'books:delete',
     booksGetPdfData: 'books:get-pdf-data',
+    notesCreate: 'notes:create',
+    notesList: 'notes:list',
+    notesDelete: 'notes:delete',
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page'
 };

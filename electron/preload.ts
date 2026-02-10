@@ -17,6 +17,11 @@ const api: RendererApi = {
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
     getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload)
   },
+  notes: {
+    create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesCreate, payload),
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesList, payload),
+    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesDelete, payload)
+  },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>
     ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })

@@ -10,6 +10,9 @@ export const IPC_CHANNELS = {
   booksReveal: 'books:reveal',
   booksDelete: 'books:delete',
   booksGetPdfData: 'books:get-pdf-data',
+  notesCreate: 'notes:create',
+  notesList: 'notes:list',
+  notesDelete: 'notes:delete',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -43,6 +46,16 @@ export type Book = {
   createdAt: number;
 };
 
+export type Note = {
+  id: string;
+  userId: string;
+  bookId: string;
+  page: number;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type AuthError = { ok: false; error: string };
 export type AuthResult = { ok: true; token: string; user: User } | AuthError;
 export type GetCurrentUserResult = { ok: true; user: User } | AuthError;
@@ -53,6 +66,9 @@ export type BooksImportResult = { ok: true; book: Book } | AuthError;
 export type BooksRevealResult = { ok: true } | AuthError;
 export type BooksDeleteResult = { ok: true } | AuthError;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | AuthError;
+export type NotesCreateResult = { ok: true; note: Note } | AuthError;
+export type NotesListResult = { ok: true; notes: Note[] } | AuthError;
+export type NotesDeleteResult = { ok: true } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -100,6 +116,22 @@ export type BooksGetPdfDataRequest = {
   bookId: string;
 };
 
+export type NotesCreateRequest = {
+  token: string;
+  bookId: string;
+  page: number;
+  content: string;
+};
+
+export type NotesListRequest = {
+  token: string;
+};
+
+export type NotesDeleteRequest = {
+  token: string;
+  noteId: string;
+};
+
 export type ProgressGetLastPageRequest = {
   userId: string;
   bookId: string;
@@ -127,10 +159,17 @@ export interface RendererBooksApi {
   getPdfData: (payload: BooksGetPdfDataRequest) => Promise<BooksGetPdfDataResult>;
 }
 
+export interface RendererNotesApi {
+  create: (payload: NotesCreateRequest) => Promise<NotesCreateResult>;
+  list: (payload: NotesListRequest) => Promise<NotesListResult>;
+  delete: (payload: NotesDeleteRequest) => Promise<NotesDeleteResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
   books: RendererBooksApi;
+  notes: RendererNotesApi;
   getLastPage: (userId: string, bookId: string) => Promise<number | null>;
   setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
 }

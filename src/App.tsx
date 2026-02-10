@@ -8,6 +8,7 @@ import type {
   BooksImportResult,
   BooksListResult,
   BooksRevealResult,
+  Note,
   SignInRequest,
   SignUpRequest,
   User
@@ -17,6 +18,7 @@ import { AuthCard } from '@/components/auth-card';
 import type { AppView } from '@/components/Sidebar';
 import { LibraryScreen } from '@/screens/LibraryScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
+import { NotesScreen } from '@/screens/NotesScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 
 const SESSION_TOKEN_KEY = 'auth.session.token';
@@ -46,6 +48,7 @@ export default function App() {
   const [currentView, setCurrentView] = React.useState<AppView>('library');
   const [activeBook, setActiveBook] = React.useState<Book | null>(null);
   const [activePdfData, setActivePdfData] = React.useState<{ base64: string; title: string } | null>(null);
+  const [readerInitialPage, setReaderInitialPage] = React.useState<number | null>(null);
 
   const clearSession = React.useCallback((nextError: string | null = null) => {
     localStorage.removeItem(SESSION_TOKEN_KEY);
@@ -54,6 +57,7 @@ export default function App() {
     setBooks([]);
     setActiveBook(null);
     setActivePdfData(null);
+    setReaderInitialPage(null);
     setPassword('');
     setError(nextError);
   }, []);
@@ -258,7 +262,9 @@ export default function App() {
     }
   };
 
-  const onOpenBook = async (book: Book) => {
+  const onOpenBook = async (book: Book, initialPageOverride: number | null = null) => {
+    setReaderInitialPage(initialPageOverride);
+
     if (book.format === 'epub') {
       setActiveBook(book);
       setActivePdfData(null);
@@ -284,6 +290,7 @@ export default function App() {
 
       setActiveBook(book);
       setActivePdfData({ base64: result.base64, title: result.title });
+      setCurrentView('library');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -295,7 +302,19 @@ export default function App() {
   const onBackToLibrary = () => {
     setActiveBook(null);
     setActivePdfData(null);
+    setReaderInitialPage(null);
     setCurrentView('library');
+  };
+
+  const onOpenNote = async (note: Note) => {
+    const book = books.find((item) => item.id === note.bookId && item.format === 'pdf');
+    if (!book) {
+      setError('Book for this note was not found.');
+      return;
+    }
+
+    setCurrentView('library');
+    await onOpenBook(book, note.page);
   };
 
   const onRevealBook = async (bookId: string) => {
@@ -378,8 +397,11 @@ export default function App() {
             <PdfReaderScreen
               title={activePdfData.title || activeBook.title}
               base64={activePdfData.base64}
+              token={token ?? ''}
               userId={user.id.trim() || user.email}
               bookId={activeBook.id}
+              initialPage={readerInitialPage}
+              onInitialPageApplied={() => setReaderInitialPage(null)}
               loading={loading}
               onBack={onBackToLibrary}
             />
@@ -425,7 +447,11 @@ export default function App() {
       }
 
       if (currentView === 'notes') {
-        return <PlaceholderScreen title="Notes" />;
+        if (!token) {
+          return <PlaceholderScreen title="Notes" description="Sign in again to view notes." />;
+        }
+
+        return <NotesScreen token={token} books={books} onOpenNote={(note) => void onOpenNote(note)} />;
       }
 
       return <PlaceholderScreen title="Settings" />;
@@ -438,6 +464,7 @@ export default function App() {
           setCurrentView(view);
           setActiveBook(null);
           setActivePdfData(null);
+          setReaderInitialPage(null);
         }}
         user={user}
         loading={loading}

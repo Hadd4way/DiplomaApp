@@ -12,6 +12,12 @@ import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog';
 import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 
@@ -20,8 +26,11 @@ GlobalWorkerOptions.workerSrc = workerSrc;
 type Props = {
   title: string;
   base64: string;
+  token: string;
   userId: string;
   bookId: string;
+  initialPage?: number | null;
+  onInitialPageApplied?: () => void;
   loading: boolean;
   onBack: () => void;
 };
@@ -80,7 +89,17 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
   });
 }
 
-export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack }: Props) {
+export function PdfReaderScreen({
+  title,
+  base64,
+  token,
+  userId,
+  bookId,
+  initialPage = null,
+  onInitialPageApplied,
+  loading,
+  onBack
+}: Props) {
   const readerRootRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
@@ -105,6 +124,11 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
   const [pendingRestorePage, setPendingRestorePage] = React.useState<number | null>(null);
   const [progressLoaded, setProgressLoaded] = React.useState(false);
   const [restoreApplied, setRestoreApplied] = React.useState(false);
+  const [noteOpen, setNoteOpen] = React.useState(false);
+  const [noteContent, setNoteContent] = React.useState('');
+  const [noteSaving, setNoteSaving] = React.useState(false);
+  const [noteError, setNoteError] = React.useState<string | null>(null);
+  const [noteSuccess, setNoteSuccess] = React.useState<string | null>(null);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestPageRef = React.useRef(1);
@@ -160,6 +184,50 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
     flushLastPageSave();
     onBack();
   }, [flushLastPageSave, onBack]);
+
+  const openAddNote = React.useCallback(() => {
+    setNoteError(null);
+    setNoteSuccess(null);
+    setNoteContent('');
+    setNoteOpen(true);
+  }, []);
+
+  const saveNote = React.useCallback(async () => {
+    if (!window.api) {
+      setNoteError('Renderer API is unavailable. Open this app via Electron.');
+      return;
+    }
+
+    const content = noteContent.trim();
+    if (!content) {
+      setNoteError('Note content is required.');
+      return;
+    }
+
+    setNoteSaving(true);
+    setNoteError(null);
+    try {
+      const result = await window.api.notes.create({
+        token,
+        bookId,
+        page,
+        content
+      });
+      if (!result.ok) {
+        setNoteError(result.error);
+        return;
+      }
+
+      setNoteOpen(false);
+      setNoteContent('');
+      setNoteSuccess('Note added.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setNoteError(message);
+    } finally {
+      setNoteSaving(false);
+    }
+  }, [bookId, noteContent, page, token]);
 
   React.useEffect(() => {
     latestPageRef.current = page;
@@ -276,10 +344,14 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
       return;
     }
 
-    const nextPage = clampPage(pendingRestorePage ?? 1, doc.numPages);
+    const preferredPage = initialPage && initialPage >= 1 ? initialPage : pendingRestorePage ?? 1;
+    const nextPage = clampPage(preferredPage, doc.numPages);
     setPage(nextPage);
     setRestoreApplied(true);
-  }, [doc, pendingRestorePage, progressLoaded, restoreApplied]);
+    if (initialPage && initialPage >= 1) {
+      onInitialPageApplied?.();
+    }
+  }, [doc, initialPage, onInitialPageApplied, pendingRestorePage, progressLoaded, restoreApplied]);
 
   React.useEffect(() => {
     const viewportElement = readerViewportRef.current;
@@ -629,6 +701,12 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
         return;
       }
 
+      if (event.key === 'n' || event.key === 'N') {
+        event.preventDefault();
+        openAddNote();
+        return;
+      }
+
       if (event.key === '/') {
         event.preventDefault();
         pageInputRef.current?.focus();
@@ -640,7 +718,7 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [focusReader, goNext, goPrev, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
+  }, [focusReader, goNext, goPrev, openAddNote, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
 
   React.useEffect(() => {
     const viewportElement = readerViewportRef.current;
@@ -797,6 +875,17 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
             variant="outline"
             size="sm"
             className="ml-2"
+            onClick={openAddNote}
+            disabled={loading || rendering}
+          >
+            Add note
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-2"
             onClick={toggleContents}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
           >
@@ -804,6 +893,7 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
           </Button>
         </div>
         {pageInputError ? <p className="px-4 pb-2 text-xs text-destructive">{pageInputError}</p> : null}
+        {noteSuccess ? <p className="px-4 pb-2 text-xs text-emerald-700">{noteSuccess}</p> : null}
       </header>
 
       <main className="flex w-full flex-1 min-h-0 min-w-0">
@@ -873,6 +963,37 @@ export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack
           </div>
         </div>
       </main>
+
+      <AlertDialog open={noteOpen} onOpenChange={setNoteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add note</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-700">
+              {title} - page {page}
+            </p>
+            <textarea
+              value={noteContent}
+              onChange={(event) => {
+                setNoteContent(event.target.value);
+                setNoteError(null);
+              }}
+              className="min-h-28 w-full rounded-md border border-slate-300 p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="Write your note..."
+            />
+            {noteError ? <p className="text-xs text-destructive">{noteError}</p> : null}
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setNoteOpen(false)} disabled={noteSaving}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveNote()} disabled={noteSaving}>
+              Save
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

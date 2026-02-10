@@ -45,7 +45,7 @@ export function Sidebar({ currentView, onViewChange, user, loading, onSignOut }:
             >
               <Icon className="h-4 w-4" />
               <span>{item.label}</span>
-              {item.view === 'notes' || item.view === 'settings' ? (
+              {item.view === 'settings' ? (
                 <span className="ml-auto text-[10px] uppercase tracking-wide opacity-80">Soon</span>
               ) : null}
             </button>
