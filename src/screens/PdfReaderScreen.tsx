@@ -494,7 +494,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
               <Minus className="h-4 w-4" />
             </Button>
             <span className="w-16 text-center text-xs font-medium text-slate-700">
-              {scaleMode === 'fitWidth' ? 'Fit W' : scaleMode === 'fitPage' ? 'Fit P' : `${Math.round(scale * 100)}%`}
+              {`${Math.round(scale * 100)}%`}
             </span>
             <Button
               type="button"
