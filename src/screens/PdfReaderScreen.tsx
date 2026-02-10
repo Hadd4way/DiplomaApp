@@ -63,6 +63,7 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
 
 export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const pageStageRef = React.useRef<HTMLDivElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
   const readerViewportRef = React.useRef<HTMLElement | null>(null);
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
@@ -79,7 +80,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
   const [outlineLoading, setOutlineLoading] = React.useState(false);
-  const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
 
   const goPrev = React.useCallback(() => {
@@ -410,7 +411,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [goNext, goPrev, pageCount]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#f3f5f7]">
+    <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f3f5f7]">
       <header className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3">
           <Button type="button" variant="outline" size="sm" onClick={onBack} disabled={loading}>
@@ -538,7 +539,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
         {pageInputError ? <p className="px-4 pb-2 text-xs text-destructive">{pageInputError}</p> : null}
       </header>
 
-      <main className="flex min-h-0 flex-1">
+      <main className="flex w-full flex-1 min-h-0 min-w-0">
         {sidebarOpen ? (
           <div className="h-full w-[300px] shrink-0 border-r border-slate-200 bg-white">
             <PdfSidebar
@@ -556,51 +557,54 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
           </div>
         ) : null}
 
-        <section ref={readerViewportRef} className="min-w-0 flex-1 overflow-auto bg-[#eef1f5]">
-          <div className="relative flex min-h-full w-full items-start justify-center p-8">
-            <div
-              className="group relative"
-              style={{ width: canvasWidth > 0 ? `${canvasWidth}px` : 'auto', maxWidth: '100%' }}
-            >
-              {error ? <p className="text-sm text-destructive">{error}</p> : null}
-              {!error ? (
-                <>
-                  <button
-                    type="button"
-                    className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Previous page"
-                    title="Previous page"
-                    onClick={goPrev}
-                    disabled={loading || rendering || page <= 1}
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Next page"
-                    title="Next page"
-                    onClick={goNext}
-                    disabled={loading || rendering || page >= pageCount}
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
+        <div className="flex min-h-0 min-w-0 flex-1 basis-0 flex-col bg-[#eef1f5]">
+          <div ref={readerViewportRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+            <div className="w-full min-h-full flex justify-center px-8 py-6">
+              <div
+                ref={pageStageRef}
+                className="group relative"
+                style={{ width: canvasWidth > 0 ? `${canvasWidth}px` : 'auto', maxWidth: '100%' }}
+              >
+                {error ? <p className="text-sm text-destructive">{error}</p> : null}
+                {!error ? (
+                  <>
+                    <button
+                      type="button"
+                      className="absolute left-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Previous page"
+                      title="Previous page"
+                      onClick={goPrev}
+                      disabled={loading || rendering || page <= 1}
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="absolute right-3 top-1/2 z-20 -translate-y-1/2 rounded-full border border-slate-300 bg-white/95 p-2 text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Next page"
+                      title="Next page"
+                      onClick={goNext}
+                      disabled={loading || rendering || page >= pageCount}
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
 
-                  {rendering ? (
-                    <div className="pointer-events-none absolute right-3 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-xs text-slate-600 shadow-sm">
-                      <ListTree className="h-3.5 w-3.5" />
-                      Rendering...
+                    {rendering ? (
+                      <div className="pointer-events-none absolute right-3 top-3 z-30 inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white/95 px-2 py-1 text-xs text-slate-600 shadow-sm">
+                        <ListTree className="h-3.5 w-3.5" />
+                        Rendering...
+                      </div>
+                    ) : null}
+
+                    <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
+                      <canvas ref={canvasRef} className="block" />
                     </div>
-                  ) : null}
-
-                  <div className="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
-                    <canvas ref={canvasRef} className="block" />
-                  </div>
-                </>
-              ) : null}
+                  </>
+                ) : null}
+              </div>
             </div>
           </div>
-        </section>
+        </div>
       </main>
     </div>
   );
