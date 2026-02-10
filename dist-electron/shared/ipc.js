@@ -12,5 +12,7 @@ exports.IPC_CHANNELS = {
     booksImport: 'books:import',
     booksReveal: 'books:reveal',
     booksDelete: 'books:delete',
-    booksGetPdfData: 'books:get-pdf-data'
+    booksGetPdfData: 'books:get-pdf-data',
+    progressGetLastPage: 'progress:get-last-page',
+    progressSetLastPage: 'progress:set-last-page'
 };

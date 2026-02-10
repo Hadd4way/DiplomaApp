@@ -17,6 +17,8 @@ const api = {
         reveal: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksReveal, payload),
         delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksDelete, payload),
         getPdfData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetPdfData, payload)
-    }
+    },
+    getLastPage: (userId, bookId) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
+    setLastPage: (userId, bookId, lastPage) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })
 };
 electron_1.contextBridge.exposeInMainWorld('api', api);

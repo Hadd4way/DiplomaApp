@@ -16,7 +16,10 @@ const api: RendererApi = {
     reveal: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksReveal, payload),
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
     getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload)
-  }
+  },
+  getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
+  setLastPage: (userId, bookId, lastPage) =>
+    ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })
 };
 
 contextBridge.exposeInMainWorld('api', api);

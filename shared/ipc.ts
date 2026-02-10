@@ -9,7 +9,9 @@ export const IPC_CHANNELS = {
   booksImport: 'books:import',
   booksReveal: 'books:reveal',
   booksDelete: 'books:delete',
-  booksGetPdfData: 'books:get-pdf-data'
+  booksGetPdfData: 'books:get-pdf-data',
+  progressGetLastPage: 'progress:get-last-page',
+  progressSetLastPage: 'progress:set-last-page'
 } as const;
 
 export type PingResponse = {
@@ -98,6 +100,17 @@ export type BooksGetPdfDataRequest = {
   bookId: string;
 };
 
+export type ProgressGetLastPageRequest = {
+  userId: string;
+  bookId: string;
+};
+
+export type ProgressSetLastPageRequest = {
+  userId: string;
+  bookId: string;
+  lastPage: number;
+};
+
 export interface RendererAuthApi {
   signUp: (payload: SignUpRequest) => Promise<AuthResult>;
   signIn: (payload: SignInRequest) => Promise<AuthResult>;
@@ -118,6 +131,8 @@ export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
   books: RendererBooksApi;
+  getLastPage: (userId: string, bookId: string) => Promise<number | null>;
+  setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
 }
 
 declare global {

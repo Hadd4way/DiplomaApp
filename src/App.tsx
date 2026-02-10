@@ -378,6 +378,8 @@ export default function App() {
             <PdfReaderScreen
               title={activePdfData.title || activeBook.title}
               base64={activePdfData.base64}
+              userId={user.id.trim() || user.email}
+              bookId={activeBook.id}
               loading={loading}
               onBack={onBackToLibrary}
             />

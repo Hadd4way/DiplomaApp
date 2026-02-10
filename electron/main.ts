@@ -10,6 +10,8 @@ import {
   IPC_CHANNELS,
   type GetCurrentUserRequest,
   type PingResponse,
+  type ProgressGetLastPageRequest,
+  type ProgressSetLastPageRequest,
   type SignInRequest,
   type SignOutRequest,
   type SignUpRequest
@@ -17,6 +19,7 @@ import {
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
 import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBook } from './books';
+import { getReaderProgressDb } from './reader-progress-db';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -46,7 +49,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  const db = getDatabase(app.getPath('userData'));
+  const userDataPath = app.getPath('userData');
+  const db = getDatabase(userDataPath);
+  const progressDb = getReaderProgressDb(userDataPath);
 
   ipcMain.handle(IPC_CHANNELS.ping, (): PingResponse => ({
     ok: true,
@@ -69,16 +74,22 @@ app.whenReady().then(() => {
     addSampleBook(db, payload)
   );
   ipcMain.handle(IPC_CHANNELS.booksImport, (_event, payload: BooksImportRequest) =>
-    importBook(db, payload, app.getPath('userData'), mainWindow)
+    importBook(db, payload, userDataPath, mainWindow)
   );
   ipcMain.handle(IPC_CHANNELS.booksReveal, (_event, payload: BooksRevealRequest) =>
-    revealBook(db, payload, app.getPath('userData'))
+    revealBook(db, payload, userDataPath)
   );
   ipcMain.handle(IPC_CHANNELS.booksDelete, (_event, payload: BooksDeleteRequest) =>
-    deleteBook(db, payload, app.getPath('userData'))
+    deleteBook(db, payload, userDataPath)
   );
   ipcMain.handle(IPC_CHANNELS.booksGetPdfData, (_event, payload: BooksGetPdfDataRequest) =>
     getPdfData(db, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
+    progressDb.getLastPage(payload.userId, payload.bookId)
+  );
+  ipcMain.handle(IPC_CHANNELS.progressSetLastPage, (_event, payload: ProgressSetLastPageRequest) =>
+    progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage)
   );
 
   createWindow();

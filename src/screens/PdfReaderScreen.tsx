@@ -20,6 +20,8 @@ GlobalWorkerOptions.workerSrc = workerSrc;
 type Props = {
   title: string;
   base64: string;
+  userId: string;
+  bookId: string;
   loading: boolean;
   onBack: () => void;
 };
@@ -35,6 +37,15 @@ function computeFitWidthScale(basePageWidth: number, availableWidth: number): nu
     return 1;
   }
   return clampScale(availableWidth / basePageWidth);
+}
+
+function clampPage(nextPage: number, totalPages: number): number {
+  if (!Number.isFinite(nextPage)) {
+    return 1;
+  }
+  const safeTotal = Math.max(1, Math.floor(totalPages));
+  const safeNext = Math.floor(nextPage);
+  return Math.min(safeTotal, Math.max(1, safeNext));
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -61,7 +72,7 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
   });
 }
 
-export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
+export function PdfReaderScreen({ title, base64, userId, bookId, loading, onBack }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -82,7 +93,13 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const [outlineItems, setOutlineItems] = React.useState<PdfOutlineItem[]>([]);
   const [outlineLoading, setOutlineLoading] = React.useState(false);
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
+  const [pendingRestorePage, setPendingRestorePage] = React.useState<number | null>(null);
+  const [progressLoaded, setProgressLoaded] = React.useState(false);
+  const [restoreApplied, setRestoreApplied] = React.useState(false);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
+  const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestPageRef = React.useRef(1);
+  const canSaveRef = React.useRef(false);
 
   const goPrev = React.useCallback(() => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -91,6 +108,77 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   const goNext = React.useCallback(() => {
     setPage((prev) => Math.min(pageCount, prev + 1));
   }, [pageCount]);
+
+  const flushLastPageSave = React.useCallback(() => {
+    if (!canSaveRef.current || !window.api) {
+      return;
+    }
+    const safeUserId = userId.trim();
+    const safeBookId = bookId.trim();
+    if (!safeUserId || !safeBookId) {
+      return;
+    }
+    void window.api.setLastPage(safeUserId, safeBookId, Math.max(1, latestPageRef.current));
+  }, [bookId, userId]);
+
+  const handleBack = React.useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    flushLastPageSave();
+    onBack();
+  }, [flushLastPageSave, onBack]);
+
+  React.useEffect(() => {
+    latestPageRef.current = page;
+  }, [page]);
+
+  React.useEffect(() => {
+    canSaveRef.current = Boolean(doc) && progressLoaded && restoreApplied;
+  }, [doc, progressLoaded, restoreApplied]);
+
+  React.useEffect(() => {
+    let canceled = false;
+
+    const loadLastPage = async () => {
+      setProgressLoaded(false);
+      setRestoreApplied(false);
+      setPendingRestorePage(null);
+
+      if (!window.api) {
+        setProgressLoaded(true);
+        return;
+      }
+
+      const safeUserId = userId.trim();
+      const safeBookId = bookId.trim();
+      if (!safeUserId || !safeBookId) {
+        setProgressLoaded(true);
+        return;
+      }
+
+      try {
+        const savedLastPage = await window.api.getLastPage(safeUserId, safeBookId);
+        if (!canceled) {
+          setPendingRestorePage(savedLastPage);
+        }
+      } catch {
+        if (!canceled) {
+          setPendingRestorePage(null);
+        }
+      } finally {
+        if (!canceled) {
+          setProgressLoaded(true);
+        }
+      }
+    };
+
+    void loadLastPage();
+    return () => {
+      canceled = true;
+    };
+  }, [bookId, userId]);
 
   const tryJumpToPage = React.useCallback(
     (rawValue: string): boolean => {
@@ -121,6 +209,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     const loadDocument = async () => {
       setError(null);
       setRendering(true);
+      setRestoreApplied(false);
       setScaleMode('fitPage');
       setScale(1);
       setFitWidthReady(false);
@@ -150,6 +239,16 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
       canceled = true;
     };
   }, [base64]);
+
+  React.useEffect(() => {
+    if (!doc || !progressLoaded || restoreApplied) {
+      return;
+    }
+
+    const nextPage = clampPage(pendingRestorePage ?? 1, doc.numPages);
+    setPage(nextPage);
+    setRestoreApplied(true);
+  }, [doc, pendingRestorePage, progressLoaded, restoreApplied]);
 
   React.useEffect(() => {
     const viewportElement = readerViewportRef.current;
@@ -288,6 +387,59 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
   }, [page]);
 
   React.useEffect(() => {
+    if (!canSaveRef.current || !window.api) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    const safeUserId = userId.trim();
+    const safeBookId = bookId.trim();
+    if (!safeUserId || !safeBookId) {
+      return;
+    }
+
+    saveTimerRef.current = setTimeout(() => {
+      void window.api?.setLastPage(safeUserId, safeBookId, Math.max(1, page));
+      saveTimerRef.current = null;
+    }, 400);
+
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [bookId, page, restoreApplied, userId]);
+
+  React.useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      flushLastPageSave();
+    };
+  }, [flushLastPageSave]);
+
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      flushLastPageSave();
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [flushLastPageSave]);
+
+  React.useEffect(() => {
     let canceled = false;
 
     const loadOutline = async () => {
@@ -421,7 +573,7 @@ export function PdfReaderScreen({ title, base64, loading, onBack }: Props) {
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f3f5f7]">
       <header className="shrink-0 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3">
-          <Button type="button" variant="outline" size="sm" onClick={onBack} disabled={loading}>
+          <Button type="button" variant="outline" size="sm" onClick={handleBack} disabled={loading}>
             Back
           </Button>
 
