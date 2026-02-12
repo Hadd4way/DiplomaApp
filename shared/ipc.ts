@@ -16,6 +16,8 @@ export const IPC_CHANNELS = {
   notesUpdate: 'notes:update',
   highlightsList: 'highlights:list',
   highlightsCreateMerged: 'highlights:create-merged',
+  highlightsDelete: 'highlights:delete',
+  highlightsInsertRaw: 'highlights:insert-raw',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -92,6 +94,8 @@ export type NotesDeleteResult = { ok: true } | AuthError;
 export type NotesUpdateResult = { ok: true; note: Note } | AuthError;
 export type HighlightsListResult = { ok: true; highlights: Highlight[] } | AuthError;
 export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | AuthError;
+export type HighlightsDeleteResult = { ok: true } | AuthError;
+export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -176,6 +180,18 @@ export type HighlightsCreateMergedRequest = {
   rects: HighlightRect[];
 };
 
+export type HighlightsDeleteRequest = {
+  token: string;
+  highlightId: string;
+};
+
+export type HighlightsInsertRawRequest = {
+  token: string;
+  bookId: string;
+  page: number;
+  rects: HighlightRect[];
+};
+
 export type ProgressGetLastPageRequest = {
   userId: string;
   bookId: string;
@@ -213,6 +229,8 @@ export interface RendererNotesApi {
 export interface RendererHighlightsApi {
   list: (payload: HighlightsListRequest) => Promise<HighlightsListResult>;
   createMerged: (payload: HighlightsCreateMergedRequest) => Promise<HighlightsCreateMergedResult>;
+  delete: (payload: HighlightsDeleteRequest) => Promise<HighlightsDeleteResult>;
+  insertRaw: (payload: HighlightsInsertRawRequest) => Promise<HighlightsInsertRawResult>;
 }
 
 export interface RendererApi {

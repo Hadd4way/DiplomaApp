@@ -32,6 +32,11 @@ type Props = {
 };
 
 type ScaleMode = 'fitWidth' | 'fitPage' | 'manual';
+type HighlightContextMenuState = { highlightId: string; x: number; y: number } | null;
+type PendingHighlightDeletion = {
+  id: string;
+  highlight: Highlight;
+};
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -76,6 +81,35 @@ function normalizeSelectionRect(rect: HighlightRect): HighlightRect | null {
     return null;
   }
   return { x: x1, y: y1, w, h };
+}
+
+function getHighlightBounds(rects: HighlightRect[]): HighlightRect | null {
+  if (rects.length === 0) {
+    return null;
+  }
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const rect of rects) {
+    left = Math.min(left, rect.x);
+    top = Math.min(top, rect.y);
+    right = Math.max(right, rect.x + rect.w);
+    bottom = Math.max(bottom, rect.y + rect.h);
+  }
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(right) || !Number.isFinite(bottom)) {
+    return null;
+  }
+  const width = right - left;
+  const height = bottom - top;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+  return { x: left, y: top, w: width, h: height };
+}
+
+function pointInRect(x: number, y: number, rect: HighlightRect): boolean {
+  return x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -148,8 +182,12 @@ export function PdfReaderScreen({
   const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
   const [bookNotesError, setBookNotesError] = React.useState<string | null>(null);
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
+  const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
+  const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDeletionTimeoutsRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const pendingHighlightDeletionsRef = React.useRef<PendingHighlightDeletion[]>([]);
   const latestPageRef = React.useRef(1);
   const canSaveRef = React.useRef(false);
 
@@ -361,15 +399,186 @@ export function PdfReaderScreen({
     }
   }, [bookId, loadPageHighlights, page, token]);
 
+  const finalizeHighlightDelete = React.useCallback(
+    async (highlight: Highlight) => {
+      if (!window.api) {
+        return;
+      }
+      const safeId = highlight.id.trim();
+      if (!safeId) {
+        return;
+      }
+      try {
+        const result = await window.api.highlights.delete({ token, highlightId: safeId });
+        if (!result.ok && highlight.bookId === bookId && highlight.page === page) {
+          await loadPageHighlights();
+        }
+      } catch {
+        if (highlight.bookId === bookId && highlight.page === page) {
+          await loadPageHighlights();
+        }
+      }
+    },
+    [bookId, loadPageHighlights, page, token]
+  );
+
+  const queueHighlightDeletion = React.useCallback(
+    (highlight: Highlight) => {
+      const safeId = highlight.id.trim();
+      if (!safeId) {
+        return;
+      }
+
+      const existingTimeout = pendingDeletionTimeoutsRef.current.get(safeId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      setPageHighlights((prev) => prev.filter((item) => item.id !== safeId));
+      setPendingHighlightDeletions((prev) => {
+        const filtered = prev.filter((item) => item.id !== safeId);
+        return [...filtered, { id: safeId, highlight }];
+      });
+      setHighlightContextMenu(null);
+
+      const timeoutId = setTimeout(() => {
+        pendingDeletionTimeoutsRef.current.delete(safeId);
+        setPendingHighlightDeletions((prev) => prev.filter((item) => item.id !== safeId));
+        void finalizeHighlightDelete(highlight);
+      }, 5000);
+
+      pendingDeletionTimeoutsRef.current.set(safeId, timeoutId);
+    },
+    [finalizeHighlightDelete]
+  );
+
+  const undoHighlightDeletion = React.useCallback(
+    async (pendingId: string) => {
+      if (!window.api) {
+        return;
+      }
+      const timeoutId = pendingDeletionTimeoutsRef.current.get(pendingId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        pendingDeletionTimeoutsRef.current.delete(pendingId);
+      }
+
+      const pending = pendingHighlightDeletions.find((item) => item.id === pendingId);
+      if (!pending) {
+        return;
+      }
+
+      setPendingHighlightDeletions((prev) => prev.filter((item) => item.id !== pendingId));
+
+      try {
+        const result = await window.api.highlights.insertRaw({
+          token,
+          bookId: pending.highlight.bookId,
+          page: pending.highlight.page,
+          rects: pending.highlight.rects
+        });
+        if (result.ok && pending.highlight.page === page && pending.highlight.bookId === bookId) {
+          await loadPageHighlights();
+        }
+      } catch {
+      }
+    },
+    [bookId, loadPageHighlights, page, pendingHighlightDeletions, token]
+  );
+
+  const openHighlightContextMenu = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+        return;
+      }
+
+      const stage = pageStageRef.current;
+      if (!stage) {
+        return;
+      }
+      const stageRect = stage.getBoundingClientRect();
+      if (stageRect.width <= 0 || stageRect.height <= 0) {
+        return;
+      }
+
+      const xNormalized = (event.clientX - stageRect.left) / stageRect.width;
+      const yNormalized = (event.clientY - stageRect.top) / stageRect.height;
+
+      const hit = pageHighlights.find((highlight) =>
+        highlight.rects.some((rect) => pointInRect(xNormalized, yNormalized, rect))
+      );
+      if (!hit) {
+        setHighlightContextMenu(null);
+        return;
+      }
+
+      event.preventDefault();
+      const x = Math.max(8, Math.min(stageRect.width - 8, event.clientX - stageRect.left));
+      const y = Math.max(8, Math.min(stageRect.height - 8, event.clientY - stageRect.top));
+      setHighlightContextMenu({ highlightId: hit.id, x, y });
+    },
+    [pageHighlights]
+  );
+
   React.useEffect(() => {
     setBookNotes([]);
     setBookNotesError(null);
     setNotesPanelOpen(false);
+    setHighlightContextMenu(null);
   }, [bookId]);
 
   React.useEffect(() => {
     void loadPageHighlights();
   }, [loadPageHighlights]);
+
+  React.useEffect(() => {
+    setHighlightContextMenu(null);
+  }, [page, scale]);
+
+  React.useEffect(() => {
+    const closeMenuOnPointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && target.closest('[data-highlight-menu="true"]')) {
+        return;
+      }
+      setHighlightContextMenu(null);
+    };
+    const closeMenuOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setHighlightContextMenu(null);
+      }
+    };
+    const closeMenuOnScroll = () => {
+      setHighlightContextMenu(null);
+    };
+    const viewportElement = readerViewportRef.current;
+    document.addEventListener('pointerdown', closeMenuOnPointerDown);
+    document.addEventListener('keydown', closeMenuOnEscape);
+    viewportElement?.addEventListener('scroll', closeMenuOnScroll);
+    return () => {
+      document.removeEventListener('pointerdown', closeMenuOnPointerDown);
+      document.removeEventListener('keydown', closeMenuOnEscape);
+      viewportElement?.removeEventListener('scroll', closeMenuOnScroll);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    pendingHighlightDeletionsRef.current = pendingHighlightDeletions;
+  }, [pendingHighlightDeletions]);
+
+  React.useEffect(() => {
+    return () => {
+      for (const timeoutId of pendingDeletionTimeoutsRef.current.values()) {
+        clearTimeout(timeoutId);
+      }
+      const pending = [...pendingHighlightDeletionsRef.current];
+      pendingDeletionTimeoutsRef.current.clear();
+      for (const item of pending) {
+        void finalizeHighlightDelete(item.highlight);
+      }
+    };
+  }, [finalizeHighlightDelete]);
 
   React.useEffect(() => {
     if (!notesPanelOpen) {
@@ -1141,7 +1350,12 @@ export function PdfReaderScreen({
                       </div>
                     ) : null}
 
-                    <div className="relative overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]">
+                    <div
+                      className="relative overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]"
+                      onContextMenu={(event) => {
+                        openHighlightContextMenu(event);
+                      }}
+                    >
                       <canvas ref={canvasRef} className="block" />
                       <div
                         className="absolute inset-0 z-10 pdf-text-layer"
@@ -1151,20 +1365,71 @@ export function PdfReaderScreen({
                         }}
                       />
                       <div className="pointer-events-none absolute inset-0 z-[11]">
-                        {pageHighlights.map((highlight) =>
-                          highlight.rects.map((rect, index) => (
+                        {pageHighlights.map((highlight) => {
+                          const bounds = getHighlightBounds(highlight.rects);
+                          if (!bounds) {
+                            return null;
+                          }
+                          return (
                             <div
-                              key={`${highlight.id}:${index}`}
-                              className="absolute bg-yellow-300/45"
+                              key={highlight.id}
+                              className="absolute"
                               style={{
-                                left: `${rect.x * 100}%`,
-                                top: `${rect.y * 100}%`,
-                                width: `${rect.w * 100}%`,
-                                height: `${rect.h * 100}%`
+                                left: `${bounds.x * 100}%`,
+                                top: `${bounds.y * 100}%`,
+                                width: `${bounds.w * 100}%`,
+                                height: `${bounds.h * 100}%`
                               }}
-                            />
-                          ))
-                        )}
+                            >
+                              {highlight.rects.map((rect, index) => (
+                                <div
+                                  key={`${highlight.id}:${index}`}
+                                  className="absolute bg-yellow-300/45"
+                                  style={{
+                                    left: `${((rect.x - bounds.x) / bounds.w) * 100}%`,
+                                    top: `${((rect.y - bounds.y) / bounds.h) * 100}%`,
+                                    width: `${(rect.w / bounds.w) * 100}%`,
+                                    height: `${(rect.h / bounds.h) * 100}%`
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          );
+                        })}
+                        {highlightContextMenu ? (
+                          <div
+                            data-highlight-menu="true"
+                            className="pointer-events-auto absolute z-20 min-w-[150px] rounded-md border border-slate-200 bg-white p-1 shadow-lg"
+                            style={{
+                              left: `${highlightContextMenu.x}px`,
+                              top: `${highlightContextMenu.y}px`
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="block w-full rounded px-2 py-1 text-left text-xs text-red-700 transition-colors hover:bg-red-50"
+                              onClick={() => {
+                                const targetHighlight = pageHighlights.find(
+                                  (item) => item.id === highlightContextMenu.highlightId
+                                );
+                                if (!targetHighlight) {
+                                  setHighlightContextMenu(null);
+                                  return;
+                                }
+                                queueHighlightDeletion(targetHighlight);
+                              }}
+                            >
+                              Delete highlight
+                            </button>
+                            <button
+                              type="button"
+                              className="mt-1 block w-full rounded px-2 py-1 text-left text-xs text-slate-600 transition-colors hover:bg-slate-100"
+                              onClick={() => setHighlightContextMenu(null)}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </>
@@ -1205,6 +1470,28 @@ export function PdfReaderScreen({
                 ))}
               </div>
             </aside>
+          ) : null}
+
+          {pendingHighlightDeletions.length > 0 ? (
+            <div className="pointer-events-none absolute bottom-3 right-3 z-50 flex flex-col gap-2">
+              {pendingHighlightDeletions.map((pending) => (
+                <div
+                  key={pending.id}
+                  className="pointer-events-auto flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 shadow-lg"
+                >
+                  <p className="text-xs text-slate-700">Highlight deleted</p>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+                    onClick={() => {
+                      void undoHighlightDeletion(pending.id);
+                    }}
+                  >
+                    Undo
+                  </button>
+                </div>
+              ))}
+            </div>
           ) : null}
         </div>
       </main>

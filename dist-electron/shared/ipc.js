@@ -19,6 +19,8 @@ exports.IPC_CHANNELS = {
     notesUpdate: 'notes:update',
     highlightsList: 'highlights:list',
     highlightsCreateMerged: 'highlights:create-merged',
+    highlightsDelete: 'highlights:delete',
+    highlightsInsertRaw: 'highlights:insert-raw',
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page'
 };

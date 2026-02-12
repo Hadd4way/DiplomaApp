@@ -25,7 +25,9 @@ const api: RendererApi = {
   },
   highlights: {
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsList, payload),
-    createMerged: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsCreateMerged, payload)
+    createMerged: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsCreateMerged, payload),
+    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsDelete, payload),
+    insertRaw: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsInsertRaw, payload)
   },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>

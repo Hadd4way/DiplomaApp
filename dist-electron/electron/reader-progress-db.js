@@ -165,6 +165,7 @@ class ReaderProgressDb {
         this.deleteHighlightsByIdsStmt = this.db.prepare(`DELETE FROM highlights
        WHERE user_id = @user_id
          AND id IN (SELECT value FROM json_each(@ids_json))`);
+        this.deleteHighlightStmt = this.db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?');
         this.listHighlightsStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
@@ -307,6 +308,15 @@ class ReaderProgressDb {
             return;
         }
         this.deleteHighlightsByIdsStmt.run({ user_id: safeUserId, ids_json: JSON.stringify(safeIds) });
+    }
+    deleteHighlight(userId, highlightId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeHighlightId = asNonEmptyString(highlightId);
+        if (!safeUserId || !safeHighlightId) {
+            return false;
+        }
+        const result = this.deleteHighlightStmt.run(safeHighlightId, safeUserId);
+        return result.changes > 0;
     }
     createMergedHighlight(userId, bookId, page, rects, id, createdAt, updatedAt, removeIds) {
         const run = this.db.transaction(() => {

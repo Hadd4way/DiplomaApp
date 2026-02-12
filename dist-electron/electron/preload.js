@@ -26,7 +26,9 @@ const api = {
     },
     highlights: {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsList, payload),
-        createMerged: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsCreateMerged, payload)
+        createMerged: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsCreateMerged, payload),
+        delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsDelete, payload),
+        insertRaw: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsInsertRaw, payload)
     },
     getLastPage: (userId, bookId) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
     setLastPage: (userId, bookId, lastPage) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })

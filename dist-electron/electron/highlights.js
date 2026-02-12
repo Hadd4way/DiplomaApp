@@ -2,9 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listHighlights = listHighlights;
 exports.createMergedHighlight = createMergedHighlight;
+exports.deleteHighlight = deleteHighlight;
+exports.insertRawHighlight = insertRawHighlight;
 const node_crypto_1 = require("node:crypto");
 const auth_1 = require("./auth");
 const EPSILON = 0.002;
+const LINE_EPSILON = 0.01;
+const GAP_EPSILON = 0.005;
 const MIN_RECT_SIZE = 0.000001;
 function clamp01(value) {
     return Math.min(1, Math.max(0, value));
@@ -69,7 +73,7 @@ function mergePair(a, b) {
         h: bottom - y
     };
 }
-function mergeRects(rects) {
+function mergeRectsByLine(rects) {
     const normalized = rects
         .map((rect) => normalizeRect(rect))
         .filter((rect) => Boolean(rect))
@@ -77,33 +81,40 @@ function mergeRects(rects) {
     if (normalized.length <= 1) {
         return normalized;
     }
-    let current = normalized;
-    let changed = true;
-    while (changed) {
-        changed = false;
-        const next = [];
-        const consumed = new Array(current.length).fill(false);
-        for (let i = 0; i < current.length; i += 1) {
-            if (consumed[i]) {
-                continue;
+    const lineGroups = [];
+    for (const rect of normalized) {
+        const centerY = rect.y + rect.h / 2;
+        let assigned = false;
+        for (const group of lineGroups) {
+            const groupCenterY = group.reduce((sum, item) => sum + (item.y + item.h / 2), 0) / group.length;
+            if (Math.abs(centerY - groupCenterY) < LINE_EPSILON) {
+                group.push(rect);
+                assigned = true;
+                break;
             }
-            let merged = current[i];
-            for (let j = i + 1; j < current.length; j += 1) {
-                if (consumed[j]) {
-                    continue;
-                }
-                const candidate = current[j];
-                if (rectsOverlap(merged, candidate, EPSILON) || rectsCloseOnSameLine(merged, candidate, EPSILON)) {
-                    merged = mergePair(merged, candidate);
-                    consumed[j] = true;
-                    changed = true;
-                }
-            }
-            next.push(merged);
         }
-        current = next.sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
+        if (!assigned) {
+            lineGroups.push([rect]);
+        }
     }
-    return current;
+    const merged = [];
+    for (const group of lineGroups) {
+        const sorted = group.sort((a, b) => a.x - b.x);
+        let current = sorted[0];
+        for (let i = 1; i < sorted.length; i += 1) {
+            const next = sorted[i];
+            const touchesOrOverlapsX = current.x + current.w >= next.x - GAP_EPSILON;
+            if (touchesOrOverlapsX) {
+                current = mergePair(current, next);
+            }
+            else {
+                merged.push(current);
+                current = next;
+            }
+        }
+        merged.push(current);
+    }
+    return merged.sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
 }
 function anyOverlap(left, right) {
     for (const a of left) {
@@ -143,7 +154,7 @@ function createMergedHighlight(authDb, readerDb, payload) {
     if (!page) {
         return { ok: false, error: 'Invalid page' };
     }
-    const incoming = mergeRects(payload.rects ?? []);
+    const incoming = mergeRectsByLine(payload.rects ?? []);
     if (incoming.length === 0) {
         return { ok: false, error: 'At least one highlight rect is required.' };
     }
@@ -162,12 +173,59 @@ function createMergedHighlight(authDb, readerDb, payload) {
             allRectsToMerge.push(...highlight.rects);
         }
     }
-    const finalRects = mergeRects(allRectsToMerge);
+    const finalRects = mergeRectsByLine(allRectsToMerge);
     if (finalRects.length === 0) {
         return { ok: false, error: 'At least one highlight rect is required.' };
     }
     const now = Date.now();
     const created = readerDb.createMergedHighlight(session.userId, bookId, page, finalRects, (0, node_crypto_1.randomUUID)(), now, now, overlapIds);
+    if (!created) {
+        return { ok: false, error: 'Failed to create highlight.' };
+    }
+    return { ok: true, highlight: created };
+}
+function deleteHighlight(authDb, readerDb, payload) {
+    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const highlightId = payload.highlightId?.trim();
+    if (!highlightId) {
+        return { ok: false, error: 'Highlight not found' };
+    }
+    const deleted = readerDb.deleteHighlight(session.userId, highlightId);
+    if (!deleted) {
+        return { ok: false, error: 'Highlight not found' };
+    }
+    return { ok: true };
+}
+function insertRawHighlight(authDb, readerDb, payload) {
+    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const page = normalizePage(payload.page);
+    if (!page) {
+        return { ok: false, error: 'Invalid page' };
+    }
+    const rects = (payload.rects ?? [])
+        .map((rect) => normalizeRect(rect))
+        .filter((rect) => Boolean(rect));
+    if (rects.length === 0) {
+        return { ok: false, error: 'At least one highlight rect is required.' };
+    }
+    const ownedBook = authDb
+        .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, session.userId);
+    if (!ownedBook) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const now = Date.now();
+    const created = readerDb.insertHighlight(session.userId, bookId, page, rects, (0, node_crypto_1.randomUUID)(), now, now);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }

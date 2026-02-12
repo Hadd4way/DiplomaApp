@@ -64,6 +64,8 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesUpdate, (_event, payload) => (0, notes_1.updateNote)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsList, (_event, payload) => (0, highlights_1.listHighlights)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsCreateMerged, (_event, payload) => (0, highlights_1.createMergedHighlight)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsDelete, (_event, payload) => (0, highlights_1.deleteHighlight)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsInsertRaw, (_event, payload) => (0, highlights_1.insertRawHighlight)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(payload.userId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage));
     createWindow();

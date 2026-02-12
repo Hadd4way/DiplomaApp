@@ -15,6 +15,8 @@ import {
   type NotesUpdateRequest,
   type PingResponse,
   type HighlightsCreateMergedRequest,
+  type HighlightsDeleteRequest,
+  type HighlightsInsertRawRequest,
   type HighlightsListRequest,
   type ProgressGetLastPageRequest,
   type ProgressSetLastPageRequest,
@@ -26,7 +28,7 @@ import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
 import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
-import { createMergedHighlight, listHighlights } from './highlights';
+import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights } from './highlights';
 import { getReaderProgressDb } from './reader-progress-db';
 
 let mainWindow: BrowserWindow | null = null;
@@ -102,6 +104,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.highlightsCreateMerged, (_event, payload: HighlightsCreateMergedRequest) =>
     createMergedHighlight(db, progressDb, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.highlightsDelete, (_event, payload: HighlightsDeleteRequest) =>
+    deleteHighlight(db, progressDb, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.highlightsInsertRaw, (_event, payload: HighlightsInsertRawRequest) =>
+    insertRawHighlight(db, progressDb, payload)
   );
   ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
     progressDb.getLastPage(payload.userId, payload.bookId)
