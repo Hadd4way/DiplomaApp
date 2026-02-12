@@ -6,7 +6,9 @@ import {
   Minus,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus
+  Plus,
+  Search,
+  X
 } from 'lucide-react';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { PdfSidebar } from '@/components/pdf-sidebar';
@@ -16,6 +18,7 @@ import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } fr
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import type { Highlight, HighlightRect, Note } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
+import { usePdfSearch } from '@/lib/usePdfSearch';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
 
@@ -152,6 +155,7 @@ export function PdfReaderScreen({
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
   const textLayerRef = React.useRef<HTMLDivElement | null>(null);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const readerViewportRef = React.useRef<HTMLDivElement | null>(null);
   const [doc, setDoc] = React.useState<PDFDocumentProxy | null>(null);
   const [page, setPage] = React.useState(1);
@@ -178,6 +182,7 @@ export function PdfReaderScreen({
   const [noteError, setNoteError] = React.useState<string | null>(null);
   const [noteSuccess, setNoteSuccess] = React.useState<string | null>(null);
   const [notesPanelOpen, setNotesPanelOpen] = React.useState(false);
+  const [searchPanelOpen, setSearchPanelOpen] = React.useState(false);
   const [bookNotes, setBookNotes] = React.useState<Note[]>([]);
   const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
   const [bookNotesError, setBookNotesError] = React.useState<string | null>(null);
@@ -190,6 +195,7 @@ export function PdfReaderScreen({
   const pendingHighlightDeletionsRef = React.useRef<PendingHighlightDeletion[]>([]);
   const latestPageRef = React.useRef(1);
   const canSaveRef = React.useRef(false);
+  const { query: searchQuery, results: searchResults, isSearching, setQuery: setSearchQuery, clearQuery } = usePdfSearch(doc, bookId);
 
   const goPrev = React.useCallback(() => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -219,6 +225,10 @@ export function PdfReaderScreen({
 
   const toggleBookNotesPanel = React.useCallback(() => {
     setNotesPanelOpen((prev) => !prev);
+  }, []);
+
+  const openSearchPanel = React.useCallback(() => {
+    setSearchPanelOpen(true);
   }, []);
 
   const focusReader = React.useCallback(() => {
@@ -526,7 +536,20 @@ export function PdfReaderScreen({
     setBookNotesError(null);
     setNotesPanelOpen(false);
     setHighlightContextMenu(null);
-  }, [bookId]);
+    setSearchPanelOpen(false);
+    clearQuery();
+  }, [bookId, clearQuery]);
+
+  React.useEffect(() => {
+    if (!searchPanelOpen) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [searchPanelOpen]);
 
   React.useEffect(() => {
     void loadPageHighlights();
@@ -1002,6 +1025,12 @@ export function PdfReaderScreen({
       const typing = isTypingTarget(event.target ?? activeElement);
       const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
+      if (ctrlOrMeta && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        openSearchPanel();
+        return;
+      }
+
       if (ctrlOrMeta && event.key.toLowerCase() === 'l') {
         event.preventDefault();
         pageInputRef.current?.focus();
@@ -1010,6 +1039,12 @@ export function PdfReaderScreen({
       }
 
       if (event.key === 'Escape') {
+        if (searchPanelOpen) {
+          event.preventDefault();
+          setSearchPanelOpen(false);
+          focusReader();
+          return;
+        }
         if (notesPanelOpen) {
           event.preventDefault();
           setNotesPanelOpen(false);
@@ -1104,7 +1139,21 @@ export function PdfReaderScreen({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [focusReader, goNext, goPrev, notesPanelOpen, openAddNote, pageCount, setFitMode, sidebarOpen, toggleContents, zoomIn, zoomOut]);
+  }, [
+    focusReader,
+    goNext,
+    goPrev,
+    notesPanelOpen,
+    openAddNote,
+    openSearchPanel,
+    pageCount,
+    searchPanelOpen,
+    setFitMode,
+    sidebarOpen,
+    toggleContents,
+    zoomIn,
+    zoomOut
+  ]);
 
   React.useEffect(() => {
     const viewportElement = readerViewportRef.current;
@@ -1276,6 +1325,18 @@ export function PdfReaderScreen({
             disabled={loading}
           >
             Notes
+          </Button>
+
+          <Button
+            type="button"
+            variant={searchPanelOpen ? 'default' : 'outline'}
+            size="sm"
+            className="ml-2"
+            onClick={openSearchPanel}
+            disabled={loading}
+            aria-label="Search document"
+          >
+            <Search className="h-4 w-4" />
           </Button>
 
           <Button
@@ -1468,6 +1529,67 @@ export function PdfReaderScreen({
                     <p className="mt-1 line-clamp-2 text-xs text-slate-700">{note.content}</p>
                   </button>
                 ))}
+              </div>
+            </aside>
+          ) : null}
+
+          {searchPanelOpen ? (
+            <aside
+              className={`absolute top-3 bottom-3 z-40 flex w-[360px] flex-col rounded-lg border border-slate-200 bg-white shadow-xl ${
+                notesPanelOpen ? 'right-[336px]' : 'right-3'
+              }`}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                <p className="text-sm font-semibold">Search</p>
+                <Button type="button" size="sm" variant="outline" onClick={() => setSearchPanelOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="space-y-2 border-b border-slate-200 p-3">
+                <Input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search in this PDF..."
+                  aria-label="Search in document"
+                />
+                <p className="text-xs text-slate-600">{isSearching ? 'Searching...' : `${searchResults.length} results`}</p>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                {!searchQuery.trim() ? <p className="text-xs text-slate-600">Type a query to search all pages.</p> : null}
+                {searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
+                  <p className="text-xs text-slate-600">No matches found.</p>
+                ) : null}
+                <div className="space-y-2">
+                  {searchResults.map((result, index) => {
+                    const safeStart = Math.max(0, Math.min(result.start, result.snippet.length));
+                    const safeEnd = Math.max(safeStart, Math.min(result.end, result.snippet.length));
+                    const before = result.snippet.slice(0, safeStart);
+                    const match = result.snippet.slice(safeStart, safeEnd);
+                    const after = result.snippet.slice(safeEnd);
+                    return (
+                      <button
+                        key={`${result.page}:${result.start}:${result.end}:${index}`}
+                        type="button"
+                        onClick={() => {
+                          setPage(clampPage(result.page, pageCount));
+                          setPageInputError(null);
+                          readerViewportRef.current?.scrollTo({ top: 0 });
+                        }}
+                        className="w-full rounded-md border border-slate-200 p-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
+                          Page {result.page}
+                        </span>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-700">
+                          {before}
+                          <mark className="rounded bg-yellow-200 px-0.5">{match}</mark>
+                          {after}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </aside>
           ) : null}
