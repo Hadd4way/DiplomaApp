@@ -40,6 +40,17 @@ type PendingHighlightDeletion = {
   id: string;
   highlight: Highlight;
 };
+type SearchPixelRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+type SearchLayerContext = {
+  pageRoot: HTMLDivElement;
+  textLayer: HTMLDivElement;
+  overlayLayer: HTMLDivElement;
+};
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -115,6 +126,115 @@ function pointInRect(x: number, y: number, rect: HighlightRect): boolean {
   return x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
 }
 
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase();
+}
+
+function ensureSearchOverlayLayer(pageRoot: HTMLDivElement): HTMLDivElement {
+  if (window.getComputedStyle(pageRoot).position === 'static') {
+    pageRoot.style.position = 'relative';
+  }
+  const overlays = Array.from(pageRoot.querySelectorAll('[data-search-overlay]'));
+  const [firstOverlay, ...extraOverlays] = overlays;
+  for (const extraOverlay of extraOverlays) {
+    extraOverlay.remove();
+  }
+  if (firstOverlay instanceof HTMLDivElement) {
+    firstOverlay.className = 'absolute inset-0 z-[11] pointer-events-none';
+    return firstOverlay;
+  }
+  const overlay = document.createElement('div');
+  overlay.dataset.searchOverlay = 'true';
+  overlay.className = 'absolute inset-0 z-[11] pointer-events-none';
+  pageRoot.appendChild(overlay);
+  return overlay;
+}
+
+function clearSearchOverlay(overlayLayer: HTMLDivElement): void {
+  overlayLayer.replaceChildren();
+}
+
+function syncSearchOverlayBox(textLayer: HTMLDivElement, overlayLayer: HTMLDivElement): void {
+  const parent = overlayLayer.parentElement;
+  if (!(parent instanceof HTMLElement)) {
+    return;
+  }
+  const parentRect = parent.getBoundingClientRect();
+  const textLayerRect = textLayer.getBoundingClientRect();
+  overlayLayer.style.left = `${textLayerRect.left - parentRect.left}px`;
+  overlayLayer.style.top = `${textLayerRect.top - parentRect.top}px`;
+  overlayLayer.style.width = `${textLayerRect.width}px`;
+  overlayLayer.style.height = `${textLayerRect.height}px`;
+}
+
+function getTextLayerMetric(textLayer: HTMLDivElement): string {
+  const spans = textLayer.querySelectorAll('span');
+  const spanCount = spans.length;
+  const tlRect = textLayer.getBoundingClientRect();
+  const first = spans[0];
+  const middle = spanCount > 0 ? spans[Math.floor(spanCount / 2)] : null;
+  const last = spanCount > 0 ? spans[spanCount - 1] : null;
+  const firstRect = first ? first.getBoundingClientRect() : null;
+  const middleRect = middle ? middle.getBoundingClientRect() : null;
+  const lastRect = last ? last.getBoundingClientRect() : null;
+  return [
+    spanCount,
+    tlRect.width.toFixed(2),
+    tlRect.height.toFixed(2),
+    firstRect ? firstRect.left.toFixed(2) : '',
+    firstRect ? firstRect.top.toFixed(2) : '',
+    firstRect ? firstRect.width.toFixed(2) : '',
+    firstRect ? firstRect.height.toFixed(2) : '',
+    middleRect ? middleRect.left.toFixed(2) : '',
+    middleRect ? middleRect.top.toFixed(2) : '',
+    middleRect ? middleRect.width.toFixed(2) : '',
+    middleRect ? middleRect.height.toFixed(2) : '',
+    lastRect ? lastRect.left.toFixed(2) : '',
+    lastRect ? lastRect.top.toFixed(2) : '',
+    lastRect ? lastRect.width.toFixed(2) : '',
+    lastRect ? lastRect.height.toFixed(2) : ''
+  ].join('|');
+}
+
+function mergeSearchRects(rects: SearchPixelRect[]): SearchPixelRect[] {
+  if (rects.length === 0) {
+    return [];
+  }
+  const sorted = [...rects].sort((a, b) => {
+    if (Math.abs(a.top - b.top) > 0.5) {
+      return a.top - b.top;
+    }
+    return a.left - b.left;
+  });
+  const merged: SearchPixelRect[] = [];
+  for (const rect of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last) {
+      merged.push({ ...rect });
+      continue;
+    }
+    const lastCenterY = last.top + last.height / 2;
+    const nextCenterY = rect.top + rect.height / 2;
+    const sameLine = Math.abs(lastCenterY - nextCenterY) < 3;
+    const lastRight = last.left + last.width;
+    const nextRight = rect.left + rect.width;
+    const nearInX = rect.left - lastRight < 3;
+    if (sameLine && nearInX) {
+      const left = Math.min(last.left, rect.left);
+      const top = Math.min(last.top, rect.top);
+      const right = Math.max(lastRight, nextRight);
+      const bottom = Math.max(last.top + last.height, rect.top + rect.height);
+      last.left = left;
+      last.top = top;
+      last.width = right - left;
+      last.height = bottom - top;
+      continue;
+    }
+    merged.push({ ...rect });
+  }
+  return merged;
+}
+
 function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -153,7 +273,12 @@ export function PdfReaderScreen({
   const readerRootRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
+  const pageRootRef = React.useRef<HTMLDivElement | null>(null);
   const textLayerRef = React.useRef<HTMLDivElement | null>(null);
+  const searchOverlayRunIdRef = React.useRef(0);
+  const searchOverlayRafRef = React.useRef<number | null>(null);
+  const searchOverlayTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pageRootVersion, setPageRootVersion] = React.useState(0);
   const pageInputRef = React.useRef<HTMLInputElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const readerViewportRef = React.useRef<HTMLDivElement | null>(null);
@@ -166,6 +291,7 @@ export function PdfReaderScreen({
   const [scaleMode, setScaleMode] = React.useState<ScaleMode>('fitWidth');
   const [fitWidthReady, setFitWidthReady] = React.useState(false);
   const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
+  const [canvasHeight, setCanvasHeight] = React.useState<number>(0);
   const [viewportWidth, setViewportWidth] = React.useState(0);
   const [viewportHeight, setViewportHeight] = React.useState(0);
   const [rendering, setRendering] = React.useState(false);
@@ -234,6 +360,203 @@ export function PdfReaderScreen({
   const focusReader = React.useCallback(() => {
     readerRootRef.current?.focus();
   }, []);
+
+  const setPageRootNode = React.useCallback((node: HTMLDivElement | null) => {
+    pageRootRef.current = node;
+    if (node) {
+      ensureSearchOverlayLayer(node);
+      setPageRootVersion((prev) => prev + 1);
+    }
+  }, []);
+
+  const clearScheduledSearchOverlayRecompute = React.useCallback(() => {
+    if (searchOverlayRafRef.current !== null) {
+      cancelAnimationFrame(searchOverlayRafRef.current);
+      searchOverlayRafRef.current = null;
+    }
+    if (searchOverlayTimeoutRef.current !== null) {
+      clearTimeout(searchOverlayTimeoutRef.current);
+      searchOverlayTimeoutRef.current = null;
+    }
+  }, []);
+
+  const waitForStableTextLayer = React.useCallback(
+    async (runId: number): Promise<SearchLayerContext | null> => {
+      const start = performance.now();
+      let previousMetric: string | null = null;
+      let stableCount = 0;
+
+      while (performance.now() - start < 1200) {
+        if (searchOverlayRunIdRef.current !== runId) {
+          return null;
+        }
+
+        const pageRoot = pageRootRef.current;
+        if (pageRoot) {
+          const overlayLayer = ensureSearchOverlayLayer(pageRoot);
+          const textLayerCandidate = pageRoot.querySelector('.textLayer');
+          const textLayer = textLayerCandidate instanceof HTMLDivElement ? textLayerCandidate : null;
+          if (textLayer) {
+            const metric = getTextLayerMetric(textLayer);
+            if (metric === previousMetric) {
+              stableCount += 1;
+            } else {
+              stableCount = 0;
+              previousMetric = metric;
+            }
+            if (stableCount >= 3) {
+              return { pageRoot, textLayer, overlayLayer };
+            }
+          }
+        }
+
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+      }
+
+      const pageRoot = pageRootRef.current;
+      if (!pageRoot) {
+        return null;
+      }
+      const bestEffortTextLayer = pageRoot.querySelector('.textLayer');
+      const textLayer = bestEffortTextLayer instanceof HTMLDivElement ? bestEffortTextLayer : null;
+      if (!textLayer) {
+        return null;
+      }
+      const overlayLayer = ensureSearchOverlayLayer(pageRoot);
+      return { pageRoot, textLayer, overlayLayer };
+    },
+    []
+  );
+
+  const computeAndRenderSearchOverlay = React.useCallback(
+    (runId: number, context: SearchLayerContext) => {
+      if (searchOverlayRunIdRef.current !== runId) {
+        return;
+      }
+
+      const normalizedQuery = normalizeSearchText(searchQuery.trim());
+      if (!normalizedQuery) {
+        clearSearchOverlay(context.overlayLayer);
+        return;
+      }
+
+      const { textLayer, overlayLayer } = context;
+      const baseRect = overlayLayer.getBoundingClientRect();
+      if (baseRect.width <= 0 || baseRect.height <= 0) {
+        clearSearchOverlay(overlayLayer);
+        return;
+      }
+
+      const spans = textLayer.querySelectorAll('span');
+      const rawRects: SearchPixelRect[] = [];
+      const maxX = baseRect.width;
+      const maxY = baseRect.height;
+      for (const span of spans) {
+        if (searchOverlayRunIdRef.current !== runId) {
+          return;
+        }
+        const node = span.firstChild;
+        if (!(node instanceof Text)) {
+          continue;
+        }
+        const raw = node.textContent ?? '';
+        if (!raw) {
+          continue;
+        }
+        const rawLower = normalizeSearchText(raw);
+        let startIndex = 0;
+        while (startIndex < rawLower.length) {
+          const matchIndex = rawLower.indexOf(normalizedQuery, startIndex);
+          if (matchIndex < 0) {
+            break;
+          }
+          const range = document.createRange();
+          range.setStart(node, matchIndex);
+          range.setEnd(node, matchIndex + normalizedQuery.length);
+          for (const rect of Array.from(range.getClientRects())) {
+            if (
+              !Number.isFinite(rect.left) ||
+              !Number.isFinite(rect.top) ||
+              !Number.isFinite(rect.width) ||
+              !Number.isFinite(rect.height)
+            ) {
+              continue;
+            }
+            const unclampedLeft = rect.left - baseRect.left;
+            const unclampedTop = rect.top - baseRect.top;
+            const unclampedRight = unclampedLeft + rect.width;
+            const unclampedBottom = unclampedTop + rect.height;
+            const left = Math.max(0, unclampedLeft);
+            const top = Math.max(0, unclampedTop);
+            const right = Math.min(maxX, unclampedRight);
+            const bottom = Math.min(maxY, unclampedBottom);
+            const width = right - left;
+            const height = bottom - top;
+            if (width < 2 || height < 2) {
+              continue;
+            }
+            rawRects.push({ left, top, width, height });
+          }
+          startIndex = matchIndex + Math.max(1, normalizedQuery.length);
+        }
+      }
+
+      if (searchOverlayRunIdRef.current !== runId) {
+        return;
+      }
+
+      const mergedRects = mergeSearchRects(rawRects);
+      const fragment = document.createDocumentFragment();
+      for (const rect of mergedRects) {
+        const leftPercent = (rect.left / baseRect.width) * 100;
+        const topPercent = (rect.top / baseRect.height) * 100;
+        const widthPercent = (rect.width / baseRect.width) * 100;
+        const heightPercent = (rect.height / baseRect.height) * 100;
+        const box = document.createElement('div');
+        box.style.position = 'absolute';
+        box.style.left = `${leftPercent}%`;
+        box.style.top = `${topPercent}%`;
+        box.style.width = `${widthPercent}%`;
+        box.style.height = `${heightPercent}%`;
+        box.style.background = 'rgba(255,235,59,0.35)';
+        box.style.borderRadius = '2px';
+        fragment.appendChild(box);
+      }
+      overlayLayer.replaceChildren(fragment);
+    },
+    [searchQuery]
+  );
+
+  const scheduleSearchOverlayRecompute = React.useCallback(
+    (reason: string) => {
+      void reason;
+      const runId = searchOverlayRunIdRef.current + 1;
+      searchOverlayRunIdRef.current = runId;
+      clearScheduledSearchOverlayRecompute();
+      if (!normalizeSearchText(searchQuery.trim())) {
+        const pageRoot = pageRootRef.current;
+        if (pageRoot) {
+          clearSearchOverlay(ensureSearchOverlayLayer(pageRoot));
+        }
+        return;
+      }
+      searchOverlayTimeoutRef.current = setTimeout(() => {
+        searchOverlayTimeoutRef.current = null;
+        searchOverlayRafRef.current = requestAnimationFrame(() => {
+          searchOverlayRafRef.current = null;
+          void waitForStableTextLayer(runId).then((context) => {
+            if (!context || searchOverlayRunIdRef.current !== runId) {
+              return;
+            }
+            computeAndRenderSearchOverlay(runId, context);
+          });
+        });
+      }, 0);
+    },
+    [clearScheduledSearchOverlayRecompute, computeAndRenderSearchOverlay, waitForStableTextLayer]
+  );
 
   const flushLastPageSave = React.useCallback(() => {
     if (!canSaveRef.current || !window.api) {
@@ -695,6 +1018,7 @@ export function PdfReaderScreen({
       setScale(1);
       setFitWidthReady(false);
       setCanvasWidth(0);
+      setCanvasHeight(0);
       try {
         const data = base64ToUint8Array(base64);
         const loadedDoc = await getDocument({ data }).promise;
@@ -841,10 +1165,15 @@ export function PdfReaderScreen({
           setError('Canvas is not available.');
           return;
         }
-
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        const outputScale = typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+        canvas.width = Math.max(1, Math.round(viewport.width * outputScale));
+        canvas.height = Math.max(1, Math.round(viewport.height * outputScale));
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
         setCanvasWidth(viewport.width);
+        setCanvasHeight(viewport.height);
+        context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
+        context.clearRect(0, 0, viewport.width, viewport.height);
         renderTask = pdfPage.render({ canvasContext: context, viewport });
         await renderTask.promise;
 
@@ -887,6 +1216,74 @@ export function PdfReaderScreen({
       textLayerTask?.cancel();
     };
   }, [doc, fitWidthReady, page, scale, scaleMode]);
+
+  React.useEffect(() => {
+    scheduleSearchOverlayRecompute('state-change');
+  }, [page, pageRootVersion, scale, scheduleSearchOverlayRecompute, searchQuery]);
+
+  React.useEffect(() => {
+    const pageRoot = pageRootRef.current;
+    if (!pageRoot) {
+      return;
+    }
+
+    let canceled = false;
+    let textLayerObserver: MutationObserver | null = null;
+    let textLayerAttachRafId: number | null = null;
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            scheduleSearchOverlayRecompute('resize');
+          })
+        : null;
+
+    const attachTextLayerObserver = () => {
+      if (canceled) {
+        return;
+      }
+      const textLayerCandidate = pageRoot.querySelector('.textLayer');
+      const textLayer = textLayerCandidate instanceof HTMLDivElement ? textLayerCandidate : null;
+      if (!textLayer) {
+        textLayerAttachRafId = requestAnimationFrame(attachTextLayerObserver);
+        return;
+      }
+      ensureSearchOverlayLayer(pageRoot);
+      textLayerObserver?.disconnect();
+      textLayerObserver = new MutationObserver(() => {
+        scheduleSearchOverlayRecompute('mutation');
+      });
+      textLayerObserver.observe(textLayer, {
+        childList: true,
+        attributes: true,
+        attributeFilter: ['style', 'class'],
+        characterData: true,
+        subtree: true
+      });
+      resizeObserver?.observe(textLayer);
+      if (textLayer.parentElement) {
+        resizeObserver?.observe(textLayer.parentElement);
+      }
+    };
+
+    attachTextLayerObserver();
+    resizeObserver?.observe(pageRoot);
+
+    return () => {
+      canceled = true;
+      if (textLayerAttachRafId !== null) {
+        cancelAnimationFrame(textLayerAttachRafId);
+      }
+      textLayerObserver?.disconnect();
+      resizeObserver?.disconnect();
+    };
+  }, [page, pageRootVersion, scheduleSearchOverlayRecompute]);
+
+  React.useEffect(() => {
+    return () => {
+      searchOverlayRunIdRef.current += 1;
+      clearScheduledSearchOverlayRecompute();
+    };
+  }, [clearScheduledSearchOverlayRecompute]);
 
   React.useEffect(() => {
     setPageInputValue(String(page));
@@ -1413,13 +1810,18 @@ export function PdfReaderScreen({
 
                     <div
                       className="relative overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_18px_40px_-18px_rgba(15,23,42,0.5)]"
+                      ref={setPageRootNode}
+                      style={{
+                        width: canvasWidth > 0 ? `${canvasWidth}px` : undefined,
+                        height: canvasHeight > 0 ? `${canvasHeight}px` : undefined
+                      }}
                       onContextMenu={(event) => {
                         openHighlightContextMenu(event);
                       }}
                     >
                       <canvas ref={canvasRef} className="block" />
                       <div
-                        className="absolute inset-0 z-10 pdf-text-layer"
+                        className="textLayer absolute inset-0 z-10 pdf-text-layer"
                         ref={textLayerRef}
                         onMouseUp={() => {
                           void createHighlightFromSelection();
