@@ -132,6 +132,8 @@ export class ReaderProgressDb {
   private deleteHighlightsByIdsStmt: Database.Statement;
   private deleteHighlightStmt: Database.Statement<[string, string]>;
   private listHighlightsStmt: Database.Statement<[string, string, number], HighlightRow>;
+  private listNotesByBookForExportStmt: Database.Statement<[string, string], NoteRow>;
+  private listHighlightsByBookStmt: Database.Statement<[string, string], HighlightRow>;
   private listBookmarksStmt: Database.Statement<[string, string], BookmarkRow>;
   private insertBookmarkStmt: Database.Statement<[string, string, string, number, number]>;
   private deleteBookmarkByPageStmt: Database.Statement<[string, string, number]>;
@@ -262,6 +264,18 @@ export class ReaderProgressDb {
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`
+    );
+    this.listNotesByBookForExportStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, content, created_at, updated_at
+       FROM notes
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY page ASC, created_at ASC`
+    );
+    this.listHighlightsByBookStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, rects, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY page ASC, created_at ASC`
     );
     this.listBookmarksStmt = this.db.prepare(
       `SELECT id, user_id, book_id, page, created_at
@@ -482,6 +496,33 @@ export class ReaderProgressDb {
       return this.insertHighlight(userId, bookId, page, rects, id, createdAt, updatedAt);
     });
     return run();
+  }
+
+  listNotesByBookForExport(userId: string, bookId: string): Note[] {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    if (!safeUserId || !safeBookId) {
+      return [];
+    }
+    const rows = this.listNotesByBookForExportStmt.all(safeUserId, safeBookId);
+    return rows.map(toNote);
+  }
+
+  listHighlightsByBook(userId: string, bookId: string): Highlight[] {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    if (!safeUserId || !safeBookId) {
+      return [];
+    }
+    const rows = this.listHighlightsByBookStmt.all(safeUserId, safeBookId);
+    const highlights: Highlight[] = [];
+    for (const row of rows) {
+      const parsed = toHighlight(row);
+      if (parsed) {
+        highlights.push(parsed);
+      }
+    }
+    return highlights;
   }
 
   listBookmarks(userId: string, bookId: string): Bookmark[] {

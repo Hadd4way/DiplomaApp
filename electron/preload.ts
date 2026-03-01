@@ -34,6 +34,10 @@ const api: RendererApi = {
     toggle: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksToggle, payload),
     remove: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksRemove, payload)
   },
+  export: {
+    getBookData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportGetBookData, payload),
+    saveFile: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportSaveFile, payload)
+  },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>
     ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })

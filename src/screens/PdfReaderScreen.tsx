@@ -3,6 +3,7 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Download,
   ListTree,
   Minus,
   PanelLeftClose,
@@ -14,13 +15,15 @@ import {
   X
 } from 'lucide-react';
 import { type PdfOutlineItem } from '@/components/outline-tree';
+import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
-import type { Bookmark as BookmarkItem, Highlight, HighlightRect, Note } from '../../shared/ipc';
+import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
+import { toJSON, toMarkdown } from '@/lib/book-export';
 import { usePdfSearch } from '@/lib/usePdfSearch';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -160,6 +163,32 @@ function hasBookmarksApi(
       typeof api.bookmarks.toggle === 'function' &&
       typeof api.bookmarks.remove === 'function'
   );
+}
+
+function hasExportApi(
+  api: Window['api']
+): api is NonNullable<Window['api']> & {
+  export: {
+    getBookData: (payload: { token: string; bookId: string }) => Promise<unknown>;
+    saveFile: (payload: { suggestedName: string; ext: 'md' | 'json'; content: string }) => Promise<unknown>;
+  };
+} {
+  return Boolean(
+    api && api.export && typeof api.export.getBookData === 'function' && typeof api.export.saveFile === 'function'
+  );
+}
+
+function toPreview(text: string, maxLines: number): string {
+  const lines = text.split('\n');
+  if (lines.length <= maxLines) {
+    return text;
+  }
+  return `${lines.slice(0, maxLines).join('\n')}\n...`;
+}
+
+function sanitizeExportName(value: string): string {
+  const trimmed = value.trim() || 'book-export';
+  return trimmed.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim() || 'book-export';
 }
 
 function ensureSearchOverlayLayer(pageRoot: HTMLDivElement): HTMLDivElement {
@@ -434,6 +463,14 @@ export function PdfReaderScreen({
   const [bookmarks, setBookmarks] = React.useState<BookmarkItem[]>([]);
   const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
   const [bookmarksError, setBookmarksError] = React.useState<string | null>(null);
+  const [exportDialogOpen, setExportDialogOpen] = React.useState(false);
+  const [exportFormat, setExportFormat] = React.useState<ExportFormat>('markdown');
+  const [exportLoading, setExportLoading] = React.useState(false);
+  const [exportError, setExportError] = React.useState<string | null>(null);
+  const [exportMessage, setExportMessage] = React.useState<string | null>(null);
+  const [exportData, setExportData] = React.useState<{ book: Book; notes: Note[]; highlights: Highlight[] } | null>(
+    null
+  );
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
   const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
@@ -448,6 +485,16 @@ export function PdfReaderScreen({
   const { query: searchQuery, results: searchResults, isSearching, setQuery: setSearchQuery, clearQuery } = usePdfSearch(doc, bookId);
   const bookmarkedPages = React.useMemo(() => new Set(bookmarks.map((bookmark) => bookmark.page)), [bookmarks]);
   const isCurrentPageBookmarked = bookmarkedPages.has(page);
+  const exportContent = React.useMemo(() => {
+    if (!exportData) {
+      return '';
+    }
+    if (exportFormat === 'json') {
+      return toJSON(exportData.book, exportData.notes, exportData.highlights);
+    }
+    return toMarkdown(exportData.book.title, exportData.notes, exportData.highlights);
+  }, [exportData, exportFormat]);
+  const exportPreview = React.useMemo(() => toPreview(exportContent, 40), [exportContent]);
 
   const goPrev = React.useCallback(() => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -488,6 +535,33 @@ export function PdfReaderScreen({
     setSearchPanelOpen(false);
     setBookmarksPanelOpen(true);
   }, []);
+
+  const openExportDialog = React.useCallback(async () => {
+    if (!hasExportApi(window.api)) {
+      setExportError('Export API is unavailable. Restart the app to reload Electron preload.');
+      setExportDialogOpen(true);
+      return;
+    }
+    setExportDialogOpen(true);
+    setExportError(null);
+    setExportMessage(null);
+    setExportLoading(true);
+    try {
+      const result = await window.api.export.getBookData({ token, bookId });
+      if (!result.ok) {
+        setExportError(result.error);
+        setExportData(null);
+        return;
+      }
+      setExportData(result.data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setExportError(message);
+      setExportData(null);
+    } finally {
+      setExportLoading(false);
+    }
+  }, [bookId, token]);
 
   const focusReader = React.useCallback(() => {
     readerRootRef.current?.focus();
@@ -911,6 +985,62 @@ export function PdfReaderScreen({
     [bookId, loadBookmarks, token]
   );
 
+  const copyExportContent = React.useCallback(async () => {
+    if (!exportContent) {
+      setExportError('Nothing to export.');
+      return;
+    }
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+      setExportError('Clipboard is unavailable in this environment.');
+      return;
+    }
+    setExportError(null);
+    setExportMessage(null);
+    try {
+      await navigator.clipboard.writeText(exportContent);
+      setExportMessage('Copied to clipboard.');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setExportError(message);
+    }
+  }, [exportContent]);
+
+  const saveExportContent = React.useCallback(async () => {
+    if (!exportContent) {
+      setExportError('Nothing to export.');
+      return;
+    }
+    if (!hasExportApi(window.api)) {
+      setExportError('Export API is unavailable. Restart the app to reload Electron preload.');
+      return;
+    }
+    const ext: 'md' | 'json' = exportFormat === 'json' ? 'json' : 'md';
+    const baseTitle = sanitizeExportName(exportData?.book.title ?? title);
+    setExportLoading(true);
+    setExportError(null);
+    setExportMessage(null);
+    try {
+      const result = await window.api.export.saveFile({
+        suggestedName: `${baseTitle}-export.${ext}`,
+        ext,
+        content: exportContent
+      });
+      if (!result.ok) {
+        if ('cancelled' in result && result.cancelled) {
+          return;
+        }
+        setExportError('error' in result ? result.error : 'Failed to save export file.');
+        return;
+      }
+      setExportMessage(`Saved: ${result.path}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setExportError(message);
+    } finally {
+      setExportLoading(false);
+    }
+  }, [exportContent, exportData?.book.title, exportFormat, title]);
+
   const loadPageHighlights = React.useCallback(async () => {
     if (!window.api) {
       setPageHighlights([]);
@@ -1124,6 +1254,10 @@ export function PdfReaderScreen({
     setBookmarks([]);
     setBookmarksError(null);
     setBookmarksPanelOpen(false);
+    setExportDialogOpen(false);
+    setExportError(null);
+    setExportMessage(null);
+    setExportData(null);
     setNotesPanelOpen(false);
     setHighlightContextMenu(null);
     setSearchPanelOpen(false);
@@ -2064,6 +2198,20 @@ export function PdfReaderScreen({
             size="sm"
             className="ml-2"
             onClick={() => {
+              void openExportDialog();
+            }}
+            disabled={loading}
+          >
+            <Download className="mr-1 h-4 w-4" />
+            Export
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-2"
+            onClick={() => {
               void toggleBookmarkForPage(page);
             }}
             disabled={loading}
@@ -2477,6 +2625,28 @@ export function PdfReaderScreen({
           setNoteError(null);
         }}
         onSave={() => void saveNote()}
+      />
+      <ExportDialog
+        open={exportDialogOpen}
+        loading={exportLoading}
+        format={exportFormat}
+        preview={exportPreview}
+        error={exportError}
+        message={exportMessage}
+        onFormatChange={(nextFormat) => {
+          setExportFormat(nextFormat);
+          setExportError(null);
+          setExportMessage(null);
+        }}
+        onCopy={() => {
+          void copyExportContent();
+        }}
+        onSave={() => {
+          void saveExportContent();
+        }}
+        onClose={() => {
+          setExportDialogOpen(false);
+        }}
       />
     </div>
   );

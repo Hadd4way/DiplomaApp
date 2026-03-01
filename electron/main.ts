@@ -14,6 +14,8 @@ import {
   type NotesListRequest,
   type NotesUpdateRequest,
   type PingResponse,
+  type ExportGetBookDataRequest,
+  type ExportSaveFileRequest,
   type BookmarksListRequest,
   type BookmarksToggleRequest,
   type BookmarksRemoveRequest,
@@ -33,6 +35,7 @@ import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBoo
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights } from './highlights';
 import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
+import { getBookExportData, saveExportFile } from './export';
 import { getReaderProgressDb } from './reader-progress-db';
 
 let mainWindow: BrowserWindow | null = null;
@@ -123,6 +126,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.bookmarksRemove, (_event, payload: BookmarksRemoveRequest) =>
     removeBookmark(db, progressDb, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.exportGetBookData, (_event, payload: ExportGetBookDataRequest) =>
+    getBookExportData(db, progressDb, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.exportSaveFile, async (_event, payload: ExportSaveFileRequest) =>
+    saveExportFile(payload, mainWindow)
   );
   ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
     progressDb.getLastPage(payload.userId, payload.bookId)

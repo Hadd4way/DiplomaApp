@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
   bookmarksList: 'bookmarks:list',
   bookmarksToggle: 'bookmarks:toggle',
   bookmarksRemove: 'bookmarks:remove',
+  exportGetBookData: 'export:get-book-data',
+  exportSaveFile: 'export:save-file',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -110,6 +112,20 @@ export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | Aut
 export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | AuthError;
 export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | AuthError;
 export type BookmarksRemoveResult = { ok: true } | AuthError;
+export type ExportGetBookDataResult =
+  | {
+      ok: true;
+      data: {
+        book: Book;
+        notes: Note[];
+        highlights: Highlight[];
+      };
+    }
+  | AuthError;
+export type ExportSaveFileResult =
+  | { ok: true; path: string }
+  | { ok: false; cancelled: true }
+  | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -223,6 +239,17 @@ export type BookmarksRemoveRequest = {
   page: number;
 };
 
+export type ExportGetBookDataRequest = {
+  token: string;
+  bookId: string;
+};
+
+export type ExportSaveFileRequest = {
+  suggestedName: string;
+  ext: 'md' | 'json';
+  content: string;
+};
+
 export type ProgressGetLastPageRequest = {
   userId: string;
   bookId: string;
@@ -270,6 +297,11 @@ export interface RendererBookmarksApi {
   remove: (payload: BookmarksRemoveRequest) => Promise<BookmarksRemoveResult>;
 }
 
+export interface RendererExportApi {
+  getBookData: (payload: ExportGetBookDataRequest) => Promise<ExportGetBookDataResult>;
+  saveFile: (payload: ExportSaveFileRequest) => Promise<ExportSaveFileResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
@@ -277,6 +309,7 @@ export interface RendererApi {
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;
   bookmarks: RendererBookmarksApi;
+  export: RendererExportApi;
   getLastPage: (userId: string, bookId: string) => Promise<number | null>;
   setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
 }

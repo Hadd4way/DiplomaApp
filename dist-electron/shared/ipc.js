@@ -24,6 +24,8 @@ exports.IPC_CHANNELS = {
     bookmarksList: 'bookmarks:list',
     bookmarksToggle: 'bookmarks:toggle',
     bookmarksRemove: 'bookmarks:remove',
+    exportGetBookData: 'export:get-book-data',
+    exportSaveFile: 'export:save-file',
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page'
 };

@@ -196,6 +196,14 @@ class ReaderProgressDb {
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`);
+        this.listNotesByBookForExportStmt = this.db.prepare(`SELECT id, user_id, book_id, page, content, created_at, updated_at
+       FROM notes
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY page ASC, created_at ASC`);
+        this.listHighlightsByBookStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY page ASC, created_at ASC`);
         this.listBookmarksStmt = this.db.prepare(`SELECT id, user_id, book_id, page, created_at
        FROM bookmarks
        WHERE user_id = ? AND book_id = ?
@@ -358,6 +366,31 @@ class ReaderProgressDb {
             return this.insertHighlight(userId, bookId, page, rects, id, createdAt, updatedAt);
         });
         return run();
+    }
+    listNotesByBookForExport(userId, bookId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        if (!safeUserId || !safeBookId) {
+            return [];
+        }
+        const rows = this.listNotesByBookForExportStmt.all(safeUserId, safeBookId);
+        return rows.map(toNote);
+    }
+    listHighlightsByBook(userId, bookId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        if (!safeUserId || !safeBookId) {
+            return [];
+        }
+        const rows = this.listHighlightsByBookStmt.all(safeUserId, safeBookId);
+        const highlights = [];
+        for (const row of rows) {
+            const parsed = toHighlight(row);
+            if (parsed) {
+                highlights.push(parsed);
+            }
+        }
+        return highlights;
     }
     listBookmarks(userId, bookId) {
         const safeUserId = asNonEmptyString(userId);

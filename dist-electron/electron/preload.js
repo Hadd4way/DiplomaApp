@@ -35,6 +35,10 @@ const api = {
         toggle: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksToggle, payload),
         remove: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksRemove, payload)
     },
+    export: {
+        getBookData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.exportGetBookData, payload),
+        saveFile: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.exportSaveFile, payload)
+    },
     getLastPage: (userId, bookId) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
     setLastPage: (userId, bookId, lastPage) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })
 };
