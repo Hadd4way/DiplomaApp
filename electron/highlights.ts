@@ -52,6 +52,31 @@ function normalizePage(page: number): number | null {
   return nextPage >= 1 ? nextPage : null;
 }
 
+function normalizeHighlightText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function mergeHighlightTexts(values: Array<string | null | undefined>): string | null {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeHighlightText(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    merged.push(normalized);
+  }
+  if (merged.length === 0) {
+    return null;
+  }
+  return merged.join('\n');
+}
+
 function rectsOverlap(a: HighlightRect, b: HighlightRect, epsilon: number): boolean {
   const overlapX = a.x < b.x + b.w - epsilon && a.x + a.w > b.x + epsilon;
   const overlapY = a.y < b.y + b.h - epsilon && a.y + a.h > b.y + epsilon;
@@ -202,11 +227,13 @@ export function createMergedHighlight(
   const existing = readerDb.listHighlights(session.userId, bookId, page);
   const overlapIds: string[] = [];
   const allRectsToMerge: HighlightRect[] = [...incoming];
+  const textParts: Array<string | null | undefined> = [payload.text];
 
   for (const highlight of existing) {
     if (anyOverlap(incoming, highlight.rects)) {
       overlapIds.push(highlight.id);
       allRectsToMerge.push(...highlight.rects);
+      textParts.push(highlight.text);
     }
   }
 
@@ -216,11 +243,13 @@ export function createMergedHighlight(
   }
 
   const now = Date.now();
+  const mergedText = mergeHighlightTexts(textParts);
   const created = readerDb.createMergedHighlight(
     session.userId,
     bookId,
     page,
     finalRects,
+    mergedText,
     randomUUID(),
     now,
     now,
@@ -290,7 +319,16 @@ export function insertRawHighlight(
   }
 
   const now = Date.now();
-  const created = readerDb.insertHighlight(session.userId, bookId, page, rects, randomUUID(), now, now);
+  const created = readerDb.insertHighlight(
+    session.userId,
+    bookId,
+    page,
+    rects,
+    normalizeHighlightText(payload.text),
+    randomUUID(),
+    now,
+    now
+  );
   if (!created) {
     return { ok: false, error: 'Failed to create highlight.' };
   }

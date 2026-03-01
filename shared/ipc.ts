@@ -79,6 +79,7 @@ export type Highlight = {
   bookId: string;
   page: number;
   rects: HighlightRect[];
+  text: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -208,6 +209,7 @@ export type HighlightsCreateMergedRequest = {
   bookId: string;
   page: number;
   rects: HighlightRect[];
+  text: string | null;
 };
 
 export type HighlightsDeleteRequest = {
@@ -220,6 +222,7 @@ export type HighlightsInsertRawRequest = {
   bookId: string;
   page: number;
   rects: HighlightRect[];
+  text: string | null;
 };
 
 export type BookmarksListRequest = {

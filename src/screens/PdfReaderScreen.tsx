@@ -191,6 +191,14 @@ function sanitizeExportName(value: string): string {
   return trimmed.replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').trim() || 'book-export';
 }
 
+function normalizeHighlightSelectionText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function ensureSearchOverlayLayer(pageRoot: HTMLDivElement): HTMLDivElement {
   if (window.getComputedStyle(pageRoot).position === 'static') {
     pageRoot.style.position = 'relative';
@@ -1066,6 +1074,7 @@ export function PdfReaderScreen({
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
       return;
     }
+    const selectedText = normalizeHighlightSelectionText(selection.toString());
 
     const stage = pageStageRef.current;
     const textLayer = textLayerRef.current;
@@ -1117,7 +1126,7 @@ export function PdfReaderScreen({
     }
 
     try {
-      const result = await window.api.highlights.createMerged({ token, bookId, page, rects });
+      const result = await window.api.highlights.createMerged({ token, bookId, page, rects, text: selectedText });
       if (result.ok) {
         await loadPageHighlights();
       }
@@ -1202,7 +1211,8 @@ export function PdfReaderScreen({
           token,
           bookId: pending.highlight.bookId,
           page: pending.highlight.page,
-          rects: pending.highlight.rects
+          rects: pending.highlight.rects,
+          text: pending.highlight.text
         });
         if (result.ok && pending.highlight.page === page && pending.highlight.bookId === bookId) {
           await loadPageHighlights();

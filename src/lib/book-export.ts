@@ -1,6 +1,9 @@
 import type { Book, Highlight, Note } from '../../shared/ipc';
 
-function escapeMarkdownText(value: string): string {
+function normalizeText(value: string | null | undefined): string {
+  if (typeof value !== 'string') {
+    return '';
+  }
   return value.replace(/\r\n/g, '\n').trim();
 }
 
@@ -21,6 +24,8 @@ export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlig
   const lines: string[] = [];
   lines.push(`# ${bookTitle}`);
   lines.push(`Exported: ${new Date().toISOString()}`);
+  lines.push(`Total highlights: ${highlights.length}`);
+  lines.push(`Total notes: ${notes.length}`);
   lines.push('');
   lines.push('## Highlights');
 
@@ -30,10 +35,13 @@ export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlig
     lines.push('- No highlights');
   } else {
     for (const page of highlightPages) {
-      const pageHighlights = highlightsByPage.get(page) ?? [];
       lines.push(`### Page ${page}`);
-      lines.push(`- Page ${page} - ${pageHighlights.length} highlight blocks`);
-      lines.push('');
+      const pageHighlights = highlightsByPage.get(page) ?? [];
+      for (const highlight of pageHighlights) {
+        const text = normalizeText(highlight.text);
+        lines.push(`> ${text || '(highlight without text)'}`);
+        lines.push('');
+      }
     }
   }
 
@@ -44,10 +52,10 @@ export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlig
     lines.push('- No notes');
   } else {
     for (const page of notePages) {
-      const pageNotes = notesByPage.get(page) ?? [];
       lines.push(`### Page ${page}`);
+      const pageNotes = notesByPage.get(page) ?? [];
       for (const note of pageNotes) {
-        lines.push(`- ${escapeMarkdownText(note.content)}`);
+        lines.push(`- ${normalizeText(note.content)}`);
       }
       lines.push('');
     }
@@ -59,10 +67,19 @@ export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlig
 export function toJSON(book: Book, notes: Note[], highlights: Highlight[]): string {
   return JSON.stringify(
     {
-      exportedAt: new Date().toISOString(),
       book,
-      notes,
-      highlights
+      exportedAt: new Date().toISOString(),
+      highlights: highlights.map((highlight) => ({
+        page: highlight.page,
+        text: highlight.text,
+        rects: highlight.rects,
+        createdAt: highlight.createdAt
+      })),
+      notes: notes.map((note) => ({
+        page: note.page,
+        content: note.content,
+        createdAt: note.createdAt
+      }))
     },
     null,
     2
