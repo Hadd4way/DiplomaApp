@@ -29,6 +29,11 @@ const api: RendererApi = {
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsDelete, payload),
     insertRaw: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsInsertRaw, payload)
   },
+  bookmarks: {
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksList, payload),
+    toggle: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksToggle, payload),
+    remove: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksRemove, payload)
+  },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>
     ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })

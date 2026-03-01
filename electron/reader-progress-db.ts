@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
-import type { Highlight, HighlightRect, Note } from '../shared/ipc';
+import type { Bookmark, Highlight, HighlightRect, Note } from '../shared/ipc';
 
 type GetRow = { last_page: number };
 type NoteRow = {
@@ -23,6 +23,13 @@ type HighlightRow = {
   updated_at: number;
 };
 type ListNotesFilters = { bookId?: string | null; q?: string | null };
+type BookmarkRow = {
+  id: string;
+  user_id: string;
+  book_id: string;
+  page: number;
+  created_at: number;
+};
 
 function asNonEmptyString(value: string): string | null {
   const trimmed = value.trim();
@@ -94,6 +101,23 @@ function toHighlight(row: HighlightRow): Highlight | null {
   };
 }
 
+function toBookmark(row: BookmarkRow): Bookmark {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    bookId: row.book_id,
+    page: row.page,
+    createdAt: row.created_at
+  };
+}
+
+function isBookmarkUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.includes('UNIQUE constraint failed: bookmarks.user_id, bookmarks.book_id, bookmarks.page');
+}
+
 export class ReaderProgressDb {
   private db: Database.Database;
 
@@ -108,6 +132,9 @@ export class ReaderProgressDb {
   private deleteHighlightsByIdsStmt: Database.Statement;
   private deleteHighlightStmt: Database.Statement<[string, string]>;
   private listHighlightsStmt: Database.Statement<[string, string, number], HighlightRow>;
+  private listBookmarksStmt: Database.Statement<[string, string], BookmarkRow>;
+  private insertBookmarkStmt: Database.Statement<[string, string, string, number, number]>;
+  private deleteBookmarkByPageStmt: Database.Statement<[string, string, number]>;
 
   private ensureHighlightsSchema(): void {
     const rows = this.db.prepare('PRAGMA table_info(highlights)').all() as Array<{ name: string }>;
@@ -177,9 +204,20 @@ export class ReaderProgressDb {
         updated_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS bookmarks (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        page INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(user_id, book_id, page)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_notes_user_created_at ON notes(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_notes_user_book_page ON notes(user_id, book_id, page);
       CREATE INDEX IF NOT EXISTS idx_highlights_user_book_page ON highlights(user_id, book_id, page);
+      CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_created_at ON bookmarks(user_id, book_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_page ON bookmarks(user_id, book_id, page);
     `);
     this.ensureHighlightsSchema();
 
@@ -224,6 +262,20 @@ export class ReaderProgressDb {
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`
+    );
+    this.listBookmarksStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, created_at
+       FROM bookmarks
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY page ASC`
+    );
+    this.insertBookmarkStmt = this.db.prepare(
+      `INSERT INTO bookmarks (id, user_id, book_id, page, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+    this.deleteBookmarkByPageStmt = this.db.prepare(
+      `DELETE FROM bookmarks
+       WHERE user_id = ? AND book_id = ? AND page = ?`
     );
   }
 
@@ -428,6 +480,68 @@ export class ReaderProgressDb {
     const run = this.db.transaction(() => {
       this.deleteHighlights(userId, removeIds);
       return this.insertHighlight(userId, bookId, page, rects, id, createdAt, updatedAt);
+    });
+    return run();
+  }
+
+  listBookmarks(userId: string, bookId: string): Bookmark[] {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    if (!safeUserId || !safeBookId) {
+      return [];
+    }
+    const rows = this.listBookmarksStmt.all(safeUserId, safeBookId);
+    return rows.map(toBookmark);
+  }
+
+  addBookmark(userId: string, bookId: string, page: number, id: string, createdAt: number): Bookmark | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    const safePage = normalizeLastPage(page);
+    const safeId = asNonEmptyString(id);
+    if (!safeUserId || !safeBookId || !safePage || !safeId) {
+      return null;
+    }
+    this.insertBookmarkStmt.run(safeId, safeUserId, safeBookId, safePage, Math.floor(createdAt));
+    return {
+      id: safeId,
+      userId: safeUserId,
+      bookId: safeBookId,
+      page: safePage,
+      createdAt: Math.floor(createdAt)
+    };
+  }
+
+  removeBookmark(userId: string, bookId: string, page: number): boolean {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    const safePage = normalizeLastPage(page);
+    if (!safeUserId || !safeBookId || !safePage) {
+      return false;
+    }
+    const result = this.deleteBookmarkByPageStmt.run(safeUserId, safeBookId, safePage);
+    return result.changes > 0;
+  }
+
+  toggleBookmark(userId: string, bookId: string, page: number, idFactory: () => string): boolean | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    const safePage = normalizeLastPage(page);
+    if (!safeUserId || !safeBookId || !safePage) {
+      return null;
+    }
+
+    const run = this.db.transaction((): boolean => {
+      try {
+        this.insertBookmarkStmt.run(idFactory(), safeUserId, safeBookId, safePage, Date.now());
+        return true;
+      } catch (error) {
+        if (!isBookmarkUniqueConstraintError(error)) {
+          throw error;
+        }
+        this.deleteBookmarkByPageStmt.run(safeUserId, safeBookId, safePage);
+        return false;
+      }
     });
     return run();
   }

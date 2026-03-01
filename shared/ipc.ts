@@ -18,6 +18,9 @@ export const IPC_CHANNELS = {
   highlightsCreateMerged: 'highlights:create-merged',
   highlightsDelete: 'highlights:delete',
   highlightsInsertRaw: 'highlights:insert-raw',
+  bookmarksList: 'bookmarks:list',
+  bookmarksToggle: 'bookmarks:toggle',
+  bookmarksRemove: 'bookmarks:remove',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -78,6 +81,14 @@ export type Highlight = {
   updatedAt: number;
 };
 
+export type Bookmark = {
+  id: string;
+  userId: string;
+  bookId: string;
+  page: number;
+  createdAt: number;
+};
+
 export type AuthError = { ok: false; error: string };
 export type AuthResult = { ok: true; token: string; user: User } | AuthError;
 export type GetCurrentUserResult = { ok: true; user: User } | AuthError;
@@ -96,6 +107,9 @@ export type HighlightsListResult = { ok: true; highlights: Highlight[] } | AuthE
 export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | AuthError;
 export type HighlightsDeleteResult = { ok: true } | AuthError;
 export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | AuthError;
+export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | AuthError;
+export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | AuthError;
+export type BookmarksRemoveResult = { ok: true } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -192,6 +206,23 @@ export type HighlightsInsertRawRequest = {
   rects: HighlightRect[];
 };
 
+export type BookmarksListRequest = {
+  token: string;
+  bookId: string;
+};
+
+export type BookmarksToggleRequest = {
+  token: string;
+  bookId: string;
+  page: number;
+};
+
+export type BookmarksRemoveRequest = {
+  token: string;
+  bookId: string;
+  page: number;
+};
+
 export type ProgressGetLastPageRequest = {
   userId: string;
   bookId: string;
@@ -233,12 +264,19 @@ export interface RendererHighlightsApi {
   insertRaw: (payload: HighlightsInsertRawRequest) => Promise<HighlightsInsertRawResult>;
 }
 
+export interface RendererBookmarksApi {
+  list: (payload: BookmarksListRequest) => Promise<BookmarksListResult>;
+  toggle: (payload: BookmarksToggleRequest) => Promise<BookmarksToggleResult>;
+  remove: (payload: BookmarksRemoveRequest) => Promise<BookmarksRemoveResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;
+  bookmarks: RendererBookmarksApi;
   getLastPage: (userId: string, bookId: string) => Promise<number | null>;
   setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
 }

@@ -1,5 +1,6 @@
 import * as React from 'react';
 import {
+  Bookmark,
   ChevronLeft,
   ChevronRight,
   ListTree,
@@ -8,6 +9,8 @@ import {
   PanelLeftOpen,
   Plus,
   Search,
+  Star,
+  Trash2,
   X
 } from 'lucide-react';
 import { type PdfOutlineItem } from '@/components/outline-tree';
@@ -16,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
-import type { Highlight, HighlightRect, Note } from '../../shared/ipc';
+import type { Bookmark as BookmarkItem, Highlight, HighlightRect, Note } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { usePdfSearch } from '@/lib/usePdfSearch';
 
@@ -45,6 +48,10 @@ type SearchPixelRect = {
   top: number;
   width: number;
   height: number;
+};
+type SearchMatchRectGroup = {
+  rects: SearchPixelRect[];
+  bounds: SearchPixelRect;
 };
 type SearchLayerContext = {
   pageRoot: HTMLDivElement;
@@ -128,6 +135,31 @@ function pointInRect(x: number, y: number, rect: HighlightRect): boolean {
 
 function normalizeSearchText(value: string): string {
   return value.toLowerCase();
+}
+
+function formatTimestamp(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+  return new Date(value).toLocaleString();
+}
+
+function hasBookmarksApi(
+  api: Window['api']
+): api is NonNullable<Window['api']> & {
+  bookmarks: {
+    list: (payload: { token: string; bookId: string }) => Promise<unknown>;
+    toggle: (payload: { token: string; bookId: string; page: number }) => Promise<unknown>;
+    remove: (payload: { token: string; bookId: string; page: number }) => Promise<unknown>;
+  };
+} {
+  return Boolean(
+    api &&
+      api.bookmarks &&
+      typeof api.bookmarks.list === 'function' &&
+      typeof api.bookmarks.toggle === 'function' &&
+      typeof api.bookmarks.remove === 'function'
+  );
 }
 
 function ensureSearchOverlayLayer(pageRoot: HTMLDivElement): HTMLDivElement {
@@ -235,6 +267,92 @@ function mergeSearchRects(rects: SearchPixelRect[]): SearchPixelRect[] {
   return merged;
 }
 
+function getSearchRectBounds(rects: SearchPixelRect[]): SearchPixelRect | null {
+  if (rects.length === 0) {
+    return null;
+  }
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  for (const rect of rects) {
+    left = Math.min(left, rect.left);
+    top = Math.min(top, rect.top);
+    right = Math.max(right, rect.left + rect.width);
+    bottom = Math.max(bottom, rect.top + rect.height);
+  }
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !Number.isFinite(right) || !Number.isFinite(bottom)) {
+    return null;
+  }
+  const width = right - left;
+  const height = bottom - top;
+  if (width <= 0 || height <= 0) {
+    return null;
+  }
+  return { left, top, width, height };
+}
+
+function nextIndex(current: number, total: number): number {
+  if (total <= 0) {
+    return -1;
+  }
+  if (current < 0) {
+    return 0;
+  }
+  return (current + 1) % total;
+}
+
+function prevIndex(current: number, total: number): number {
+  if (total <= 0) {
+    return -1;
+  }
+  if (current < 0) {
+    return total - 1;
+  }
+  return (current - 1 + total) % total;
+}
+
+function getActiveMatchOrdinalOnPage(
+  results: Array<{ page: number }>,
+  currentPage: number,
+  activeIndex: number
+): number {
+  if (activeIndex < 0 || activeIndex >= results.length) {
+    return -1;
+  }
+  if (results[activeIndex]?.page !== currentPage) {
+    return -1;
+  }
+  let ordinal = 0;
+  for (let i = 0; i < activeIndex; i += 1) {
+    if (results[i]?.page === currentPage) {
+      ordinal += 1;
+    }
+  }
+  return ordinal;
+}
+
+function scrollToActiveMatch(
+  viewport: HTMLDivElement,
+  overlayLayer: HTMLDivElement,
+  activeGroup: SearchMatchRectGroup
+): void {
+  const viewportRect = viewport.getBoundingClientRect();
+  const overlayRect = overlayLayer.getBoundingClientRect();
+  const targetTop = overlayRect.top + activeGroup.bounds.top;
+  const targetBottom = targetTop + activeGroup.bounds.height;
+  const isVisible = targetTop >= viewportRect.top && targetBottom <= viewportRect.bottom;
+  if (isVisible) {
+    return;
+  }
+  const targetTopInScrollSpace = viewport.scrollTop + (targetTop - viewportRect.top);
+  const offset = viewport.clientHeight * 0.25;
+  viewport.scrollTo({
+    top: Math.max(0, targetTopInScrollSpace - offset),
+    behavior: 'smooth'
+  });
+}
+
 function base64ToUint8Array(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -308,10 +426,14 @@ export function PdfReaderScreen({
   const [noteError, setNoteError] = React.useState<string | null>(null);
   const [noteSuccess, setNoteSuccess] = React.useState<string | null>(null);
   const [notesPanelOpen, setNotesPanelOpen] = React.useState(false);
+  const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = React.useState(false);
   const [bookNotes, setBookNotes] = React.useState<Note[]>([]);
   const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
   const [bookNotesError, setBookNotesError] = React.useState<string | null>(null);
+  const [bookmarks, setBookmarks] = React.useState<BookmarkItem[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
+  const [bookmarksError, setBookmarksError] = React.useState<string | null>(null);
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
   const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
@@ -321,7 +443,11 @@ export function PdfReaderScreen({
   const pendingHighlightDeletionsRef = React.useRef<PendingHighlightDeletion[]>([]);
   const latestPageRef = React.useRef(1);
   const canSaveRef = React.useRef(false);
+  const lastSearchQueryRef = React.useRef('');
+  const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
   const { query: searchQuery, results: searchResults, isSearching, setQuery: setSearchQuery, clearQuery } = usePdfSearch(doc, bookId);
+  const bookmarkedPages = React.useMemo(() => new Set(bookmarks.map((bookmark) => bookmark.page)), [bookmarks]);
+  const isCurrentPageBookmarked = bookmarkedPages.has(page);
 
   const goPrev = React.useCallback(() => {
     setPage((prev) => Math.max(1, prev - 1));
@@ -354,7 +480,13 @@ export function PdfReaderScreen({
   }, []);
 
   const openSearchPanel = React.useCallback(() => {
+    setBookmarksPanelOpen(false);
     setSearchPanelOpen(true);
+  }, []);
+
+  const openBookmarksPanel = React.useCallback(() => {
+    setSearchPanelOpen(false);
+    setBookmarksPanelOpen(true);
   }, []);
 
   const focusReader = React.useCallback(() => {
@@ -450,7 +582,7 @@ export function PdfReaderScreen({
       }
 
       const spans = textLayer.querySelectorAll('span');
-      const rawRects: SearchPixelRect[] = [];
+      const groups: SearchMatchRectGroup[] = [];
       const maxX = baseRect.width;
       const maxY = baseRect.height;
       for (const span of spans) {
@@ -472,6 +604,7 @@ export function PdfReaderScreen({
           if (matchIndex < 0) {
             break;
           }
+          const matchRects: SearchPixelRect[] = [];
           const range = document.createRange();
           range.setStart(node, matchIndex);
           range.setEnd(node, matchIndex + normalizedQuery.length);
@@ -497,7 +630,14 @@ export function PdfReaderScreen({
             if (width < 2 || height < 2) {
               continue;
             }
-            rawRects.push({ left, top, width, height });
+            matchRects.push({ left, top, width, height });
+          }
+          const mergedMatchRects = mergeSearchRects(matchRects);
+          if (mergedMatchRects.length > 0) {
+            const bounds = getSearchRectBounds(mergedMatchRects);
+            if (bounds) {
+              groups.push({ rects: mergedMatchRects, bounds });
+            }
           }
           startIndex = matchIndex + Math.max(1, normalizedQuery.length);
         }
@@ -507,26 +647,48 @@ export function PdfReaderScreen({
         return;
       }
 
-      const mergedRects = mergeSearchRects(rawRects);
+      const orderedGroups = [...groups].sort((a, b) => {
+        if (Math.abs(a.bounds.top - b.bounds.top) > 0.5) {
+          return a.bounds.top - b.bounds.top;
+        }
+        return a.bounds.left - b.bounds.left;
+      });
+      const activeOrdinalOnPage = getActiveMatchOrdinalOnPage(searchResults, page, activeSearchIndex);
+      const activeGroupIndex =
+        activeOrdinalOnPage >= 0 && activeOrdinalOnPage < orderedGroups.length ? activeOrdinalOnPage : -1;
       const fragment = document.createDocumentFragment();
-      for (const rect of mergedRects) {
-        const leftPercent = (rect.left / baseRect.width) * 100;
-        const topPercent = (rect.top / baseRect.height) * 100;
-        const widthPercent = (rect.width / baseRect.width) * 100;
-        const heightPercent = (rect.height / baseRect.height) * 100;
-        const box = document.createElement('div');
-        box.style.position = 'absolute';
-        box.style.left = `${leftPercent}%`;
-        box.style.top = `${topPercent}%`;
-        box.style.width = `${widthPercent}%`;
-        box.style.height = `${heightPercent}%`;
-        box.style.background = 'rgba(255,235,59,0.35)';
-        box.style.borderRadius = '2px';
-        fragment.appendChild(box);
-      }
+      orderedGroups.forEach((group, groupIndex) => {
+        const isActiveGroup = groupIndex === activeGroupIndex;
+        for (const rect of group.rects) {
+          const leftPercent = (rect.left / baseRect.width) * 100;
+          const topPercent = (rect.top / baseRect.height) * 100;
+          const widthPercent = (rect.width / baseRect.width) * 100;
+          const heightPercent = (rect.height / baseRect.height) * 100;
+          const box = document.createElement('div');
+          box.style.position = 'absolute';
+          box.style.left = `${leftPercent}%`;
+          box.style.top = `${topPercent}%`;
+          box.style.width = `${widthPercent}%`;
+          box.style.height = `${heightPercent}%`;
+          box.style.background = isActiveGroup ? 'rgba(255,193,7,0.55)' : 'rgba(255,235,59,0.35)';
+          box.style.borderRadius = '2px';
+          if (isActiveGroup) {
+            box.style.outline = '1px solid rgba(146, 64, 14, 0.9)';
+            box.style.outlineOffset = '-1px';
+          }
+          fragment.appendChild(box);
+        }
+      });
       overlayLayer.replaceChildren(fragment);
+      if (activeGroupIndex >= 0) {
+        const viewport = readerViewportRef.current;
+        const activeGroup = orderedGroups[activeGroupIndex];
+        if (viewport && activeGroup) {
+          scrollToActiveMatch(viewport, overlayLayer, activeGroup);
+        }
+      }
     },
-    [searchQuery]
+    [activeSearchIndex, page, searchQuery, searchResults]
   );
 
   const scheduleSearchOverlayRecompute = React.useCallback(
@@ -557,6 +719,40 @@ export function PdfReaderScreen({
     },
     [clearScheduledSearchOverlayRecompute, computeAndRenderSearchOverlay, waitForStableTextLayer]
   );
+
+  const navigateToSearchIndex = React.useCallback(
+    (nextActiveIndex: number) => {
+      const target = searchResults[nextActiveIndex];
+      if (!target) {
+        return;
+      }
+      setActiveSearchIndex(nextActiveIndex);
+      setPageInputError(null);
+      const targetPage = clampPage(target.page, pageCount);
+      if (targetPage !== page) {
+        setPage(targetPage);
+        return;
+      }
+      scheduleSearchOverlayRecompute('active-match-navigation');
+    },
+    [page, pageCount, scheduleSearchOverlayRecompute, searchResults]
+  );
+
+  const goToNextSearchMatch = React.useCallback(() => {
+    const nextActiveIndex = nextIndex(activeSearchIndex, searchResults.length);
+    if (nextActiveIndex < 0) {
+      return;
+    }
+    navigateToSearchIndex(nextActiveIndex);
+  }, [activeSearchIndex, navigateToSearchIndex, searchResults.length]);
+
+  const goToPrevSearchMatch = React.useCallback(() => {
+    const previousActiveIndex = prevIndex(activeSearchIndex, searchResults.length);
+    if (previousActiveIndex < 0) {
+      return;
+    }
+    navigateToSearchIndex(previousActiveIndex);
+  }, [activeSearchIndex, navigateToSearchIndex, searchResults.length]);
 
   const flushLastPageSave = React.useCallback(() => {
     if (!canSaveRef.current || !window.api) {
@@ -646,6 +842,74 @@ export function PdfReaderScreen({
       setBookNotesLoading(false);
     }
   }, [bookId, token]);
+
+  const loadBookmarks = React.useCallback(async () => {
+    if (!hasBookmarksApi(window.api)) {
+      setBookmarks([]);
+      setBookmarksError('Bookmarks API is unavailable. Restart the app to reload Electron preload.');
+      return;
+    }
+
+    setBookmarksLoading(true);
+    setBookmarksError(null);
+    try {
+      const result = await window.api.bookmarks.list({ token, bookId });
+      if (!result.ok) {
+        setBookmarksError(result.error);
+        setBookmarks([]);
+        return;
+      }
+      setBookmarks(result.bookmarks);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setBookmarksError(message);
+      setBookmarks([]);
+    } finally {
+      setBookmarksLoading(false);
+    }
+  }, [bookId, token]);
+
+  const toggleBookmarkForPage = React.useCallback(
+    async (targetPage: number) => {
+      if (!hasBookmarksApi(window.api)) {
+        setBookmarksError('Bookmarks API is unavailable. Restart the app to reload Electron preload.');
+        return;
+      }
+      try {
+        const result = await window.api.bookmarks.toggle({ token, bookId, page: targetPage });
+        if (!result.ok) {
+          setBookmarksError(result.error);
+          return;
+        }
+        await loadBookmarks();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setBookmarksError(message);
+      }
+    },
+    [bookId, loadBookmarks, token]
+  );
+
+  const removeBookmarkByPage = React.useCallback(
+    async (targetPage: number) => {
+      if (!hasBookmarksApi(window.api)) {
+        setBookmarksError('Bookmarks API is unavailable. Restart the app to reload Electron preload.');
+        return;
+      }
+      try {
+        const result = await window.api.bookmarks.remove({ token, bookId, page: targetPage });
+        if (!result.ok) {
+          setBookmarksError(result.error);
+          return;
+        }
+        await loadBookmarks();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setBookmarksError(message);
+      }
+    },
+    [bookId, loadBookmarks, token]
+  );
 
   const loadPageHighlights = React.useCallback(async () => {
     if (!window.api) {
@@ -857,11 +1121,32 @@ export function PdfReaderScreen({
   React.useEffect(() => {
     setBookNotes([]);
     setBookNotesError(null);
+    setBookmarks([]);
+    setBookmarksError(null);
+    setBookmarksPanelOpen(false);
     setNotesPanelOpen(false);
     setHighlightContextMenu(null);
     setSearchPanelOpen(false);
     clearQuery();
   }, [bookId, clearQuery]);
+
+  React.useEffect(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (lastSearchQueryRef.current !== normalizedQuery) {
+      lastSearchQueryRef.current = normalizedQuery;
+      setActiveSearchIndex(searchResults.length > 0 ? 0 : -1);
+      return;
+    }
+    setActiveSearchIndex((prev) => {
+      if (searchResults.length <= 0) {
+        return -1;
+      }
+      if (prev < 0) {
+        return 0;
+      }
+      return Math.min(prev, searchResults.length - 1);
+    });
+  }, [searchQuery, searchResults]);
 
   React.useEffect(() => {
     if (!searchPanelOpen) {
@@ -873,6 +1158,10 @@ export function PdfReaderScreen({
     }, 0);
     return () => clearTimeout(timeoutId);
   }, [searchPanelOpen]);
+
+  React.useEffect(() => {
+    void loadBookmarks();
+  }, [loadBookmarks]);
 
   React.useEffect(() => {
     void loadPageHighlights();
@@ -1222,6 +1511,13 @@ export function PdfReaderScreen({
   }, [page, pageRootVersion, scale, scheduleSearchOverlayRecompute, searchQuery]);
 
   React.useEffect(() => {
+    if (activeSearchIndex < 0) {
+      return;
+    }
+    scheduleSearchOverlayRecompute('active-index-change');
+  }, [activeSearchIndex, scheduleSearchOverlayRecompute]);
+
+  React.useEffect(() => {
     const pageRoot = pageRootRef.current;
     if (!pageRoot) {
       return;
@@ -1422,23 +1718,16 @@ export function PdfReaderScreen({
       const typing = isTypingTarget(event.target ?? activeElement);
       const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
-      if (ctrlOrMeta && event.key.toLowerCase() === 'f') {
-        event.preventDefault();
-        openSearchPanel();
-        return;
-      }
-
-      if (ctrlOrMeta && event.key.toLowerCase() === 'l') {
-        event.preventDefault();
-        pageInputRef.current?.focus();
-        pageInputRef.current?.select();
-        return;
-      }
-
       if (event.key === 'Escape') {
         if (searchPanelOpen) {
           event.preventDefault();
           setSearchPanelOpen(false);
+          focusReader();
+          return;
+        }
+        if (bookmarksPanelOpen) {
+          event.preventDefault();
+          setBookmarksPanelOpen(false);
           focusReader();
           return;
         }
@@ -1463,6 +1752,29 @@ export function PdfReaderScreen({
       }
 
       if (typing) {
+        return;
+      }
+
+      if (ctrlOrMeta && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        openSearchPanel();
+        return;
+      }
+
+      if (ctrlOrMeta && event.key.toLowerCase() === 'l') {
+        event.preventDefault();
+        pageInputRef.current?.focus();
+        pageInputRef.current?.select();
+        return;
+      }
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          goToPrevSearchMatch();
+        } else {
+          goToNextSearchMatch();
+        }
         return;
       }
 
@@ -1525,6 +1837,12 @@ export function PdfReaderScreen({
         return;
       }
 
+      if (event.key === 'b' || event.key === 'B') {
+        event.preventDefault();
+        void toggleBookmarkForPage(page);
+        return;
+      }
+
       if (event.key === '/') {
         event.preventDefault();
         pageInputRef.current?.focus();
@@ -1538,16 +1856,21 @@ export function PdfReaderScreen({
     };
   }, [
     focusReader,
+    bookmarksPanelOpen,
+    goToNextSearchMatch,
+    goToPrevSearchMatch,
     goNext,
     goPrev,
     notesPanelOpen,
     openAddNote,
     openSearchPanel,
     pageCount,
+    page,
     searchPanelOpen,
     setFitMode,
     sidebarOpen,
     toggleContents,
+    toggleBookmarkForPage,
     zoomIn,
     zoomOut
   ]);
@@ -1722,6 +2045,32 @@ export function PdfReaderScreen({
             disabled={loading}
           >
             Notes
+          </Button>
+
+          <Button
+            type="button"
+            variant={bookmarksPanelOpen ? 'default' : 'outline'}
+            size="sm"
+            className="ml-2"
+            onClick={openBookmarksPanel}
+            disabled={loading}
+          >
+            Bookmarks
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-2"
+            onClick={() => {
+              void toggleBookmarkForPage(page);
+            }}
+            disabled={loading}
+            aria-label={isCurrentPageBookmarked ? 'Remove bookmark from current page' : 'Bookmark current page'}
+            title={isCurrentPageBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+          >
+            <Star className={`h-4 w-4 ${isCurrentPageBookmarked ? 'fill-amber-400 text-amber-500' : ''}`} />
           </Button>
 
           <Button
@@ -1935,6 +2284,60 @@ export function PdfReaderScreen({
             </aside>
           ) : null}
 
+          {bookmarksPanelOpen ? (
+            <aside
+              className={`absolute top-3 bottom-3 z-40 flex w-[320px] flex-col rounded-lg border border-slate-200 bg-white shadow-xl ${
+                notesPanelOpen ? 'right-[336px]' : 'right-3'
+              }`}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Bookmark className="h-4 w-4 text-slate-700" />
+                  <p className="text-sm font-semibold">Bookmarks</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={() => setBookmarksPanelOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
+                {bookmarksLoading ? <p className="text-xs text-slate-600">Loading...</p> : null}
+                {!bookmarksLoading && bookmarks.length === 0 ? (
+                  <p className="text-xs text-slate-600">No bookmarks for this book.</p>
+                ) : null}
+                {bookmarks.map((bookmark) => (
+                  <div
+                    key={bookmark.id}
+                    className="flex items-start gap-2 rounded-md border border-slate-200 p-2 transition-colors hover:bg-slate-50"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPage(clampPage(bookmark.page, pageCount));
+                        setPageInputError(null);
+                        focusReader();
+                      }}
+                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <p className="text-xs font-semibold text-slate-800">Page {bookmark.page}</p>
+                      <p className="mt-1 text-[11px] text-slate-600">{formatTimestamp(bookmark.createdAt)}</p>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-700"
+                      aria-label={`Remove bookmark from page ${bookmark.page}`}
+                      onClick={() => {
+                        void removeBookmarkByPage(bookmark.page);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          ) : null}
+
           {searchPanelOpen ? (
             <aside
               className={`absolute top-3 bottom-3 z-40 flex w-[360px] flex-col rounded-lg border border-slate-200 bg-white shadow-xl ${
@@ -1952,9 +2355,45 @@ export function PdfReaderScreen({
                   ref={searchInputRef}
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') {
+                      return;
+                    }
+                    event.preventDefault();
+                    if (event.shiftKey) {
+                      goToPrevSearchMatch();
+                    } else {
+                      goToNextSearchMatch();
+                    }
+                  }}
                   placeholder="Search in this PDF..."
                   aria-label="Search in document"
                 />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={goToPrevSearchMatch}
+                    disabled={searchResults.length === 0}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={goToNextSearchMatch}
+                    disabled={searchResults.length === 0}
+                  >
+                    Next
+                  </Button>
+                  <span className="text-xs text-slate-600">
+                    {searchResults.length > 0 && activeSearchIndex >= 0
+                      ? `${activeSearchIndex + 1} / ${searchResults.length}`
+                      : `0 / ${searchResults.length}`}
+                  </span>
+                </div>
                 <p className="text-xs text-slate-600">{isSearching ? 'Searching...' : `${searchResults.length} results`}</p>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -1974,11 +2413,13 @@ export function PdfReaderScreen({
                         key={`${result.page}:${result.start}:${result.end}:${index}`}
                         type="button"
                         onClick={() => {
-                          setPage(clampPage(result.page, pageCount));
-                          setPageInputError(null);
-                          readerViewportRef.current?.scrollTo({ top: 0 });
+                          navigateToSearchIndex(index);
                         }}
-                        className="w-full rounded-md border border-slate-200 p-2 text-left transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className={`w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                          index === activeSearchIndex
+                            ? 'border-amber-400 bg-amber-50'
+                            : 'border-slate-200 hover:bg-slate-50'
+                        }`}
                       >
                         <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700">
                           Page {result.page}
