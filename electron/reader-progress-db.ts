@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import type { Bookmark, Highlight, HighlightRect, Note } from '../shared/ipc';
 
 type GetRow = { last_page: number };
+type EpubGetRow = { last_cfi: string };
 type NoteRow = {
   id: string;
   user_id: string;
@@ -132,8 +133,10 @@ export class ReaderProgressDb {
   private db: Database.Database;
 
   private getStmt: Database.Statement<[string, string], GetRow | undefined>;
+  private getEpubStmt: Database.Statement<[string, string], EpubGetRow | undefined>;
 
   private upsertStmt: Database.Statement<[string, string, number, number]>;
+  private upsertEpubStmt: Database.Statement<[string, string, string, number]>;
   private insertNoteStmt: Database.Statement<[string, string, string, number, string, number, number]>;
   private deleteNoteStmt: Database.Statement<[string, string]>;
   private updateNoteStmt: Database.Statement<[string, number, string, string]>;
@@ -199,6 +202,14 @@ export class ReaderProgressDb {
         PRIMARY KEY (user_id, book_id)
       );
 
+      CREATE TABLE IF NOT EXISTS reading_progress_epub (
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        last_cfi TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, book_id)
+      );
+
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -240,11 +251,21 @@ export class ReaderProgressDb {
     this.getStmt = this.db.prepare(
       'SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1'
     );
+    this.getEpubStmt = this.db.prepare(
+      'SELECT last_cfi FROM reading_progress_epub WHERE user_id = ? AND book_id = ? LIMIT 1'
+    );
     this.upsertStmt = this.db.prepare(`
       INSERT INTO reading_progress (user_id, book_id, last_page, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(user_id, book_id) DO UPDATE SET
         last_page = excluded.last_page,
+        updated_at = excluded.updated_at
+    `);
+    this.upsertEpubStmt = this.db.prepare(`
+      INSERT INTO reading_progress_epub (user_id, book_id, last_cfi, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, book_id) DO UPDATE SET
+        last_cfi = excluded.last_cfi,
         updated_at = excluded.updated_at
     `);
     this.insertNoteStmt = this.db.prepare(
@@ -331,6 +352,30 @@ export class ReaderProgressDb {
     }
 
     this.upsertStmt.run(safeUserId, safeBookId, safeLastPage, Date.now());
+  }
+
+  getLastEpubCfi(userId: string, bookId: string): string | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    if (!safeUserId || !safeBookId) {
+      return null;
+    }
+    const row = this.getEpubStmt.get(safeUserId, safeBookId);
+    if (!row || typeof row.last_cfi !== 'string') {
+      return null;
+    }
+    const cfi = row.last_cfi.trim();
+    return cfi.length > 0 ? cfi : null;
+  }
+
+  setLastEpubCfi(userId: string, bookId: string, cfi: string): void {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    const safeCfi = asNonEmptyString(cfi);
+    if (!safeUserId || !safeBookId || !safeCfi) {
+      return;
+    }
+    this.upsertEpubStmt.run(safeUserId, safeBookId, safeCfi, Date.now());
   }
 
   createNote(note: Note): Note | null {

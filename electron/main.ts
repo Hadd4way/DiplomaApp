@@ -3,6 +3,7 @@ import path from 'node:path';
 import {
   type BooksAddSampleRequest,
   type BooksDeleteRequest,
+  type BooksGetEpubDataRequest,
   type BooksGetPdfDataRequest,
   type BooksImportRequest,
   type BooksRevealRequest,
@@ -14,6 +15,8 @@ import {
   type NotesListRequest,
   type NotesUpdateRequest,
   type PingResponse,
+  type EpubProgressGetRequest,
+  type EpubProgressSetRequest,
   type ExportGetBookDataRequest,
   type ExportSaveFileRequest,
   type BookmarksListRequest,
@@ -31,11 +34,12 @@ import {
 } from '../shared/ipc';
 import { getDatabase } from './db';
 import { getCurrentUser, signIn, signOut, signUp } from './auth';
-import { addSampleBook, deleteBook, getPdfData, importBook, listBooks, revealBook } from './books';
+import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights } from './highlights';
 import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
 import { getBookExportData, saveExportFile } from './export';
+import { getEpubProgress, setEpubProgress } from './epub-progress';
 import { getReaderProgressDb } from './reader-progress-db';
 
 let mainWindow: BrowserWindow | null = null;
@@ -102,6 +106,9 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.booksGetPdfData, (_event, payload: BooksGetPdfDataRequest) =>
     getPdfData(db, payload)
   );
+  ipcMain.handle(IPC_CHANNELS.booksGetEpubData, (_event, payload: BooksGetEpubDataRequest) =>
+    getEpubData(db, payload)
+  );
   ipcMain.handle(IPC_CHANNELS.notesCreate, (_event, payload: NotesCreateRequest) => createNote(db, progressDb, payload));
   ipcMain.handle(IPC_CHANNELS.notesList, (_event, payload: NotesListRequest) => listNotes(db, progressDb, payload));
   ipcMain.handle(IPC_CHANNELS.notesDelete, (_event, payload: NotesDeleteRequest) => deleteNote(db, progressDb, payload));
@@ -132,6 +139,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.exportSaveFile, async (_event, payload: ExportSaveFileRequest) =>
     saveExportFile(payload, mainWindow)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubProgressGet, (_event, payload: EpubProgressGetRequest) =>
+    getEpubProgress(db, progressDb, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubProgressSet, (_event, payload: EpubProgressSetRequest) =>
+    setEpubProgress(db, progressDb, payload)
   );
   ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
     progressDb.getLastPage(payload.userId, payload.bookId)

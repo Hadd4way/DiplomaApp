@@ -13,6 +13,7 @@ const notes_1 = require("./notes");
 const highlights_1 = require("./highlights");
 const bookmarks_1 = require("./bookmarks");
 const export_1 = require("./export");
+const epub_progress_1 = require("./epub-progress");
 const reader_progress_db_1 = require("./reader-progress-db");
 let mainWindow = null;
 function createWindow() {
@@ -60,6 +61,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksReveal, (_event, payload) => (0, books_1.revealBook)(db, payload, userDataPath));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksDelete, (_event, payload) => (0, books_1.deleteBook)(db, payload, userDataPath));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetPdfData, (_event, payload) => (0, books_1.getPdfData)(db, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetEpubData, (_event, payload) => (0, books_1.getEpubData)(db, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesCreate, (_event, payload) => (0, notes_1.createNote)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, payload));
@@ -73,6 +75,8 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksRemove, (_event, payload) => (0, bookmarks_1.removeBookmark)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportGetBookData, (_event, payload) => (0, export_1.getBookExportData)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportSaveFile, async (_event, payload) => (0, export_1.saveExportFile)(payload, mainWindow));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressGet, (_event, payload) => (0, epub_progress_1.getEpubProgress)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressSet, (_event, payload) => (0, epub_progress_1.setEpubProgress)(db, progressDb, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(payload.userId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage));
     createWindow();

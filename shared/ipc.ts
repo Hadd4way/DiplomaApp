@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   booksReveal: 'books:reveal',
   booksDelete: 'books:delete',
   booksGetPdfData: 'books:get-pdf-data',
+  booksGetEpubData: 'books:get-epub-data',
   notesCreate: 'notes:create',
   notesList: 'notes:list',
   notesDelete: 'notes:delete',
@@ -23,6 +24,8 @@ export const IPC_CHANNELS = {
   bookmarksRemove: 'bookmarks:remove',
   exportGetBookData: 'export:get-book-data',
   exportSaveFile: 'export:save-file',
+  epubProgressGet: 'epub-progress:get',
+  epubProgressSet: 'epub-progress:set',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -102,6 +105,7 @@ export type BooksImportResult = { ok: true; book: Book } | AuthError;
 export type BooksRevealResult = { ok: true } | AuthError;
 export type BooksDeleteResult = { ok: true } | AuthError;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | AuthError;
+export type BooksGetEpubDataResult = { ok: true; base64: string; title: string } | AuthError;
 export type NotesCreateResult = { ok: true; note: Note } | AuthError;
 export type NotesListResult = { ok: true; notes: Note[] } | AuthError;
 export type NotesDeleteResult = { ok: true } | AuthError;
@@ -127,6 +131,8 @@ export type ExportSaveFileResult =
   | { ok: true; path: string }
   | { ok: false; cancelled: true }
   | AuthError;
+export type EpubProgressGetResult = { ok: true; cfi: string | null } | AuthError;
+export type EpubProgressSetResult = { ok: true } | AuthError;
 
 export type SignUpRequest = {
   email: string;
@@ -170,6 +176,11 @@ export type BooksDeleteRequest = {
 };
 
 export type BooksGetPdfDataRequest = {
+  token: string;
+  bookId: string;
+};
+
+export type BooksGetEpubDataRequest = {
   token: string;
   bookId: string;
 };
@@ -253,6 +264,17 @@ export type ExportSaveFileRequest = {
   content: string;
 };
 
+export type EpubProgressGetRequest = {
+  token: string;
+  bookId: string;
+};
+
+export type EpubProgressSetRequest = {
+  token: string;
+  bookId: string;
+  cfi: string;
+};
+
 export type ProgressGetLastPageRequest = {
   userId: string;
   bookId: string;
@@ -278,6 +300,7 @@ export interface RendererBooksApi {
   reveal: (payload: BooksRevealRequest) => Promise<BooksRevealResult>;
   delete: (payload: BooksDeleteRequest) => Promise<BooksDeleteResult>;
   getPdfData: (payload: BooksGetPdfDataRequest) => Promise<BooksGetPdfDataResult>;
+  getEpubData: (payload: BooksGetEpubDataRequest) => Promise<BooksGetEpubDataResult>;
 }
 
 export interface RendererNotesApi {
@@ -305,6 +328,11 @@ export interface RendererExportApi {
   saveFile: (payload: ExportSaveFileRequest) => Promise<ExportSaveFileResult>;
 }
 
+export interface RendererEpubProgressApi {
+  get: (payload: EpubProgressGetRequest) => Promise<EpubProgressGetResult>;
+  set: (payload: EpubProgressSetRequest) => Promise<EpubProgressSetResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   auth: RendererAuthApi;
@@ -313,6 +341,7 @@ export interface RendererApi {
   highlights: RendererHighlightsApi;
   bookmarks: RendererBookmarksApi;
   export: RendererExportApi;
+  epubProgress: RendererEpubProgressApi;
   getLastPage: (userId: string, bookId: string) => Promise<number | null>;
   setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
 }

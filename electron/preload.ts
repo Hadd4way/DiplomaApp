@@ -15,7 +15,8 @@ const api: RendererApi = {
     import: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksImport, payload),
     reveal: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksReveal, payload),
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
-    getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload)
+    getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload),
+    getEpubData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetEpubData, payload)
   },
   notes: {
     create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesCreate, payload),
@@ -37,6 +38,10 @@ const api: RendererApi = {
   export: {
     getBookData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportGetBookData, payload),
     saveFile: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportSaveFile, payload)
+  },
+  epubProgress: {
+    get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressGet, payload),
+    set: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressSet, payload)
   },
   getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
   setLastPage: (userId, bookId, lastPage) =>

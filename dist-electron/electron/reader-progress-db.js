@@ -143,6 +143,14 @@ class ReaderProgressDb {
         PRIMARY KEY (user_id, book_id)
       );
 
+      CREATE TABLE IF NOT EXISTS reading_progress_epub (
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        last_cfi TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, book_id)
+      );
+
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -181,11 +189,19 @@ class ReaderProgressDb {
     `);
         this.ensureHighlightsSchema();
         this.getStmt = this.db.prepare('SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1');
+        this.getEpubStmt = this.db.prepare('SELECT last_cfi FROM reading_progress_epub WHERE user_id = ? AND book_id = ? LIMIT 1');
         this.upsertStmt = this.db.prepare(`
       INSERT INTO reading_progress (user_id, book_id, last_page, updated_at)
       VALUES (?, ?, ?, ?)
       ON CONFLICT(user_id, book_id) DO UPDATE SET
         last_page = excluded.last_page,
+        updated_at = excluded.updated_at
+    `);
+        this.upsertEpubStmt = this.db.prepare(`
+      INSERT INTO reading_progress_epub (user_id, book_id, last_cfi, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, book_id) DO UPDATE SET
+        last_cfi = excluded.last_cfi,
         updated_at = excluded.updated_at
     `);
         this.insertNoteStmt = this.db.prepare(`INSERT INTO notes (id, user_id, book_id, page, content, created_at, updated_at)
@@ -245,6 +261,28 @@ class ReaderProgressDb {
             return;
         }
         this.upsertStmt.run(safeUserId, safeBookId, safeLastPage, Date.now());
+    }
+    getLastEpubCfi(userId, bookId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        if (!safeUserId || !safeBookId) {
+            return null;
+        }
+        const row = this.getEpubStmt.get(safeUserId, safeBookId);
+        if (!row || typeof row.last_cfi !== 'string') {
+            return null;
+        }
+        const cfi = row.last_cfi.trim();
+        return cfi.length > 0 ? cfi : null;
+    }
+    setLastEpubCfi(userId, bookId, cfi) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safeCfi = asNonEmptyString(cfi);
+        if (!safeUserId || !safeBookId || !safeCfi) {
+            return;
+        }
+        this.upsertEpubStmt.run(safeUserId, safeBookId, safeCfi, Date.now());
     }
     createNote(note) {
         const safeUserId = asNonEmptyString(note.userId);

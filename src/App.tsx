@@ -17,6 +17,7 @@ import { AppShell } from '@/components/AppShell';
 import { AuthCard } from '@/components/auth-card';
 import type { AppView } from '@/components/Sidebar';
 import { LibraryScreen } from '@/screens/LibraryScreen';
+import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
@@ -410,11 +411,12 @@ export default function App() {
 
         if (activeBook && activeBook.format === 'epub') {
           return (
-            <PlaceholderScreen
-              title="EPUB Reader"
-              description="EPUB reader coming soon."
-              actionLabel="Back to Library"
-              onAction={onBackToLibrary}
+            <EpubReaderScreen
+              title={activeBook.title}
+              token={token ?? ''}
+              bookId={activeBook.id}
+              loading={loading}
+              onBack={onBackToLibrary}
             />
           );
         }

@@ -9,6 +9,7 @@ exports.importBook = importBook;
 exports.revealBook = revealBook;
 exports.deleteBook = deleteBook;
 exports.getPdfData = getPdfData;
+exports.getEpubData = getEpubData;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
@@ -245,5 +246,39 @@ async function getPdfData(db, payload) {
     }
     catch {
         return { ok: false, error: 'Failed to read PDF file from disk.' };
+    }
+}
+async function getEpubData(db, payload) {
+    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
+    if (!session.ok) {
+        return session;
+    }
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const bookRow = db
+        .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, session.userId);
+    if (!bookRow) {
+        return { ok: false, error: 'Book not found' };
+    }
+    if (bookRow.format !== 'epub') {
+        return { ok: false, error: 'Selected book is not an EPUB.' };
+    }
+    const epubPath = bookRow.file_path?.trim();
+    if (!epubPath) {
+        return { ok: false, error: 'EPUB file path is missing.' };
+    }
+    try {
+        const fileBuffer = await promises_1.default.readFile(epubPath);
+        return {
+            ok: true,
+            base64: fileBuffer.toString('base64'),
+            title: bookRow.title
+        };
+    }
+    catch {
+        return { ok: false, error: 'Failed to read EPUB file from disk.' };
     }
 }

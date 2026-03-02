@@ -13,6 +13,7 @@ exports.IPC_CHANNELS = {
     booksReveal: 'books:reveal',
     booksDelete: 'books:delete',
     booksGetPdfData: 'books:get-pdf-data',
+    booksGetEpubData: 'books:get-epub-data',
     notesCreate: 'notes:create',
     notesList: 'notes:list',
     notesDelete: 'notes:delete',
@@ -26,6 +27,8 @@ exports.IPC_CHANNELS = {
     bookmarksRemove: 'bookmarks:remove',
     exportGetBookData: 'export:get-book-data',
     exportSaveFile: 'export:save-file',
+    epubProgressGet: 'epub-progress:get',
+    epubProgressSet: 'epub-progress:set',
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page'
 };
