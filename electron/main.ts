@@ -25,7 +25,8 @@ import {
   type ReaderSettingsGetRequest,
   type ReaderSettingsUpdateRequest,
   type ProgressGetLastPageRequest,
-  type ProgressSetLastPageRequest
+  type ProgressSetLastPageRequest,
+  type StatsMarkOpenedRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
@@ -36,6 +37,7 @@ import { getBookExportData, saveExportFile } from './export';
 import { getEpubProgress, setEpubProgress } from './epub-progress';
 import { getReaderProgressDb } from './reader-progress-db';
 import { getReaderSettings, updateReaderSettings } from './reader-settings';
+import { getRecentBooks, markBookOpened } from './reading-stats';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -180,6 +182,10 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.progressSetLastPage, (_event, payload: ProgressSetLastPageRequest) =>
     progressDb.setLastPage(libraryId, payload.bookId, payload.lastPage)
   );
+  ipcMain.handle(IPC_CHANNELS.statsMarkOpened, (_event, payload: StatsMarkOpenedRequest) =>
+    markBookOpened(db, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.statsGetRecentBooks, () => getRecentBooks(db, libraryId));
 
   createWindow();
 

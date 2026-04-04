@@ -47,9 +47,20 @@ function runMigrations(db) {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS reading_stats (
+      book_id TEXT PRIMARY KEY,
+      total_reading_time_sec INTEGER NOT NULL DEFAULT 0,
+      last_opened_at INTEGER NULL,
+      open_count INTEGER NOT NULL DEFAULT 0,
+      last_format TEXT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_books_user_created_at ON books(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reading_stats_last_opened_at ON reading_stats(last_opened_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_reading_stats_updated_at ON reading_stats(updated_at DESC);
   `);
 }
 function ensureLocalLibraryIdentity(db) {

@@ -25,7 +25,9 @@ export const IPC_CHANNELS = {
   readerSettingsGet: 'reader-settings:get',
   readerSettingsUpdate: 'reader-settings:update',
   progressGetLastPage: 'progress:get-last-page',
-  progressSetLastPage: 'progress:set-last-page'
+  progressSetLastPage: 'progress:set-last-page',
+  statsMarkOpened: 'stats:mark-opened',
+  statsGetRecentBooks: 'stats:get-recent-books'
 } as const;
 
 export type PingResponse = {
@@ -102,6 +104,13 @@ export type ReaderSettingsPatch = {
   epubLineHeight?: number;
 };
 
+export type RecentBookEntry = {
+  bookId: string;
+  title: string;
+  format: BookFormat;
+  lastOpenedAt: number | null;
+};
+
 export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
@@ -139,6 +148,8 @@ export type EpubProgressGetResult = { ok: true; cfi: string | null } | ErrorResu
 export type EpubProgressSetResult = { ok: true } | ErrorResult;
 export type ReaderSettingsGetResult = { ok: true; settings: ReaderSettings } | ErrorResult;
 export type ReaderSettingsUpdateResult = { ok: true; settings: ReaderSettings } | ErrorResult;
+export type StatsMarkOpenedResult = { ok: true } | ErrorResult;
+export type StatsGetRecentBooksResult = { ok: true; books: RecentBookEntry[] } | ErrorResult;
 
 export type BooksRevealRequest = {
   bookId: string;
@@ -250,6 +261,11 @@ export type ProgressSetLastPageRequest = {
   lastPage: number;
 };
 
+export type StatsMarkOpenedRequest = {
+  bookId: string;
+  format: BookFormat;
+};
+
 export interface RendererBooksApi {
   list: () => Promise<BooksListResult>;
   addSample: () => Promise<BooksAddSampleResult>;
@@ -295,6 +311,11 @@ export interface RendererReaderSettingsApi {
   update: (payload: ReaderSettingsUpdateRequest) => Promise<ReaderSettingsUpdateResult>;
 }
 
+export interface RendererStatsApi {
+  markOpened: (payload: StatsMarkOpenedRequest) => Promise<StatsMarkOpenedResult>;
+  getRecentBooks: () => Promise<StatsGetRecentBooksResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   books: RendererBooksApi;
@@ -304,6 +325,7 @@ export interface RendererApi {
   export: RendererExportApi;
   epubProgress: RendererEpubProgressApi;
   readerSettings: RendererReaderSettingsApi;
+  stats: RendererStatsApi;
   getLastPage: (payload: ProgressGetLastPageRequest) => Promise<number | null>;
   setLastPage: (payload: ProgressSetLastPageRequest) => Promise<void>;
 }

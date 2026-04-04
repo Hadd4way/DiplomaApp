@@ -42,6 +42,10 @@ const api = {
         get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.readerSettingsGet, payload),
         update: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.readerSettingsUpdate, payload)
     },
+    stats: {
+        markOpened: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.statsMarkOpened, payload),
+        getRecentBooks: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.statsGetRecentBooks)
+    },
     getLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, payload),
     setLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, payload)
 };

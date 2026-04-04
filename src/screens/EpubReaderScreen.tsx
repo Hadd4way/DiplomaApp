@@ -16,6 +16,7 @@ import {
   getReaderThemePalette,
   getReaderThemeStyles
 } from '@/lib/reader-theme';
+import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
 
 type TocItem = {
@@ -214,6 +215,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const readerContainerRef = React.useRef<HTMLDivElement | null>(null);
   const bookRef = React.useRef<any>(null);
   const renditionRef = React.useRef<any>(null);
+  const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCfiRef = React.useRef<string | null>(null);
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
@@ -223,6 +225,35 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const [ready, setReady] = React.useState(false);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const { registerActivity, bindActivityTarget, flush: flushReadingStats } = useReadingSessionStats({
+    bookId,
+    format: 'epub',
+    rootRef: readerContainerRef
+  });
+
+  const bindIframeActivity = React.useCallback(() => {
+    for (const cleanup of iframeActivityCleanupRef.current.values()) {
+      cleanup();
+    }
+    iframeActivityCleanupRef.current.clear();
+
+    const container = readerContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const frames = Array.from(container.querySelectorAll('iframe'));
+    for (const frame of frames) {
+      if (!(frame instanceof HTMLIFrameElement)) {
+        continue;
+      }
+      const documentNode = frame.contentDocument;
+      if (!documentNode) {
+        continue;
+      }
+      iframeActivityCleanupRef.current.set(frame, bindActivityTarget(documentNode));
+    }
+  }, [bindActivityTarget]);
 
   const persistCfi = React.useCallback(
     async (cfi: string) => {
@@ -236,12 +267,14 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   );
 
   const goPrev = React.useCallback(() => {
+    registerActivity();
     renditionRef.current?.prev?.();
-  }, []);
+  }, [registerActivity]);
 
   const goNext = React.useCallback(() => {
+    registerActivity();
     renditionRef.current?.next?.();
-  }, []);
+  }, [registerActivity]);
 
   React.useEffect(() => {
     const rendition = renditionRef.current;
@@ -262,7 +295,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         applyInlineEpubStyles(documentNode, settings);
       }
     }
-  }, [settings]);
+    bindIframeActivity();
+  }, [bindIframeActivity, settings]);
 
   React.useEffect(() => {
     const container = readerContainerRef.current;
@@ -354,6 +388,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
               if (!cfi) {
                 return;
               }
+              registerActivity();
               log('event:relocated', {
                 candidate: candidate.label,
                 cfi,
@@ -382,6 +417,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                   applyInlineEpubStyles(documentNode, settings);
                 }
               }
+              bindIframeActivity();
             });
             const onDisplayError = (errorPayload: unknown) => {
               warn('event:displayError', { candidate: candidate.label, errorPayload, elapsed: elapsed() });
@@ -501,12 +537,17 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         void persistCfi(latestCfiRef.current);
       }
       cleanupRelocated?.();
+      for (const cleanup of iframeActivityCleanupRef.current.values()) {
+        cleanup();
+      }
+      iframeActivityCleanupRef.current.clear();
+      flushReadingStats();
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
       renditionRef.current = null;
       bookRef.current = null;
     };
-  }, [bookId, persistCfi]);
+  }, [bindIframeActivity, bookId, flushReadingStats, persistCfi, registerActivity, settings]);
 
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden" style={getReaderThemeStyles(settings.theme)}>
@@ -519,7 +560,17 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         }}
       >
         <div className="flex h-14 items-center gap-2 px-3">
-          <Button type="button" variant="outline" size="sm" onClick={onBack} disabled={loading} style={getReaderButtonStyles(settings.theme)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              flushReadingStats();
+              onBack();
+            }}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme)}
+          >
             Back
           </Button>
           <div className="min-w-0 max-w-[420px] flex-1 px-2">
@@ -576,6 +627,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                       if (!item.href) {
                         return;
                       }
+                      registerActivity();
                       void renditionRef.current?.display?.(item.href);
                     }}
                     palette={palette}

@@ -28,6 +28,7 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { toJSON, toMarkdown } from '@/lib/book-export';
+import { useReadingSessionStats } from '@/lib/reading-stats';
 import { usePdfSearch } from '@/lib/usePdfSearch';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -493,6 +494,11 @@ export function PdfReaderScreen({
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const readerPalette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const { registerActivity, flush: flushReadingStats } = useReadingSessionStats({
+    bookId,
+    format: 'pdf',
+    rootRef: readerRootRef
+  });
   const { query: searchQuery, results: searchResults, isSearching, setQuery: setSearchQuery, clearQuery } = usePdfSearch(doc, bookId);
   const bookmarkedPages = React.useMemo(() => new Set(bookmarks.map((bookmark) => bookmark.page)), [bookmarks]);
   const isCurrentPageBookmarked = bookmarkedPages.has(page);
@@ -508,12 +514,14 @@ export function PdfReaderScreen({
   const exportPreview = React.useMemo(() => toPreview(exportContent, 40), [exportContent]);
 
   const goPrev = React.useCallback(() => {
+    registerActivity();
     setPage((prev) => Math.max(1, prev - 1));
-  }, []);
+  }, [registerActivity]);
 
   const goNext = React.useCallback(() => {
+    registerActivity();
     setPage((prev) => Math.min(pageCount, prev + 1));
-  }, [pageCount]);
+  }, [pageCount, registerActivity]);
 
   const zoomIn = React.useCallback(() => {
     setScaleMode('manual');
@@ -539,11 +547,12 @@ export function PdfReaderScreen({
   }, []);
 
   const openSearchPanel = React.useCallback(() => {
+    registerActivity();
     setBookmarksPanelOpen(false);
     setNotesPanelOpen(false);
     setSettingsPanelOpen(false);
     setSearchPanelOpen(true);
-  }, []);
+  }, [registerActivity]);
 
   const openBookmarksPanel = React.useCallback(() => {
     setSearchPanelOpen(false);
@@ -868,8 +877,9 @@ export function PdfReaderScreen({
       saveTimerRef.current = null;
     }
     flushLastPageSave();
+    flushReadingStats();
     onBack();
-  }, [flushLastPageSave, onBack]);
+  }, [flushLastPageSave, flushReadingStats, onBack]);
 
   const openAddNote = React.useCallback(() => {
     setNoteError(null);
@@ -2681,7 +2691,10 @@ export function PdfReaderScreen({
                 <Input
                   ref={searchInputRef}
                   value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  onChange={(event) => {
+                    registerActivity();
+                    setSearchQuery(event.target.value);
+                  }}
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter') {
                       return;

@@ -151,6 +151,7 @@ export default function App() {
       setActiveBook(book);
       setActivePdfData(null);
       setError(null);
+      setCurrentView('library');
       return;
     }
 

@@ -188,6 +188,7 @@ async function deleteBook(db, userId, payload, userDataPath) {
     if (deleteResult.changes === 0) {
         return { ok: false, error: 'Book not found' };
     }
+    db.prepare('DELETE FROM reading_stats WHERE book_id = ?').run(bookId);
     return { ok: true };
 }
 async function getPdfData(db, userId, payload) {

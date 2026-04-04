@@ -28,7 +28,9 @@ exports.IPC_CHANNELS = {
     readerSettingsGet: 'reader-settings:get',
     readerSettingsUpdate: 'reader-settings:update',
     progressGetLastPage: 'progress:get-last-page',
-    progressSetLastPage: 'progress:set-last-page'
+    progressSetLastPage: 'progress:set-last-page',
+    statsMarkOpened: 'stats:mark-opened',
+    statsGetRecentBooks: 'stats:get-recent-books'
 };
 exports.READER_SETTINGS_DEFAULTS = {
     theme: 'light',

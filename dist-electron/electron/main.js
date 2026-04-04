@@ -15,6 +15,7 @@ const export_1 = require("./export");
 const epub_progress_1 = require("./epub-progress");
 const reader_progress_db_1 = require("./reader-progress-db");
 const reader_settings_1 = require("./reader-settings");
+const reading_stats_1 = require("./reading-stats");
 let mainWindow = null;
 function resolveUserIdFromToken(db, token) {
     const safeToken = token.trim();
@@ -106,6 +107,8 @@ electron_1.app.whenReady().then(() => {
     });
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(libraryId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(libraryId, payload.bookId, payload.lastPage));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.statsMarkOpened, (_event, payload) => (0, reading_stats_1.markBookOpened)(db, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.statsGetRecentBooks, () => (0, reading_stats_1.getRecentBooks)(db, libraryId));
     createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {

@@ -18,6 +18,11 @@ declare module 'epubjs' {
 
   type Book = {
     ready: Promise<void>;
+    locations?: {
+      generate?: (chars?: number) => Promise<void>;
+      length?: () => number;
+      percentageFromCfi?: (cfi: string) => number;
+    };
     loaded: {
       navigation: Promise<{ toc?: unknown }>;
     };

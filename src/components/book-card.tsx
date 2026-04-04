@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import type { Book } from '../../shared/ipc';
+import type { BookMetric } from '@/lib/library-metrics';
 
 type Props = {
   book: Book;
@@ -26,6 +27,7 @@ type Props = {
   onReveal: (bookId: string) => void;
   onDelete: (bookId: string) => void;
   loading: boolean;
+  metric?: BookMetric;
 };
 
 const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -34,7 +36,7 @@ const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
   year: 'numeric'
 });
 
-export function BookCard({ book, onOpen, onReveal, onDelete, loading }: Props) {
+export function BookCard({ book, onOpen, onReveal, onDelete, loading, metric }: Props) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
 
   return (
@@ -103,6 +105,18 @@ export function BookCard({ book, onOpen, onReveal, onDelete, loading }: Props) {
             <span className="truncate text-[11px] text-muted-foreground">
               {createdAtFormatter.format(book.createdAt)}
             </span>
+          </div>
+          <div className="space-y-1 rounded-md bg-muted/40 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">{metric?.pageCountLabel ?? 'Loading pages...'}</p>
+            <div className="space-y-1">
+              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${Math.max(0, Math.min(100, metric?.progressPercent ?? 0))}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">{metric?.progressLabel ?? 'Loading progress...'}</p>
+            </div>
           </div>
         </CardContent>
       </button>

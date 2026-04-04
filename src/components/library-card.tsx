@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Book } from '../../shared/ipc';
 import { BookCard } from '@/components/book-card';
+import { useLibraryBookMetrics, useRecentBooks } from '@/lib/library-metrics';
 
 type Props = {
   books: Book[];
@@ -34,6 +35,26 @@ export function LibraryCard({
   onAddSample,
   onReload
 }: Props) {
+  const metrics = useLibraryBookMetrics(books);
+  const { recentBooks } = useRecentBooks();
+  const recentOrder = new Map(recentBooks.map((entry, index) => [entry.bookId, index]));
+  const displayedBooks = [...books].sort((left, right) => {
+    const leftRecentIndex = recentOrder.get(left.id);
+    const rightRecentIndex = recentOrder.get(right.id);
+
+    if (leftRecentIndex !== undefined && rightRecentIndex !== undefined) {
+      return leftRecentIndex - rightRecentIndex;
+    }
+    if (leftRecentIndex !== undefined) {
+      return -1;
+    }
+    if (rightRecentIndex !== undefined) {
+      return 1;
+    }
+
+    return right.createdAt - left.createdAt;
+  });
+
   return (
     <Card className="mx-auto w-full max-w-6xl">
       <CardContent className="space-y-6 p-6">
@@ -70,7 +91,7 @@ export function LibraryCard({
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {books.map((book) => (
+            {displayedBooks.map((book) => (
               <li key={book.id} className="h-full">
                 <BookCard
                   book={book}
@@ -78,6 +99,7 @@ export function LibraryCard({
                   onReveal={onReveal}
                   onDelete={onDelete}
                   loading={loading}
+                  metric={metrics[book.id]}
                 />
               </li>
             ))}

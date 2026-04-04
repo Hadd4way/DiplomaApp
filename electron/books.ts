@@ -257,6 +257,8 @@ export async function deleteBook(
     return { ok: false, error: 'Book not found' };
   }
 
+  db.prepare('DELETE FROM reading_stats WHERE book_id = ?').run(bookId);
+
   return { ok: true };
 }
 
