@@ -3,11 +3,16 @@ declare module 'epubjs' {
     display: (target?: string) => Promise<void>;
     prev: () => Promise<void>;
     next: () => Promise<void>;
+    views?: {
+      forEach?: (cb: (view: { document?: Document }) => void) => void;
+    };
     destroy?: () => void;
     on?: (event: string, cb: (payload: any) => void) => void;
     off?: (event: string, cb: (payload: any) => void) => void;
     themes?: {
       fontSize?: (value: string) => void;
+      default?: (rules: Record<string, Record<string, string>>) => void;
+      select?: (name: string) => void;
     };
   };
 

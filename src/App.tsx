@@ -16,6 +16,8 @@ import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { getReaderThemePalette } from '@/lib/reader-theme';
 
 function getRendererApi() {
   if (!window.api) {
@@ -26,6 +28,8 @@ function getRendererApi() {
 }
 
 export default function App() {
+  const { settings } = useReaderSettings();
+  const palette = getReaderThemePalette(settings.theme);
   const [loading, setLoading] = React.useState(false);
   const [booting, setBooting] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -221,9 +225,15 @@ export default function App() {
 
   if (booting) {
     return (
-      <main className="h-full overflow-auto bg-background px-4 py-10 text-foreground">
+      <main
+        className="h-full overflow-auto px-4 py-10"
+        style={{
+          backgroundColor: palette.appBg,
+          color: palette.appForeground
+        }}
+      >
         <div className="mx-auto w-full max-w-md">
-          <p className="text-sm text-muted-foreground">Loading library...</p>
+          <p className="text-sm" style={{ color: palette.mutedText }}>Loading library...</p>
         </div>
       </main>
     );

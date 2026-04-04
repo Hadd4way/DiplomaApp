@@ -14,7 +14,21 @@ const bookmarks_1 = require("./bookmarks");
 const export_1 = require("./export");
 const epub_progress_1 = require("./epub-progress");
 const reader_progress_db_1 = require("./reader-progress-db");
+const reader_settings_1 = require("./reader-settings");
 let mainWindow = null;
+function resolveUserIdFromToken(db, token) {
+    const safeToken = token.trim();
+    if (!safeToken) {
+        return db_1.LOCAL_DB_ID;
+    }
+    const sessionRow = db
+        .prepare(`SELECT user_id
+       FROM sessions
+       WHERE token = ?
+       LIMIT 1`)
+        .get(safeToken);
+    return sessionRow?.user_id ?? db_1.LOCAL_DB_ID;
+}
 function createWindow() {
     mainWindow = new electron_1.BrowserWindow({
         width: 1200,
@@ -41,7 +55,7 @@ electron_1.app.whenReady().then(() => {
     const userDataPath = electron_1.app.getPath('userData');
     const db = (0, db_1.getDatabase)(userDataPath);
     const progressDb = (0, reader_progress_db_1.getReaderProgressDb)(userDataPath);
-    const libraryId = 'local-user';
+    const libraryId = db_1.LOCAL_DB_ID;
     progressDb.migrateLegacyUserData(libraryId);
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.ping, () => ({
         ok: true,
@@ -74,6 +88,22 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportSaveFile, async (_event, payload) => (0, export_1.saveExportFile)(payload, mainWindow));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressGet, (_event, payload) => (0, epub_progress_1.getEpubProgress)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressSet, (_event, payload) => (0, epub_progress_1.setEpubProgress)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.readerSettingsGet, (_event, payload) => {
+        try {
+            const userId = resolveUserIdFromToken(db, payload.token ?? '');
+            return { ok: true, settings: (0, reader_settings_1.getReaderSettings)(db, userId) };
+        }
+        catch (error) {
+            return {
+                ok: false,
+                error: error instanceof Error ? error.message : 'Failed to load reader settings.'
+            };
+        }
+    });
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.readerSettingsUpdate, (_event, payload) => {
+        const userId = resolveUserIdFromToken(db, payload.token ?? '');
+        return (0, reader_settings_1.updateReaderSettings)(db, userId, payload.patch ?? {});
+    });
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(libraryId, payload.bookId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(libraryId, payload.bookId, payload.lastPage));
     createWindow();

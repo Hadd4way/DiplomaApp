@@ -3,7 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 let dbInstance: Database.Database | null = null;
-const LOCAL_DB_ID = 'local-user';
+export const LOCAL_DB_ID = 'local-user';
 
 function runMigrations(db: Database.Database) {
   db.pragma('journal_mode = WAL');
@@ -33,6 +33,14 @@ function runMigrations(db: Database.Database) {
       format TEXT NOT NULL CHECK(format IN ('pdf', 'epub')),
       file_path TEXT NULL,
       created_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reader_settings (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      theme TEXT NOT NULL,
+      epub_font_size INTEGER NOT NULL,
+      epub_line_height REAL NOT NULL,
+      updated_at INTEGER NOT NULL
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);

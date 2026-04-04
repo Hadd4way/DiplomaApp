@@ -22,10 +22,12 @@ import {
   type HighlightsDeleteRequest,
   type HighlightsInsertRawRequest,
   type HighlightsListRequest,
+  type ReaderSettingsGetRequest,
+  type ReaderSettingsUpdateRequest,
   type ProgressGetLastPageRequest,
   type ProgressSetLastPageRequest
 } from '../shared/ipc';
-import { getDatabase } from './db';
+import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights } from './highlights';
@@ -33,8 +35,27 @@ import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
 import { getBookExportData, saveExportFile } from './export';
 import { getEpubProgress, setEpubProgress } from './epub-progress';
 import { getReaderProgressDb } from './reader-progress-db';
+import { getReaderSettings, updateReaderSettings } from './reader-settings';
 
 let mainWindow: BrowserWindow | null = null;
+
+function resolveUserIdFromToken(db: ReturnType<typeof getDatabase>, token: string): string {
+  const safeToken = token.trim();
+  if (!safeToken) {
+    return LOCAL_DB_ID;
+  }
+
+  const sessionRow = db
+    .prepare(
+      `SELECT user_id
+       FROM sessions
+       WHERE token = ?
+       LIMIT 1`
+    )
+    .get(safeToken) as { user_id: string } | undefined;
+
+  return sessionRow?.user_id ?? LOCAL_DB_ID;
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -65,7 +86,7 @@ app.whenReady().then(() => {
   const userDataPath = app.getPath('userData');
   const db = getDatabase(userDataPath);
   const progressDb = getReaderProgressDb(userDataPath);
-  const libraryId = 'local-user';
+  const libraryId = LOCAL_DB_ID;
   progressDb.migrateLegacyUserData(libraryId);
 
   ipcMain.handle(IPC_CHANNELS.ping, (): PingResponse => ({
@@ -138,6 +159,21 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.epubProgressSet, (_event, payload: EpubProgressSetRequest) =>
     setEpubProgress(db, progressDb, libraryId, payload)
   );
+  ipcMain.handle(IPC_CHANNELS.readerSettingsGet, (_event, payload: ReaderSettingsGetRequest) => {
+    try {
+      const userId = resolveUserIdFromToken(db, payload.token ?? '');
+      return { ok: true, settings: getReaderSettings(db, userId) };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to load reader settings.'
+      };
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.readerSettingsUpdate, (_event, payload: ReaderSettingsUpdateRequest) => {
+    const userId = resolveUserIdFromToken(db, payload.token ?? '');
+    return updateReaderSettings(db, userId, payload.patch ?? {});
+  });
   ipcMain.handle(IPC_CHANNELS.progressGetLastPage, (_event, payload: ProgressGetLastPageRequest) =>
     progressDb.getLastPage(libraryId, payload.bookId)
   );

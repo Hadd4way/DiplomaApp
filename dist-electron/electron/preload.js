@@ -38,6 +38,10 @@ const api = {
         get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubProgressGet, payload),
         set: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubProgressSet, payload)
     },
+    readerSettings: {
+        get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.readerSettingsGet, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.readerSettingsUpdate, payload)
+    },
     getLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, payload),
     setLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, payload)
 };

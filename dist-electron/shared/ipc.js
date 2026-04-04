@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IPC_CHANNELS = void 0;
+exports.READER_SETTINGS_DEFAULTS = exports.IPC_CHANNELS = void 0;
 exports.IPC_CHANNELS = {
     ping: 'app:ping',
     booksList: 'books:list',
@@ -25,6 +25,13 @@ exports.IPC_CHANNELS = {
     exportSaveFile: 'export:save-file',
     epubProgressGet: 'epub-progress:get',
     epubProgressSet: 'epub-progress:set',
+    readerSettingsGet: 'reader-settings:get',
+    readerSettingsUpdate: 'reader-settings:update',
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page'
+};
+exports.READER_SETTINGS_DEFAULTS = {
+    theme: 'light',
+    epubFontSize: 100,
+    epubLineHeight: 1.6
 };

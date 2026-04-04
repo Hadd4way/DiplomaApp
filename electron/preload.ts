@@ -37,6 +37,10 @@ const api: RendererApi = {
     get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressGet, payload),
     set: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressSet, payload)
   },
+  readerSettings: {
+    get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.readerSettingsGet, payload),
+    update: (payload) => ipcRenderer.invoke(IPC_CHANNELS.readerSettingsUpdate, payload)
+  },
   getLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, payload),
   setLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, payload)
 };

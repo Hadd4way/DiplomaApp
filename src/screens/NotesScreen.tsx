@@ -163,7 +163,7 @@ export function NotesScreen({ books, onOpenNote }: Props) {
         <select
           value={selectedBookId}
           onChange={(event) => setSelectedBookId(event.target.value)}
-          className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <option value="all">All books</option>
           {books.map((book) => (
@@ -189,12 +189,12 @@ export function NotesScreen({ books, onOpenNote }: Props) {
             key={note.id}
             type="button"
             onClick={() => onOpenNote(note)}
-            className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="w-full rounded-lg border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{titleByBookId.get(note.bookId) ?? 'Unknown book'}</p>
-                <p className="text-xs text-slate-600">Page {note.page}</p>
+                <p className="text-sm font-semibold">{titleByBookId.get(note.bookId) ?? 'Unknown book'}</p>
+                <p className="text-xs text-muted-foreground">Page {note.page}</p>
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -221,8 +221,8 @@ export function NotesScreen({ books, onOpenNote }: Props) {
                 </Button>
               </div>
             </div>
-            <p className="mt-2 line-clamp-2 text-sm text-slate-700">{note.content}</p>
-            <p className="mt-2 text-xs text-slate-500">Updated {formatDate(note.updatedAt)}</p>
+            <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{note.content}</p>
+            <p className="mt-2 text-xs text-muted-foreground">Updated {formatDate(note.updatedAt)}</p>
           </button>
         ))}
       </div>

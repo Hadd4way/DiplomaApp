@@ -22,6 +22,8 @@ export const IPC_CHANNELS = {
   exportSaveFile: 'export:save-file',
   epubProgressGet: 'epub-progress:get',
   epubProgressSet: 'epub-progress:set',
+  readerSettingsGet: 'reader-settings:get',
+  readerSettingsUpdate: 'reader-settings:update',
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page'
 } as const;
@@ -80,6 +82,26 @@ export type Bookmark = {
   createdAt: number;
 };
 
+export type ReaderTheme = 'light' | 'sepia' | 'dark';
+
+export type ReaderSettings = {
+  theme: ReaderTheme;
+  epubFontSize: number;
+  epubLineHeight: number;
+};
+
+export const READER_SETTINGS_DEFAULTS: ReaderSettings = {
+  theme: 'light',
+  epubFontSize: 100,
+  epubLineHeight: 1.6
+};
+
+export type ReaderSettingsPatch = {
+  theme?: ReaderTheme;
+  epubFontSize?: number;
+  epubLineHeight?: number;
+};
+
 export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
@@ -115,6 +137,8 @@ export type ExportSaveFileResult =
   | ErrorResult;
 export type EpubProgressGetResult = { ok: true; cfi: string | null } | ErrorResult;
 export type EpubProgressSetResult = { ok: true } | ErrorResult;
+export type ReaderSettingsGetResult = { ok: true; settings: ReaderSettings } | ErrorResult;
+export type ReaderSettingsUpdateResult = { ok: true; settings: ReaderSettings } | ErrorResult;
 
 export type BooksRevealRequest = {
   bookId: string;
@@ -208,6 +232,15 @@ export type EpubProgressSetRequest = {
   cfi: string;
 };
 
+export type ReaderSettingsGetRequest = {
+  token: string;
+};
+
+export type ReaderSettingsUpdateRequest = {
+  token: string;
+  patch: ReaderSettingsPatch;
+};
+
 export type ProgressGetLastPageRequest = {
   bookId: string;
 };
@@ -257,6 +290,11 @@ export interface RendererEpubProgressApi {
   set: (payload: EpubProgressSetRequest) => Promise<EpubProgressSetResult>;
 }
 
+export interface RendererReaderSettingsApi {
+  get: (payload: ReaderSettingsGetRequest) => Promise<ReaderSettingsGetResult>;
+  update: (payload: ReaderSettingsUpdateRequest) => Promise<ReaderSettingsUpdateResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   books: RendererBooksApi;
@@ -265,6 +303,7 @@ export interface RendererApi {
   bookmarks: RendererBookmarksApi;
   export: RendererExportApi;
   epubProgress: RendererEpubProgressApi;
+  readerSettings: RendererReaderSettingsApi;
   getLastPage: (payload: ProgressGetLastPageRequest) => Promise<number | null>;
   setLastPage: (payload: ProgressSetLastPageRequest) => Promise<void>;
 }
