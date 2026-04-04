@@ -3,16 +3,10 @@ import { IPC_CHANNELS, type RendererApi } from '../shared/ipc';
 
 const api: RendererApi = {
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.ping),
-  auth: {
-    signUp: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authSignUp, payload),
-    signIn: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authSignIn, payload),
-    getCurrentUser: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authGetCurrentUser, payload),
-    signOut: (payload) => ipcRenderer.invoke(IPC_CHANNELS.authSignOut, payload)
-  },
   books: {
-    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksList, payload),
-    addSample: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample, payload),
-    import: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksImport, payload),
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.booksList),
+    addSample: () => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample),
+    import: () => ipcRenderer.invoke(IPC_CHANNELS.booksImport),
     reveal: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksReveal, payload),
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
     getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload),
@@ -43,9 +37,8 @@ const api: RendererApi = {
     get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressGet, payload),
     set: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressSet, payload)
   },
-  getLastPage: (userId, bookId) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, { userId, bookId }),
-  setLastPage: (userId, bookId, lastPage) =>
-    ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, { userId, bookId, lastPage })
+  getLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, payload),
+  setLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, payload)
 };
 
 contextBridge.exposeInMainWorld('api', api);

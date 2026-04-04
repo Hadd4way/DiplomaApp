@@ -1,9 +1,5 @@
 export const IPC_CHANNELS = {
   ping: 'app:ping',
-  authSignUp: 'auth:sign-up',
-  authSignIn: 'auth:sign-in',
-  authGetCurrentUser: 'auth:get-current-user',
-  authSignOut: 'auth:sign-out',
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
@@ -40,18 +36,10 @@ export type PingResponse = {
   };
 };
 
-export type User = {
-  id: string;
-  email: string;
-  displayName: string;
-  createdAt: number;
-};
-
 export type BookFormat = 'pdf' | 'epub';
 
 export type Book = {
   id: string;
-  userId: string;
   title: string;
   author?: string | null;
   format: BookFormat;
@@ -61,7 +49,6 @@ export type Book = {
 
 export type Note = {
   id: string;
-  userId: string;
   bookId: string;
   page: number;
   content: string;
@@ -78,7 +65,6 @@ export type HighlightRect = {
 
 export type Highlight = {
   id: string;
-  userId: string;
   bookId: string;
   page: number;
   rects: HighlightRect[];
@@ -89,34 +75,30 @@ export type Highlight = {
 
 export type Bookmark = {
   id: string;
-  userId: string;
   bookId: string;
   page: number;
   createdAt: number;
 };
 
-export type AuthError = { ok: false; error: string };
-export type AuthResult = { ok: true; token: string; user: User } | AuthError;
-export type GetCurrentUserResult = { ok: true; user: User } | AuthError;
-export type SignOutResult = { ok: true } | AuthError;
-export type BooksListResult = { ok: true; books: Book[] } | AuthError;
-export type BooksAddSampleResult = { ok: true; book: Book } | AuthError;
-export type BooksImportResult = { ok: true; book: Book } | AuthError;
-export type BooksRevealResult = { ok: true } | AuthError;
-export type BooksDeleteResult = { ok: true } | AuthError;
-export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | AuthError;
-export type BooksGetEpubDataResult = { ok: true; base64: string; title: string } | AuthError;
-export type NotesCreateResult = { ok: true; note: Note } | AuthError;
-export type NotesListResult = { ok: true; notes: Note[] } | AuthError;
-export type NotesDeleteResult = { ok: true } | AuthError;
-export type NotesUpdateResult = { ok: true; note: Note } | AuthError;
-export type HighlightsListResult = { ok: true; highlights: Highlight[] } | AuthError;
-export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | AuthError;
-export type HighlightsDeleteResult = { ok: true } | AuthError;
-export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | AuthError;
-export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | AuthError;
-export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | AuthError;
-export type BookmarksRemoveResult = { ok: true } | AuthError;
+export type ErrorResult = { ok: false; error: string };
+export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
+export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
+export type BooksImportResult = { ok: true; book: Book } | ErrorResult;
+export type BooksRevealResult = { ok: true } | ErrorResult;
+export type BooksDeleteResult = { ok: true } | ErrorResult;
+export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | ErrorResult;
+export type BooksGetEpubDataResult = { ok: true; base64: string; title: string } | ErrorResult;
+export type NotesCreateResult = { ok: true; note: Note } | ErrorResult;
+export type NotesListResult = { ok: true; notes: Note[] } | ErrorResult;
+export type NotesDeleteResult = { ok: true } | ErrorResult;
+export type NotesUpdateResult = { ok: true; note: Note } | ErrorResult;
+export type HighlightsListResult = { ok: true; highlights: Highlight[] } | ErrorResult;
+export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | ErrorResult;
+export type HighlightsDeleteResult = { ok: true } | ErrorResult;
+export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | ErrorResult;
+export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | ErrorResult;
+export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | ErrorResult;
+export type BookmarksRemoveResult = { ok: true } | ErrorResult;
 export type ExportGetBookDataResult =
   | {
       ok: true;
@@ -126,97 +108,56 @@ export type ExportGetBookDataResult =
         highlights: Highlight[];
       };
     }
-  | AuthError;
+  | ErrorResult;
 export type ExportSaveFileResult =
   | { ok: true; path: string }
   | { ok: false; cancelled: true }
-  | AuthError;
-export type EpubProgressGetResult = { ok: true; cfi: string | null } | AuthError;
-export type EpubProgressSetResult = { ok: true } | AuthError;
-
-export type SignUpRequest = {
-  email: string;
-  password: string;
-  displayName: string;
-};
-
-export type SignInRequest = {
-  email: string;
-  password: string;
-};
-
-export type GetCurrentUserRequest = {
-  token: string;
-};
-
-export type SignOutRequest = {
-  token: string;
-};
-
-export type BooksListRequest = {
-  token: string;
-};
-
-export type BooksAddSampleRequest = {
-  token: string;
-};
-
-export type BooksImportRequest = {
-  token: string;
-};
+  | ErrorResult;
+export type EpubProgressGetResult = { ok: true; cfi: string | null } | ErrorResult;
+export type EpubProgressSetResult = { ok: true } | ErrorResult;
 
 export type BooksRevealRequest = {
-  token: string;
   bookId: string;
 };
 
 export type BooksDeleteRequest = {
-  token: string;
   bookId: string;
 };
 
 export type BooksGetPdfDataRequest = {
-  token: string;
   bookId: string;
 };
 
 export type BooksGetEpubDataRequest = {
-  token: string;
   bookId: string;
 };
 
 export type NotesCreateRequest = {
-  token: string;
   bookId: string;
   page: number;
   content: string;
 };
 
 export type NotesListRequest = {
-  token: string;
   bookId?: string | null;
   q?: string | null;
 };
 
 export type NotesDeleteRequest = {
-  token: string;
   noteId: string;
 };
 
 export type NotesUpdateRequest = {
-  token: string;
   noteId: string;
   content: string;
 };
 
 export type HighlightsListRequest = {
-  token: string;
   bookId: string;
   page: number;
 };
 
 export type HighlightsCreateMergedRequest = {
-  token: string;
   bookId: string;
   page: number;
   rects: HighlightRect[];
@@ -224,12 +165,10 @@ export type HighlightsCreateMergedRequest = {
 };
 
 export type HighlightsDeleteRequest = {
-  token: string;
   highlightId: string;
 };
 
 export type HighlightsInsertRawRequest = {
-  token: string;
   bookId: string;
   page: number;
   rects: HighlightRect[];
@@ -237,24 +176,20 @@ export type HighlightsInsertRawRequest = {
 };
 
 export type BookmarksListRequest = {
-  token: string;
   bookId: string;
 };
 
 export type BookmarksToggleRequest = {
-  token: string;
   bookId: string;
   page: number;
 };
 
 export type BookmarksRemoveRequest = {
-  token: string;
   bookId: string;
   page: number;
 };
 
 export type ExportGetBookDataRequest = {
-  token: string;
   bookId: string;
 };
 
@@ -265,38 +200,27 @@ export type ExportSaveFileRequest = {
 };
 
 export type EpubProgressGetRequest = {
-  token: string;
   bookId: string;
 };
 
 export type EpubProgressSetRequest = {
-  token: string;
   bookId: string;
   cfi: string;
 };
 
 export type ProgressGetLastPageRequest = {
-  userId: string;
   bookId: string;
 };
 
 export type ProgressSetLastPageRequest = {
-  userId: string;
   bookId: string;
   lastPage: number;
 };
 
-export interface RendererAuthApi {
-  signUp: (payload: SignUpRequest) => Promise<AuthResult>;
-  signIn: (payload: SignInRequest) => Promise<AuthResult>;
-  getCurrentUser: (payload: GetCurrentUserRequest) => Promise<GetCurrentUserResult>;
-  signOut: (payload: SignOutRequest) => Promise<SignOutResult>;
-}
-
 export interface RendererBooksApi {
-  list: (payload: BooksListRequest) => Promise<BooksListResult>;
-  addSample: (payload: BooksAddSampleRequest) => Promise<BooksAddSampleResult>;
-  import: (payload: BooksImportRequest) => Promise<BooksImportResult>;
+  list: () => Promise<BooksListResult>;
+  addSample: () => Promise<BooksAddSampleResult>;
+  import: () => Promise<BooksImportResult>;
   reveal: (payload: BooksRevealRequest) => Promise<BooksRevealResult>;
   delete: (payload: BooksDeleteRequest) => Promise<BooksDeleteResult>;
   getPdfData: (payload: BooksGetPdfDataRequest) => Promise<BooksGetPdfDataResult>;
@@ -335,15 +259,14 @@ export interface RendererEpubProgressApi {
 
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
-  auth: RendererAuthApi;
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;
   bookmarks: RendererBookmarksApi;
   export: RendererExportApi;
   epubProgress: RendererEpubProgressApi;
-  getLastPage: (userId: string, bookId: string) => Promise<number | null>;
-  setLastPage: (userId: string, bookId: string, lastPage: number) => Promise<void>;
+  getLastPage: (payload: ProgressGetLastPageRequest) => Promise<number | null>;
+  setLastPage: (payload: ProgressSetLastPageRequest) => Promise<void>;
 }
 
 declare global {

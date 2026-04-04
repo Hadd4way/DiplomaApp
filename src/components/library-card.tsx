@@ -1,11 +1,10 @@
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { Book, User } from '../../shared/ipc';
+import type { Book } from '../../shared/ipc';
 import { BookCard } from '@/components/book-card';
 
 type Props = {
-  user: User;
   books: Book[];
   loading: boolean;
   error: string | null;
@@ -25,7 +24,6 @@ const headerDateFormatter = new Intl.DateTimeFormat('ru-RU', {
 });
 
 export function LibraryCard({
-  user,
   books,
   loading,
   error,
@@ -41,9 +39,7 @@ export function LibraryCard({
       <CardContent className="space-y-6 p-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Hello, {user.displayName || user.email}
-            </h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Library</h1>
             <p className="text-sm text-muted-foreground">{headerDateFormatter.format(new Date())}</p>
           </div>
 

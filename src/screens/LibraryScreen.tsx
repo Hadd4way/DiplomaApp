@@ -1,8 +1,7 @@
 import { LibraryCard } from '@/components/library-card';
-import type { Book, User } from '../../shared/ipc';
+import type { Book } from '../../shared/ipc';
 
 type Props = {
-  user: User;
   books: Book[];
   loading: boolean;
   error: string | null;
@@ -15,7 +14,6 @@ type Props = {
 };
 
 export function LibraryScreen({
-  user,
   books,
   loading,
   error,
@@ -28,7 +26,6 @@ export function LibraryScreen({
 }: Props) {
   return (
     <LibraryCard
-      user={user}
       books={books}
       loading={loading}
       error={error}

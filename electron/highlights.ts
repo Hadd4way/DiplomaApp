@@ -12,7 +12,6 @@ import type {
   HighlightsListRequest,
   HighlightsListResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
 
 const EPSILON = 0.002;
@@ -175,12 +174,9 @@ function anyOverlap(left: HighlightRect[], right: HighlightRect[]): boolean {
 export function listHighlights(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: HighlightsListRequest
 ): HighlightsListResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -189,19 +185,15 @@ export function listHighlights(
   if (!page) {
     return { ok: false, error: 'Invalid page' };
   }
-  return { ok: true, highlights: readerDb.listHighlights(session.userId, bookId, page) };
+  return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
 
 export function createMergedHighlight(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: HighlightsCreateMergedRequest
 ): HighlightsCreateMergedResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -219,12 +211,12 @@ export function createMergedHighlight(
 
   const ownedBook = authDb
     .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as { id: string } | undefined;
+    .get(bookId, userId) as { id: string } | undefined;
   if (!ownedBook) {
     return { ok: false, error: 'Book not found' };
   }
 
-  const existing = readerDb.listHighlights(session.userId, bookId, page);
+  const existing = readerDb.listHighlights(userId, bookId, page);
   const overlapIds: string[] = [];
   const allRectsToMerge: HighlightRect[] = [...incoming];
   const textParts: Array<string | null | undefined> = [payload.text];
@@ -245,7 +237,7 @@ export function createMergedHighlight(
   const now = Date.now();
   const mergedText = mergeHighlightTexts(textParts);
   const created = readerDb.createMergedHighlight(
-    session.userId,
+    userId,
     bookId,
     page,
     finalRects,
@@ -264,19 +256,15 @@ export function createMergedHighlight(
 export function deleteHighlight(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: HighlightsDeleteRequest
 ): HighlightsDeleteResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const highlightId = payload.highlightId?.trim();
   if (!highlightId) {
     return { ok: false, error: 'Highlight not found' };
   }
 
-  const deleted = readerDb.deleteHighlight(session.userId, highlightId);
+  const deleted = readerDb.deleteHighlight(userId, highlightId);
   if (!deleted) {
     return { ok: false, error: 'Highlight not found' };
   }
@@ -287,13 +275,9 @@ export function deleteHighlight(
 export function insertRawHighlight(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: HighlightsInsertRawRequest
 ): HighlightsInsertRawResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -313,14 +297,14 @@ export function insertRawHighlight(
 
   const ownedBook = authDb
     .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as { id: string } | undefined;
+    .get(bookId, userId) as { id: string } | undefined;
   if (!ownedBook) {
     return { ok: false, error: 'Book not found' };
   }
 
   const now = Date.now();
   const created = readerDb.insertHighlight(
-    session.userId,
+    userId,
     bookId,
     page,
     rects,

@@ -9,7 +9,6 @@ import type {
   ExportSaveFileRequest,
   ExportSaveFileResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
 
 type BookRow = {
@@ -25,7 +24,6 @@ type BookRow = {
 function toBook(row: BookRow): Book {
   return {
     id: row.id,
-    userId: row.user_id,
     title: row.title,
     author: row.author,
     format: row.format,
@@ -44,13 +42,9 @@ function sanitizeFilename(value: string): string {
 export function getBookExportData(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: ExportGetBookDataRequest
 ): ExportGetBookDataResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -63,7 +57,7 @@ export function getBookExportData(
        WHERE id = ? AND user_id = ?
        LIMIT 1`
     )
-    .get(bookId, session.userId) as BookRow | undefined;
+    .get(bookId, userId) as BookRow | undefined;
 
   if (!row) {
     return { ok: false, error: 'Book not found' };
@@ -73,8 +67,8 @@ export function getBookExportData(
     ok: true,
     data: {
       book: toBook(row),
-      notes: readerDb.listNotesByBookForExport(session.userId, bookId),
-      highlights: readerDb.listHighlightsByBook(session.userId, bookId)
+      notes: readerDb.listNotesByBookForExport(userId, bookId),
+      highlights: readerDb.listHighlightsByBook(userId, bookId)
     }
   };
 }

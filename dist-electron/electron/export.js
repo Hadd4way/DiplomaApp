@@ -8,11 +8,9 @@ exports.saveExportFile = saveExportFile;
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
 const electron_1 = require("electron");
-const auth_1 = require("./auth");
 function toBook(row) {
     return {
         id: row.id,
-        userId: row.user_id,
         title: row.title,
         author: row.author,
         format: row.format,
@@ -26,11 +24,7 @@ function sanitizeFilename(value) {
     const safe = (trimmed || fallback).replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_').replace(/\s+/g, ' ');
     return safe.slice(0, 120).trim() || fallback;
 }
-function getBookExportData(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function getBookExportData(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
@@ -40,7 +34,7 @@ function getBookExportData(authDb, readerDb, payload) {
        FROM books
        WHERE id = ? AND user_id = ?
        LIMIT 1`)
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!row) {
         return { ok: false, error: 'Book not found' };
     }
@@ -48,8 +42,8 @@ function getBookExportData(authDb, readerDb, payload) {
         ok: true,
         data: {
             book: toBook(row),
-            notes: readerDb.listNotesByBookForExport(session.userId, bookId),
-            highlights: readerDb.listHighlightsByBook(session.userId, bookId)
+            notes: readerDb.listNotesByBookForExport(userId, bookId),
+            highlights: readerDb.listHighlightsByBook(userId, bookId)
         }
     };
 }

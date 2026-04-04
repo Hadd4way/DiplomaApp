@@ -11,7 +11,6 @@ import type {
   NotesUpdateRequest,
   NotesUpdateResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
 
 function isValidPage(page: number): boolean {
@@ -21,13 +20,9 @@ function isValidPage(page: number): boolean {
 export function createNote(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: NotesCreateRequest
 ): NotesCreateResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -44,7 +39,7 @@ export function createNote(
 
   const ownedBook = authDb
     .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as { id: string } | undefined;
+    .get(bookId, userId) as { id: string } | undefined;
 
   if (!ownedBook) {
     return { ok: false, error: 'Book not found' };
@@ -53,7 +48,6 @@ export function createNote(
   const now = Date.now();
   const note: Note = {
     id: randomUUID(),
-    userId: session.userId,
     bookId,
     page: Math.floor(payload.page),
     content,
@@ -61,7 +55,7 @@ export function createNote(
     updatedAt: now
   };
 
-  const created = readerDb.createNote(note);
+  const created = readerDb.createNote(userId, note);
   if (!created) {
     return { ok: false, error: 'Failed to create note.' };
   }
@@ -72,35 +66,27 @@ export function createNote(
 export function listNotes(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: NotesListRequest
 ): NotesListResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   return {
     ok: true,
-    notes: readerDb.listNotes(session.userId, { bookId: payload.bookId ?? null, q: payload.q ?? null })
+    notes: readerDb.listNotes(userId, { bookId: payload.bookId ?? null, q: payload.q ?? null })
   };
 }
 
 export function deleteNote(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: NotesDeleteRequest
 ): NotesDeleteResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const noteId = payload.noteId?.trim();
   if (!noteId) {
     return { ok: false, error: 'Note not found' };
   }
 
-  const deleted = readerDb.deleteNote(session.userId, noteId);
+  const deleted = readerDb.deleteNote(userId, noteId);
   if (!deleted) {
     return { ok: false, error: 'Note not found' };
   }
@@ -111,13 +97,9 @@ export function deleteNote(
 export function updateNote(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: NotesUpdateRequest
 ): NotesUpdateResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const noteId = payload.noteId?.trim();
   if (!noteId) {
     return { ok: false, error: 'Note not found' };
@@ -128,7 +110,7 @@ export function updateNote(
     return { ok: false, error: 'Note content is required.' };
   }
 
-  const updated = readerDb.updateNote(session.userId, noteId, content);
+  const updated = readerDb.updateNote(userId, noteId, content);
   if (!updated) {
     return { ok: false, error: 'Note not found' };
   }

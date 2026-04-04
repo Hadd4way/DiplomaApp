@@ -5,7 +5,6 @@ exports.createMergedHighlight = createMergedHighlight;
 exports.deleteHighlight = deleteHighlight;
 exports.insertRawHighlight = insertRawHighlight;
 const node_crypto_1 = require("node:crypto");
-const auth_1 = require("./auth");
 const EPSILON = 0.002;
 const LINE_EPSILON = 0.01;
 const GAP_EPSILON = 0.005;
@@ -149,11 +148,7 @@ function anyOverlap(left, right) {
     }
     return false;
 }
-function listHighlights(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function listHighlights(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
@@ -162,13 +157,9 @@ function listHighlights(authDb, readerDb, payload) {
     if (!page) {
         return { ok: false, error: 'Invalid page' };
     }
-    return { ok: true, highlights: readerDb.listHighlights(session.userId, bookId, page) };
+    return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
-function createMergedHighlight(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function createMergedHighlight(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
@@ -183,11 +174,11 @@ function createMergedHighlight(authDb, readerDb, payload) {
     }
     const ownedBook = authDb
         .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!ownedBook) {
         return { ok: false, error: 'Book not found' };
     }
-    const existing = readerDb.listHighlights(session.userId, bookId, page);
+    const existing = readerDb.listHighlights(userId, bookId, page);
     const overlapIds = [];
     const allRectsToMerge = [...incoming];
     const textParts = [payload.text];
@@ -204,32 +195,24 @@ function createMergedHighlight(authDb, readerDb, payload) {
     }
     const now = Date.now();
     const mergedText = mergeHighlightTexts(textParts);
-    const created = readerDb.createMergedHighlight(session.userId, bookId, page, finalRects, mergedText, (0, node_crypto_1.randomUUID)(), now, now, overlapIds);
+    const created = readerDb.createMergedHighlight(userId, bookId, page, finalRects, mergedText, (0, node_crypto_1.randomUUID)(), now, now, overlapIds);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }
     return { ok: true, highlight: created };
 }
-function deleteHighlight(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function deleteHighlight(authDb, readerDb, userId, payload) {
     const highlightId = payload.highlightId?.trim();
     if (!highlightId) {
         return { ok: false, error: 'Highlight not found' };
     }
-    const deleted = readerDb.deleteHighlight(session.userId, highlightId);
+    const deleted = readerDb.deleteHighlight(userId, highlightId);
     if (!deleted) {
         return { ok: false, error: 'Highlight not found' };
     }
     return { ok: true };
 }
-function insertRawHighlight(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function insertRawHighlight(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
@@ -246,12 +229,12 @@ function insertRawHighlight(authDb, readerDb, payload) {
     }
     const ownedBook = authDb
         .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!ownedBook) {
         return { ok: false, error: 'Book not found' };
     }
     const now = Date.now();
-    const created = readerDb.insertHighlight(session.userId, bookId, page, rects, normalizeHighlightText(payload.text), (0, node_crypto_1.randomUUID)(), now, now);
+    const created = readerDb.insertHighlight(userId, bookId, page, rects, normalizeHighlightText(payload.text), (0, node_crypto_1.randomUUID)(), now, now);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }

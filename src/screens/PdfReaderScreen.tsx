@@ -31,8 +31,6 @@ GlobalWorkerOptions.workerSrc = workerSrc;
 type Props = {
   title: string;
   base64: string;
-  token: string;
-  userId: string;
   bookId: string;
   initialPage?: number | null;
   onInitialPageApplied?: () => void;
@@ -151,9 +149,9 @@ function hasBookmarksApi(
   api: Window['api']
 ): api is NonNullable<Window['api']> & {
   bookmarks: {
-    list: (payload: { token: string; bookId: string }) => Promise<unknown>;
-    toggle: (payload: { token: string; bookId: string; page: number }) => Promise<unknown>;
-    remove: (payload: { token: string; bookId: string; page: number }) => Promise<unknown>;
+    list: (payload: { bookId: string }) => Promise<unknown>;
+    toggle: (payload: { bookId: string; page: number }) => Promise<unknown>;
+    remove: (payload: { bookId: string; page: number }) => Promise<unknown>;
   };
 } {
   return Boolean(
@@ -169,7 +167,7 @@ function hasExportApi(
   api: Window['api']
 ): api is NonNullable<Window['api']> & {
   export: {
-    getBookData: (payload: { token: string; bookId: string }) => Promise<unknown>;
+    getBookData: (payload: { bookId: string }) => Promise<unknown>;
     saveFile: (payload: { suggestedName: string; ext: 'md' | 'json'; content: string }) => Promise<unknown>;
   };
 } {
@@ -417,8 +415,6 @@ function normalizeOutlineItems(items: unknown): PdfOutlineItem[] {
 export function PdfReaderScreen({
   title,
   base64,
-  token,
-  userId,
   bookId,
   initialPage = null,
   onInitialPageApplied,
@@ -555,7 +551,7 @@ export function PdfReaderScreen({
     setExportMessage(null);
     setExportLoading(true);
     try {
-      const result = await window.api.export.getBookData({ token, bookId });
+      const result = await window.api.export.getBookData({ bookId });
       if (!result.ok) {
         setExportError(result.error);
         setExportData(null);
@@ -569,7 +565,7 @@ export function PdfReaderScreen({
     } finally {
       setExportLoading(false);
     }
-  }, [bookId, token]);
+  }, [bookId]);
 
   const focusReader = React.useCallback(() => {
     readerRootRef.current?.focus();
@@ -840,13 +836,12 @@ export function PdfReaderScreen({
     if (!canSaveRef.current || !window.api) {
       return;
     }
-    const safeUserId = userId.trim();
     const safeBookId = bookId.trim();
-    if (!safeUserId || !safeBookId) {
+    if (!safeBookId) {
       return;
     }
-    void window.api.setLastPage(safeUserId, safeBookId, Math.max(1, latestPageRef.current));
-  }, [bookId, userId]);
+    void window.api.setLastPage({ bookId: safeBookId, lastPage: Math.max(1, latestPageRef.current) });
+  }, [bookId]);
 
   const handleBack = React.useCallback(() => {
     if (saveTimerRef.current) {
@@ -880,7 +875,6 @@ export function PdfReaderScreen({
     setNoteError(null);
     try {
       const result = await window.api.notes.create({
-        token,
         bookId,
         page,
         content
@@ -900,7 +894,7 @@ export function PdfReaderScreen({
     } finally {
       setNoteSaving(false);
     }
-  }, [bookId, noteContent, page, token]);
+  }, [bookId, noteContent, page]);
 
   const loadBookNotes = React.useCallback(async () => {
     if (!window.api) {
@@ -911,7 +905,7 @@ export function PdfReaderScreen({
     setBookNotesLoading(true);
     setBookNotesError(null);
     try {
-      const result = await window.api.notes.list({ token, bookId, q: null });
+      const result = await window.api.notes.list({ bookId, q: null });
       if (!result.ok) {
         setBookNotesError(result.error);
         return;
@@ -923,7 +917,7 @@ export function PdfReaderScreen({
     } finally {
       setBookNotesLoading(false);
     }
-  }, [bookId, token]);
+  }, [bookId]);
 
   const loadBookmarks = React.useCallback(async () => {
     if (!hasBookmarksApi(window.api)) {
@@ -935,7 +929,7 @@ export function PdfReaderScreen({
     setBookmarksLoading(true);
     setBookmarksError(null);
     try {
-      const result = await window.api.bookmarks.list({ token, bookId });
+      const result = await window.api.bookmarks.list({ bookId });
       if (!result.ok) {
         setBookmarksError(result.error);
         setBookmarks([]);
@@ -949,7 +943,7 @@ export function PdfReaderScreen({
     } finally {
       setBookmarksLoading(false);
     }
-  }, [bookId, token]);
+  }, [bookId]);
 
   const toggleBookmarkForPage = React.useCallback(
     async (targetPage: number) => {
@@ -958,7 +952,7 @@ export function PdfReaderScreen({
         return;
       }
       try {
-        const result = await window.api.bookmarks.toggle({ token, bookId, page: targetPage });
+        const result = await window.api.bookmarks.toggle({ bookId, page: targetPage });
         if (!result.ok) {
           setBookmarksError(result.error);
           return;
@@ -969,7 +963,7 @@ export function PdfReaderScreen({
         setBookmarksError(message);
       }
     },
-    [bookId, loadBookmarks, token]
+    [bookId, loadBookmarks]
   );
 
   const removeBookmarkByPage = React.useCallback(
@@ -979,7 +973,7 @@ export function PdfReaderScreen({
         return;
       }
       try {
-        const result = await window.api.bookmarks.remove({ token, bookId, page: targetPage });
+        const result = await window.api.bookmarks.remove({ bookId, page: targetPage });
         if (!result.ok) {
           setBookmarksError(result.error);
           return;
@@ -990,7 +984,7 @@ export function PdfReaderScreen({
         setBookmarksError(message);
       }
     },
-    [bookId, loadBookmarks, token]
+    [bookId, loadBookmarks]
   );
 
   const copyExportContent = React.useCallback(async () => {
@@ -1055,7 +1049,7 @@ export function PdfReaderScreen({
       return;
     }
     try {
-      const result = await window.api.highlights.list({ token, bookId, page });
+      const result = await window.api.highlights.list({ bookId, page });
       if (!result.ok) {
         setPageHighlights([]);
         return;
@@ -1064,7 +1058,7 @@ export function PdfReaderScreen({
     } catch {
       setPageHighlights([]);
     }
-  }, [bookId, page, token]);
+  }, [bookId, page]);
 
   const createHighlightFromSelection = React.useCallback(async () => {
     if (!window.api) {
@@ -1126,14 +1120,14 @@ export function PdfReaderScreen({
     }
 
     try {
-      const result = await window.api.highlights.createMerged({ token, bookId, page, rects, text: selectedText });
+      const result = await window.api.highlights.createMerged({ bookId, page, rects, text: selectedText });
       if (result.ok) {
         await loadPageHighlights();
       }
     } finally {
       selection.removeAllRanges();
     }
-  }, [bookId, loadPageHighlights, page, token]);
+  }, [bookId, loadPageHighlights, page]);
 
   const finalizeHighlightDelete = React.useCallback(
     async (highlight: Highlight) => {
@@ -1145,7 +1139,7 @@ export function PdfReaderScreen({
         return;
       }
       try {
-        const result = await window.api.highlights.delete({ token, highlightId: safeId });
+        const result = await window.api.highlights.delete({ highlightId: safeId });
         if (!result.ok && highlight.bookId === bookId && highlight.page === page) {
           await loadPageHighlights();
         }
@@ -1155,7 +1149,7 @@ export function PdfReaderScreen({
         }
       }
     },
-    [bookId, loadPageHighlights, page, token]
+    [bookId, loadPageHighlights, page]
   );
 
   const queueHighlightDeletion = React.useCallback(
@@ -1208,7 +1202,6 @@ export function PdfReaderScreen({
 
       try {
         const result = await window.api.highlights.insertRaw({
-          token,
           bookId: pending.highlight.bookId,
           page: pending.highlight.page,
           rects: pending.highlight.rects,
@@ -1220,7 +1213,7 @@ export function PdfReaderScreen({
       } catch {
       }
     },
-    [bookId, loadPageHighlights, page, pendingHighlightDeletions, token]
+    [bookId, loadPageHighlights, page, pendingHighlightDeletions]
   );
 
   const openHighlightContextMenu = React.useCallback(
@@ -1388,15 +1381,14 @@ export function PdfReaderScreen({
         return;
       }
 
-      const safeUserId = userId.trim();
       const safeBookId = bookId.trim();
-      if (!safeUserId || !safeBookId) {
+      if (!safeBookId) {
         setProgressLoaded(true);
         return;
       }
 
       try {
-        const savedLastPage = await window.api.getLastPage(safeUserId, safeBookId);
+        const savedLastPage = await window.api.getLastPage({ bookId: safeBookId });
         if (!canceled) {
           setPendingRestorePage(savedLastPage);
         }
@@ -1415,7 +1407,7 @@ export function PdfReaderScreen({
     return () => {
       canceled = true;
     };
-  }, [bookId, userId]);
+  }, [bookId]);
 
   const tryJumpToPage = React.useCallback(
     (rawValue: string): boolean => {
@@ -1738,14 +1730,13 @@ export function PdfReaderScreen({
       clearTimeout(saveTimerRef.current);
     }
 
-    const safeUserId = userId.trim();
     const safeBookId = bookId.trim();
-    if (!safeUserId || !safeBookId) {
+    if (!safeBookId) {
       return;
     }
 
     saveTimerRef.current = setTimeout(() => {
-      void window.api?.setLastPage(safeUserId, safeBookId, Math.max(1, page));
+      void window.api?.setLastPage({ bookId: safeBookId, lastPage: Math.max(1, page) });
       saveTimerRef.current = null;
     }, 400);
 
@@ -1755,7 +1746,7 @@ export function PdfReaderScreen({
         saveTimerRef.current = null;
       }
     };
-  }, [bookId, page, restoreApplied, userId]);
+  }, [bookId, page, restoreApplied]);
 
   React.useEffect(() => {
     return () => {

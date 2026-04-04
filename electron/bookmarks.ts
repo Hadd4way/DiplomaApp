@@ -8,7 +8,6 @@ import type {
   BookmarksToggleRequest,
   BookmarksToggleResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
 
 function normalizePage(page: number): number | null {
@@ -29,33 +28,25 @@ function hasOwnedBook(authDb: Database.Database, userId: string, bookId: string)
 export function listBookmarks(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: BookmarksListRequest
 ): BookmarksListResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
-  if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+  if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
     return { ok: false, error: 'Book not found' };
   }
 
-  return { ok: true, bookmarks: readerDb.listBookmarks(session.userId, bookId) };
+  return { ok: true, bookmarks: readerDb.listBookmarks(userId, bookId) };
 }
 
 export function toggleBookmark(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: BookmarksToggleRequest
 ): BookmarksToggleResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
-  if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+  if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
     return { ok: false, error: 'Book not found' };
   }
 
@@ -64,7 +55,7 @@ export function toggleBookmark(
     return { ok: false, error: 'Invalid page' };
   }
 
-  const bookmarked = readerDb.toggleBookmark(session.userId, bookId, page, () => randomUUID());
+  const bookmarked = readerDb.toggleBookmark(userId, bookId, page, () => randomUUID());
   if (bookmarked === null) {
     return { ok: false, error: 'Failed to toggle bookmark.' };
   }
@@ -75,15 +66,11 @@ export function toggleBookmark(
 export function removeBookmark(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: BookmarksRemoveRequest
 ): BookmarksRemoveResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
-  if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+  if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
     return { ok: false, error: 'Book not found' };
   }
 
@@ -92,6 +79,6 @@ export function removeBookmark(
     return { ok: false, error: 'Invalid page' };
   }
 
-  readerDb.removeBookmark(session.userId, bookId, page);
+  readerDb.removeBookmark(userId, bookId, page);
   return { ok: true };
 }

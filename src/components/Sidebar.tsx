@@ -1,16 +1,11 @@
 import { BookOpen, Download, FileText, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import type { ComponentType } from 'react';
-import type { User } from '../../shared/ipc';
 
 export type AppView = 'library' | 'import' | 'notes' | 'settings';
 
 type Props = {
   currentView: AppView;
   onViewChange: (view: AppView) => void;
-  user: User;
-  loading: boolean;
-  onSignOut: () => void;
 };
 
 const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
@@ -20,7 +15,7 @@ const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ clas
   { view: 'settings', label: 'Settings', icon: Settings }
 ];
 
-export function Sidebar({ currentView, onViewChange, user, loading, onSignOut }: Props) {
+export function Sidebar({ currentView, onViewChange }: Props) {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r bg-card p-4">
       <div className="mb-6">
@@ -54,13 +49,13 @@ export function Sidebar({ currentView, onViewChange, user, loading, onSignOut }:
       </nav>
 
       <div className="mt-4 space-y-3 border-t pt-4">
-        <div>
-          <p className="truncate text-sm font-medium">{user.displayName || user.email}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-        </div>
-        <Button type="button" variant="outline" className="w-full" onClick={onSignOut} disabled={loading}>
-          Log out
-        </Button>
+        <button
+          type="button"
+          className="w-full rounded-md border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent"
+          onClick={() => onViewChange('settings')}
+        >
+          App settings
+        </button>
       </div>
     </aside>
   );

@@ -5,7 +5,6 @@ import type {
   EpubProgressSetRequest,
   EpubProgressSetResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 import type { ReaderProgressDb } from './reader-progress-db';
 
 function resolveOwnedEpubBookId(authDb: Database.Database, userId: string, rawBookId: string): string | null {
@@ -22,29 +21,23 @@ function resolveOwnedEpubBookId(authDb: Database.Database, userId: string, rawBo
 export function getEpubProgress(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: EpubProgressGetRequest
 ): EpubProgressGetResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-  const bookId = resolveOwnedEpubBookId(authDb, session.userId, payload.bookId);
+  const bookId = resolveOwnedEpubBookId(authDb, userId, payload.bookId);
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
   }
-  return { ok: true, cfi: readerDb.getLastEpubCfi(session.userId, bookId) };
+  return { ok: true, cfi: readerDb.getLastEpubCfi(userId, bookId) };
 }
 
 export function setEpubProgress(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
+  userId: string,
   payload: EpubProgressSetRequest
 ): EpubProgressSetResult {
-  const session = resolveSessionUserId(authDb, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-  const bookId = resolveOwnedEpubBookId(authDb, session.userId, payload.bookId);
+  const bookId = resolveOwnedEpubBookId(authDb, userId, payload.bookId);
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
   }
@@ -52,6 +45,6 @@ export function setEpubProgress(
   if (!cfi) {
     return { ok: false, error: 'Invalid CFI' };
   }
-  readerDb.setLastEpubCfi(session.userId, bookId, cfi);
+  readerDb.setLastEpubCfi(userId, bookId, cfi);
   return { ok: true };
 }

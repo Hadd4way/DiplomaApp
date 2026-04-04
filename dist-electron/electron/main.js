@@ -7,7 +7,6 @@ const electron_1 = require("electron");
 const node_path_1 = __importDefault(require("node:path"));
 const ipc_1 = require("../shared/ipc");
 const db_1 = require("./db");
-const auth_1 = require("./auth");
 const books_1 = require("./books");
 const notes_1 = require("./notes");
 const highlights_1 = require("./highlights");
@@ -42,6 +41,8 @@ electron_1.app.whenReady().then(() => {
     const userDataPath = electron_1.app.getPath('userData');
     const db = (0, db_1.getDatabase)(userDataPath);
     const progressDb = (0, reader_progress_db_1.getReaderProgressDb)(userDataPath);
+    const libraryId = 'local-user';
+    progressDb.migrateLegacyUserData(libraryId);
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.ping, () => ({
         ok: true,
         message: 'pong',
@@ -51,34 +52,30 @@ electron_1.app.whenReady().then(() => {
             chrome: process.versions.chrome
         }
     }));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.authSignUp, (_event, payload) => (0, auth_1.signUp)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.authSignIn, (_event, payload) => (0, auth_1.signIn)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.authGetCurrentUser, (_event, payload) => (0, auth_1.getCurrentUser)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.authSignOut, (_event, payload) => (0, auth_1.signOut)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksList, (_event, payload) => (0, books_1.listBooks)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksAddSample, (_event, payload) => (0, books_1.addSampleBook)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksImport, (_event, payload) => (0, books_1.importBook)(db, payload, userDataPath, mainWindow));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksReveal, (_event, payload) => (0, books_1.revealBook)(db, payload, userDataPath));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksDelete, (_event, payload) => (0, books_1.deleteBook)(db, payload, userDataPath));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetPdfData, (_event, payload) => (0, books_1.getPdfData)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetEpubData, (_event, payload) => (0, books_1.getEpubData)(db, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesCreate, (_event, payload) => (0, notes_1.createNote)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesUpdate, (_event, payload) => (0, notes_1.updateNote)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsList, (_event, payload) => (0, highlights_1.listHighlights)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsCreateMerged, (_event, payload) => (0, highlights_1.createMergedHighlight)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsDelete, (_event, payload) => (0, highlights_1.deleteHighlight)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsInsertRaw, (_event, payload) => (0, highlights_1.insertRawHighlight)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksList, (_event, payload) => (0, bookmarks_1.listBookmarks)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksToggle, (_event, payload) => (0, bookmarks_1.toggleBookmark)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksRemove, (_event, payload) => (0, bookmarks_1.removeBookmark)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportGetBookData, (_event, payload) => (0, export_1.getBookExportData)(db, progressDb, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksList, () => (0, books_1.listBooks)(db, libraryId));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksAddSample, () => (0, books_1.addSampleBook)(db, libraryId));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksImport, () => (0, books_1.importBook)(db, libraryId, userDataPath, mainWindow));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksReveal, (_event, payload) => (0, books_1.revealBook)(db, libraryId, payload, userDataPath));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksDelete, (_event, payload) => (0, books_1.deleteBook)(db, libraryId, payload, userDataPath));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetPdfData, (_event, payload) => (0, books_1.getPdfData)(db, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetEpubData, (_event, payload) => (0, books_1.getEpubData)(db, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesCreate, (_event, payload) => (0, notes_1.createNote)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesUpdate, (_event, payload) => (0, notes_1.updateNote)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsList, (_event, payload) => (0, highlights_1.listHighlights)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsCreateMerged, (_event, payload) => (0, highlights_1.createMergedHighlight)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsDelete, (_event, payload) => (0, highlights_1.deleteHighlight)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsInsertRaw, (_event, payload) => (0, highlights_1.insertRawHighlight)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksList, (_event, payload) => (0, bookmarks_1.listBookmarks)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksToggle, (_event, payload) => (0, bookmarks_1.toggleBookmark)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksRemove, (_event, payload) => (0, bookmarks_1.removeBookmark)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportGetBookData, (_event, payload) => (0, export_1.getBookExportData)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.exportSaveFile, async (_event, payload) => (0, export_1.saveExportFile)(payload, mainWindow));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressGet, (_event, payload) => (0, epub_progress_1.getEpubProgress)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressSet, (_event, payload) => (0, epub_progress_1.setEpubProgress)(db, progressDb, payload));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(payload.userId, payload.bookId));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(payload.userId, payload.bookId, payload.lastPage));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressGet, (_event, payload) => (0, epub_progress_1.getEpubProgress)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.epubProgressSet, (_event, payload) => (0, epub_progress_1.setEpubProgress)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressGetLastPage, (_event, payload) => progressDb.getLastPage(libraryId, payload.bookId));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(libraryId, payload.bookId, payload.lastPage));
     createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {

@@ -6,7 +6,6 @@ import type Database from 'better-sqlite3';
 import type {
   Book,
   BookFormat,
-  BooksAddSampleRequest,
   BooksAddSampleResult,
   BooksDeleteRequest,
   BooksDeleteResult,
@@ -14,14 +13,11 @@ import type {
   BooksGetEpubDataResult,
   BooksGetPdfDataRequest,
   BooksGetPdfDataResult,
-  BooksImportRequest,
   BooksImportResult,
   BooksRevealRequest,
   BooksRevealResult,
-  BooksListRequest,
   BooksListResult
 } from '../shared/ipc';
-import { resolveSessionUserId } from './auth';
 
 type BookRow = {
   id: string;
@@ -36,7 +32,6 @@ type BookRow = {
 function toBook(row: BookRow): Book {
   return {
     id: row.id,
-    userId: row.user_id,
     title: row.title,
     author: row.author,
     format: row.format,
@@ -65,12 +60,7 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-export function listBooks(db: Database.Database, payload: BooksListRequest): BooksListResult {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
+export function listBooks(db: Database.Database, userId: string): BooksListResult {
   const rows = db
     .prepare(
       `SELECT id, user_id, title, author, format, file_path, created_at
@@ -78,7 +68,7 @@ export function listBooks(db: Database.Database, payload: BooksListRequest): Boo
        WHERE user_id = ?
        ORDER BY created_at DESC`
     )
-    .all(session.userId) as BookRow[];
+    .all(userId) as BookRow[];
 
   return {
     ok: true,
@@ -88,23 +78,17 @@ export function listBooks(db: Database.Database, payload: BooksListRequest): Boo
 
 export function addSampleBook(
   db: Database.Database,
-  payload: BooksAddSampleRequest
+  userId: string
 ): BooksAddSampleResult {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const sampleCountRow = db
     .prepare('SELECT COUNT(*) AS count FROM books WHERE user_id = ?')
-    .get(session.userId) as { count: number };
+    .get(userId) as { count: number };
 
   const sampleNumber = sampleCountRow.count + 1;
   const format: BookFormat = sampleNumber % 2 === 1 ? 'pdf' : 'epub';
   const now = Date.now();
   const book: Book = {
     id: randomUUID(),
-    userId: session.userId,
     title: `Sample Book ${sampleNumber}`,
     author: null,
     format,
@@ -115,22 +99,17 @@ export function addSampleBook(
   db.prepare(
     `INSERT INTO books (id, user_id, title, author, format, file_path, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(book.id, book.userId, book.title, book.author, book.format, book.filePath, book.createdAt);
+  ).run(book.id, userId, book.title, book.author, book.format, book.filePath, book.createdAt);
 
   return { ok: true, book };
 }
 
 export async function importBook(
   db: Database.Database,
-  payload: BooksImportRequest,
+  userId: string,
   userDataPath: string,
   ownerWindow: BrowserWindow | null
 ): Promise<BooksImportResult> {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const dialogOptions: OpenDialogOptions = {
     title: 'Import book',
     properties: ['openFile'],
@@ -173,7 +152,6 @@ export async function importBook(
 
   const book: Book = {
     id: bookId,
-    userId: session.userId,
     title: titleFromFile || `Imported ${format.toUpperCase()}`,
     author: null,
     format,
@@ -185,7 +163,7 @@ export async function importBook(
     db.prepare(
       `INSERT INTO books (id, user_id, title, author, format, file_path, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(book.id, book.userId, book.title, book.author, book.format, book.filePath, book.createdAt);
+    ).run(book.id, userId, book.title, book.author, book.format, book.filePath, book.createdAt);
   } catch {
     return { ok: false, error: 'Failed to save imported book metadata.' };
   }
@@ -195,14 +173,10 @@ export async function importBook(
 
 export async function revealBook(
   db: Database.Database,
+  userId: string,
   payload: BooksRevealRequest,
   userDataPath: string
 ): Promise<BooksRevealResult> {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -210,7 +184,7 @@ export async function revealBook(
 
   const bookRow = db
     .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as { id: string; file_path: string | null } | undefined;
+    .get(bookId, userId) as { id: string; file_path: string | null } | undefined;
 
   if (!bookRow) {
     return { ok: false, error: 'Book not found' };
@@ -238,14 +212,10 @@ export async function revealBook(
 
 export async function deleteBook(
   db: Database.Database,
+  userId: string,
   payload: BooksDeleteRequest,
   userDataPath: string
 ): Promise<BooksDeleteResult> {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -253,7 +223,7 @@ export async function deleteBook(
 
   const bookRow = db
     .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as { id: string; file_path: string | null } | undefined;
+    .get(bookId, userId) as { id: string; file_path: string | null } | undefined;
 
   if (!bookRow) {
     return { ok: false, error: 'Book not found' };
@@ -281,7 +251,7 @@ export async function deleteBook(
 
   const deleteResult = db
     .prepare('DELETE FROM books WHERE id = ? AND user_id = ?')
-    .run(bookId, session.userId);
+    .run(bookId, userId);
 
   if (deleteResult.changes === 0) {
     return { ok: false, error: 'Book not found' };
@@ -292,13 +262,9 @@ export async function deleteBook(
 
 export async function getPdfData(
   db: Database.Database,
+  userId: string,
   payload: BooksGetPdfDataRequest
 ): Promise<BooksGetPdfDataResult> {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -306,7 +272,7 @@ export async function getPdfData(
 
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as
+    .get(bookId, userId) as
     | { id: string; title: string; format: 'pdf' | 'epub'; file_path: string | null }
     | undefined;
 
@@ -337,13 +303,9 @@ export async function getPdfData(
 
 export async function getEpubData(
   db: Database.Database,
+  userId: string,
   payload: BooksGetEpubDataRequest
 ): Promise<BooksGetEpubDataResult> {
-  const session = resolveSessionUserId(db, payload.token);
-  if (!session.ok) {
-    return session;
-  }
-
   const bookId = payload.bookId?.trim();
   if (!bookId) {
     return { ok: false, error: 'Book not found' };
@@ -351,7 +313,7 @@ export async function getEpubData(
 
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-    .get(bookId, session.userId) as
+    .get(bookId, userId) as
     | { id: string; title: string; format: 'pdf' | 'epub'; file_path: string | null }
     | undefined;
 

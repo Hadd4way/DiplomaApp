@@ -15,7 +15,6 @@ import {
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 
 type Props = {
-  token: string;
   books: Book[];
   onOpenNote: (note: Note) => void;
 };
@@ -28,7 +27,7 @@ function formatDate(timestamp: number): string {
   }
 }
 
-export function NotesScreen({ token, books, onOpenNote }: Props) {
+export function NotesScreen({ books, onOpenNote }: Props) {
   const [notes, setNotes] = React.useState<Note[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -69,7 +68,6 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     setError(null);
     try {
       const result = await window.api.notes.list({
-        token,
         bookId: selectedBookId === 'all' ? null : selectedBookId,
         q: query.length > 0 ? query : null
       });
@@ -84,7 +82,7 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [query, selectedBookId, token]);
+  }, [query, selectedBookId]);
 
   React.useEffect(() => {
     void loadNotes();
@@ -98,7 +96,7 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     setDeleteLoading(true);
     setError(null);
     try {
-      const result = await window.api.notes.delete({ token, noteId: deleteTarget.id });
+      const result = await window.api.notes.delete({ noteId: deleteTarget.id });
       if (!result.ok) {
         setError(result.error);
         return;
@@ -133,7 +131,7 @@ export function NotesScreen({ token, books, onOpenNote }: Props) {
     setEditLoading(true);
     setEditError(null);
     try {
-      const result = await window.api.notes.update({ token, noteId: editTarget.id, content });
+      const result = await window.api.notes.update({ noteId: editTarget.id, content });
       if (!result.ok) {
         setEditError(result.error);
         return;

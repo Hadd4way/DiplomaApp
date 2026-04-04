@@ -3,6 +3,7 @@ import path from 'node:path';
 import Database from 'better-sqlite3';
 
 let dbInstance: Database.Database | null = null;
+const LOCAL_DB_ID = 'local-user';
 
 function runMigrations(db: Database.Database) {
   db.pragma('journal_mode = WAL');
@@ -40,6 +41,36 @@ function runMigrations(db: Database.Database) {
   `);
 }
 
+function ensureLocalLibraryIdentity(db: Database.Database) {
+  const existing = db.prepare('SELECT id FROM users WHERE id = ? LIMIT 1').get(LOCAL_DB_ID) as { id: string } | undefined;
+  if (!existing) {
+    db.prepare(
+      `INSERT INTO users (id, email, password_hash, display_name, created_at)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(LOCAL_DB_ID, 'desktop@local', 'single-user-mode', 'Desktop Library', Date.now());
+  }
+
+  const localBookCount = db
+    .prepare('SELECT COUNT(*) AS count FROM books WHERE user_id = ?')
+    .get(LOCAL_DB_ID) as { count: number };
+  if (localBookCount.count > 0) {
+    return;
+  }
+
+  const legacyUserIds = db
+    .prepare(
+      `SELECT DISTINCT user_id
+       FROM books
+       WHERE user_id != ?
+       ORDER BY user_id ASC`
+    )
+    .all(LOCAL_DB_ID) as Array<{ user_id: string }>;
+
+  if (legacyUserIds.length === 1) {
+    db.prepare('UPDATE books SET user_id = ? WHERE user_id = ?').run(LOCAL_DB_ID, legacyUserIds[0].user_id);
+  }
+}
+
 export function getDatabase(userDataPath: string): Database.Database {
   if (dbInstance) {
     return dbInstance;
@@ -49,6 +80,7 @@ export function getDatabase(userDataPath: string): Database.Database {
   const dbPath = path.join(userDataPath, 'auth.sqlite');
   dbInstance = new Database(dbPath);
   runMigrations(dbInstance);
+  ensureLocalLibraryIdentity(dbInstance);
 
   return dbInstance;
 }

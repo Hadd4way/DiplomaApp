@@ -4,7 +4,6 @@ exports.listBookmarks = listBookmarks;
 exports.toggleBookmark = toggleBookmark;
 exports.removeBookmark = removeBookmark;
 const node_crypto_1 = require("node:crypto");
-const auth_1 = require("./auth");
 function normalizePage(page) {
     if (!Number.isFinite(page)) {
         return null;
@@ -18,49 +17,37 @@ function hasOwnedBook(authDb, userId, bookId) {
         .get(bookId, userId);
     return Boolean(ownedBook);
 }
-function listBookmarks(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function listBookmarks(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
-    if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+    if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
         return { ok: false, error: 'Book not found' };
     }
-    return { ok: true, bookmarks: readerDb.listBookmarks(session.userId, bookId) };
+    return { ok: true, bookmarks: readerDb.listBookmarks(userId, bookId) };
 }
-function toggleBookmark(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function toggleBookmark(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
-    if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+    if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
         return { ok: false, error: 'Book not found' };
     }
     const page = normalizePage(payload.page);
     if (!page) {
         return { ok: false, error: 'Invalid page' };
     }
-    const bookmarked = readerDb.toggleBookmark(session.userId, bookId, page, () => (0, node_crypto_1.randomUUID)());
+    const bookmarked = readerDb.toggleBookmark(userId, bookId, page, () => (0, node_crypto_1.randomUUID)());
     if (bookmarked === null) {
         return { ok: false, error: 'Failed to toggle bookmark.' };
     }
     return { ok: true, bookmarked };
 }
-function removeBookmark(authDb, readerDb, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(authDb, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function removeBookmark(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
-    if (!bookId || !hasOwnedBook(authDb, session.userId, bookId)) {
+    if (!bookId || !hasOwnedBook(authDb, userId, bookId)) {
         return { ok: false, error: 'Book not found' };
     }
     const page = normalizePage(payload.page);
     if (!page) {
         return { ok: false, error: 'Invalid page' };
     }
-    readerDb.removeBookmark(session.userId, bookId, page);
+    readerDb.removeBookmark(userId, bookId, page);
     return { ok: true };
 }

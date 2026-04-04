@@ -62,7 +62,6 @@ function normalizeHighlightText(value: string | null | undefined): string | null
 function toNote(row: NoteRow): Note {
   return {
     id: row.id,
-    userId: row.user_id,
     bookId: row.book_id,
     page: row.page,
     content: row.content,
@@ -102,7 +101,6 @@ function toHighlight(row: HighlightRow): Highlight | null {
   }
   return {
     id: row.id,
-    userId: row.user_id,
     bookId: row.book_id,
     page: row.page,
     rects,
@@ -115,7 +113,6 @@ function toHighlight(row: HighlightRow): Highlight | null {
 function toBookmark(row: BookmarkRow): Bookmark {
   return {
     id: row.id,
-    userId: row.user_id,
     bookId: row.book_id,
     page: row.page,
     createdAt: row.created_at
@@ -378,8 +375,8 @@ export class ReaderProgressDb {
     this.upsertEpubStmt.run(safeUserId, safeBookId, safeCfi, Date.now());
   }
 
-  createNote(note: Note): Note | null {
-    const safeUserId = asNonEmptyString(note.userId);
+  createNote(userId: string, note: Note): Note | null {
+    const safeUserId = asNonEmptyString(userId);
     const safeBookId = asNonEmptyString(note.bookId);
     const safePage = normalizeLastPage(note.page);
     const safeContent = normalizeNoteContent(note.content);
@@ -393,7 +390,6 @@ export class ReaderProgressDb {
     this.insertNoteStmt.run(safeId, safeUserId, safeBookId, safePage, safeContent, createdAt, now);
     return {
       id: safeId,
-      userId: safeUserId,
       bookId: safeBookId,
       page: safePage,
       content: safeContent,
@@ -492,7 +488,6 @@ export class ReaderProgressDb {
     );
     return {
       id: safeId,
-      userId: safeUserId,
       bookId: safeBookId,
       page: safePage,
       rects,
@@ -609,7 +604,6 @@ export class ReaderProgressDb {
     this.insertBookmarkStmt.run(safeId, safeUserId, safeBookId, safePage, Math.floor(createdAt));
     return {
       id: safeId,
-      userId: safeUserId,
       bookId: safeBookId,
       page: safePage,
       createdAt: Math.floor(createdAt)
@@ -648,6 +642,70 @@ export class ReaderProgressDb {
       }
     });
     return run();
+  }
+
+  migrateLegacyUserData(localUserId: string): void {
+    const safeLocalUserId = asNonEmptyString(localUserId);
+    if (!safeLocalUserId) {
+      return;
+    }
+
+    const localCountRow = this.db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM reading_progress WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM reading_progress_epub WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM notes WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM highlights WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM bookmarks WHERE user_id = ?) AS count`
+      )
+      .get(
+        safeLocalUserId,
+        safeLocalUserId,
+        safeLocalUserId,
+        safeLocalUserId,
+        safeLocalUserId
+      ) as { count: number };
+
+    if (localCountRow.count > 0) {
+      return;
+    }
+
+    const legacyUserRows = this.db
+      .prepare(
+        `SELECT DISTINCT user_id
+         FROM (
+           SELECT user_id FROM reading_progress
+           UNION
+           SELECT user_id FROM reading_progress_epub
+           UNION
+           SELECT user_id FROM notes
+           UNION
+           SELECT user_id FROM highlights
+           UNION
+           SELECT user_id FROM bookmarks
+         )
+         WHERE user_id != ?
+         ORDER BY user_id ASC`
+      )
+      .all(safeLocalUserId) as Array<{ user_id: string }>;
+
+    if (legacyUserRows.length !== 1) {
+      return;
+    }
+
+    const legacyUserId = legacyUserRows[0].user_id;
+    const migrate = this.db.transaction(() => {
+      this.db.prepare('UPDATE reading_progress SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
+      this.db
+        .prepare('UPDATE reading_progress_epub SET user_id = ? WHERE user_id = ?')
+        .run(safeLocalUserId, legacyUserId);
+      this.db.prepare('UPDATE notes SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
+      this.db.prepare('UPDATE highlights SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
+      this.db.prepare('UPDATE bookmarks SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
+    });
+
+    migrate();
   }
 }
 

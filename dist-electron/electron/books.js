@@ -14,11 +14,9 @@ const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
 const electron_1 = require("electron");
-const auth_1 = require("./auth");
 function toBook(row) {
     return {
         id: row.id,
-        userId: row.user_id,
         title: row.title,
         author: row.author,
         format: row.format,
@@ -45,36 +43,27 @@ async function pathExists(targetPath) {
         return false;
     }
 }
-function listBooks(db, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function listBooks(db, userId) {
     const rows = db
         .prepare(`SELECT id, user_id, title, author, format, file_path, created_at
        FROM books
        WHERE user_id = ?
        ORDER BY created_at DESC`)
-        .all(session.userId);
+        .all(userId);
     return {
         ok: true,
         books: rows.map(toBook)
     };
 }
-function addSampleBook(db, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+function addSampleBook(db, userId) {
     const sampleCountRow = db
         .prepare('SELECT COUNT(*) AS count FROM books WHERE user_id = ?')
-        .get(session.userId);
+        .get(userId);
     const sampleNumber = sampleCountRow.count + 1;
     const format = sampleNumber % 2 === 1 ? 'pdf' : 'epub';
     const now = Date.now();
     const book = {
         id: (0, node_crypto_1.randomUUID)(),
-        userId: session.userId,
         title: `Sample Book ${sampleNumber}`,
         author: null,
         format,
@@ -82,14 +71,10 @@ function addSampleBook(db, payload) {
         createdAt: now
     };
     db.prepare(`INSERT INTO books (id, user_id, title, author, format, file_path, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(book.id, book.userId, book.title, book.author, book.format, book.filePath, book.createdAt);
+     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(book.id, userId, book.title, book.author, book.format, book.filePath, book.createdAt);
     return { ok: true, book };
 }
-async function importBook(db, payload, userDataPath, ownerWindow) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+async function importBook(db, userId, userDataPath, ownerWindow) {
     const dialogOptions = {
         title: 'Import book',
         properties: ['openFile'],
@@ -127,7 +112,6 @@ async function importBook(db, payload, userDataPath, ownerWindow) {
     }
     const book = {
         id: bookId,
-        userId: session.userId,
         title: titleFromFile || `Imported ${format.toUpperCase()}`,
         author: null,
         format,
@@ -136,25 +120,21 @@ async function importBook(db, payload, userDataPath, ownerWindow) {
     };
     try {
         db.prepare(`INSERT INTO books (id, user_id, title, author, format, file_path, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(book.id, book.userId, book.title, book.author, book.format, book.filePath, book.createdAt);
+       VALUES (?, ?, ?, ?, ?, ?, ?)`).run(book.id, userId, book.title, book.author, book.format, book.filePath, book.createdAt);
     }
     catch {
         return { ok: false, error: 'Failed to save imported book metadata.' };
     }
     return { ok: true, book };
 }
-async function revealBook(db, payload, userDataPath) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+async function revealBook(db, userId, payload, userDataPath) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
     const bookRow = db
         .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!bookRow) {
         return { ok: false, error: 'Book not found' };
     }
@@ -173,18 +153,14 @@ async function revealBook(db, payload, userDataPath) {
     }
     return { ok: true };
 }
-async function deleteBook(db, payload, userDataPath) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+async function deleteBook(db, userId, payload, userDataPath) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
     const bookRow = db
         .prepare('SELECT id, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!bookRow) {
         return { ok: false, error: 'Book not found' };
     }
@@ -208,24 +184,20 @@ async function deleteBook(db, payload, userDataPath) {
     }
     const deleteResult = db
         .prepare('DELETE FROM books WHERE id = ? AND user_id = ?')
-        .run(bookId, session.userId);
+        .run(bookId, userId);
     if (deleteResult.changes === 0) {
         return { ok: false, error: 'Book not found' };
     }
     return { ok: true };
 }
-async function getPdfData(db, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+async function getPdfData(db, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
     const bookRow = db
         .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!bookRow) {
         return { ok: false, error: 'Book not found' };
     }
@@ -248,18 +220,14 @@ async function getPdfData(db, payload) {
         return { ok: false, error: 'Failed to read PDF file from disk.' };
     }
 }
-async function getEpubData(db, payload) {
-    const session = (0, auth_1.resolveSessionUserId)(db, payload.token);
-    if (!session.ok) {
-        return session;
-    }
+async function getEpubData(db, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
     const bookRow = db
         .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
-        .get(bookId, session.userId);
+        .get(bookId, userId);
     if (!bookRow) {
         return { ok: false, error: 'Book not found' };
     }

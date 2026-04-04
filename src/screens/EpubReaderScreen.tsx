@@ -12,7 +12,6 @@ type TocItem = {
 
 type Props = {
   title: string;
-  token: string;
   bookId: string;
   loading: boolean;
   onBack: () => void;
@@ -94,7 +93,7 @@ function TocTree({
   );
 }
 
-export function EpubReaderScreen({ title, token, bookId, loading, onBack }: Props) {
+export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const readerContainerRef = React.useRef<HTMLDivElement | null>(null);
   const bookRef = React.useRef<any>(null);
   const renditionRef = React.useRef<any>(null);
@@ -112,9 +111,9 @@ export function EpubReaderScreen({ title, token, bookId, loading, onBack }: Prop
       if (!safeCfi || !window.api) {
         return;
       }
-      await window.api.epubProgress.set({ token, bookId, cfi: safeCfi });
+      await window.api.epubProgress.set({ bookId, cfi: safeCfi });
     },
-    [bookId, token]
+    [bookId]
   );
 
   const goPrev = React.useCallback(() => {
@@ -158,7 +157,7 @@ export function EpubReaderScreen({ title, token, bookId, loading, onBack }: Prop
           throw new Error('Renderer API is unavailable. Open this app via Electron.');
         }
         log('ipc:getEpubData:start');
-        const epubDataResult = await window.api.books.getEpubData({ token, bookId });
+        const epubDataResult = await window.api.books.getEpubData({ bookId });
         if (canceled) {
           log('init:aborted:after-getEpubData', { elapsed: elapsed() });
           return;
@@ -177,7 +176,7 @@ export function EpubReaderScreen({ title, token, bookId, loading, onBack }: Prop
         let startCfi: string | null = null;
         log('ipc:epubProgress:get:start');
         const progressResult = await withTimeout(
-          window.api.epubProgress.get({ token, bookId }),
+          window.api.epubProgress.get({ bookId }),
           4000,
           'Timed out while loading reading progress.'
         ).catch(() => null);
@@ -367,7 +366,7 @@ export function EpubReaderScreen({ title, token, bookId, loading, onBack }: Prop
       renditionRef.current = null;
       bookRef.current = null;
     };
-  }, [bookId, persistCfi, token]);
+  }, [bookId, persistCfi]);
 
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden bg-[#f3f5f7]">
