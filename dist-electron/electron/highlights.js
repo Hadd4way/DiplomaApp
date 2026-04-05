@@ -1,9 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.listHighlights = listHighlights;
+exports.listEpubHighlights = listEpubHighlights;
 exports.createMergedHighlight = createMergedHighlight;
 exports.deleteHighlight = deleteHighlight;
 exports.insertRawHighlight = insertRawHighlight;
+exports.createEpubHighlight = createEpubHighlight;
 exports.updateHighlightNote = updateHighlightNote;
 const node_crypto_1 = require("node:crypto");
 const EPSILON = 0.002;
@@ -160,6 +162,16 @@ function listHighlights(authDb, readerDb, userId, payload) {
     }
     return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
+function listEpubHighlights(authDb, readerDb, userId, payload) {
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    return {
+        ok: true,
+        highlights: readerDb.listHighlights(userId, bookId, null).filter((highlight) => Boolean(highlight.cfiRange))
+    };
+}
 function normalizeHighlightNote(value) {
     if (typeof value !== 'string') {
         return null;
@@ -270,6 +282,28 @@ function insertRawHighlight(authDb, readerDb, userId, payload) {
     }
     const now = Date.now();
     const created = readerDb.insertHighlight(userId, bookId, page, rects, cfiRange, normalizeHighlightText(payload.text), normalizeHighlightNote(payload.note), (0, node_crypto_1.randomUUID)(), now, now);
+    if (!created) {
+        return { ok: false, error: 'Failed to create highlight.' };
+    }
+    return { ok: true, highlight: created };
+}
+function createEpubHighlight(authDb, readerDb, userId, payload) {
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const cfiRange = payload.cfiRange?.trim();
+    if (!cfiRange) {
+        return { ok: false, error: 'Invalid EPUB range' };
+    }
+    const ownedBook = authDb
+        .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, userId);
+    if (!ownedBook) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const now = Date.now();
+    const created = readerDb.createOrGetEpubHighlight(userId, bookId, cfiRange, normalizeHighlightText(payload.text), (0, node_crypto_1.randomUUID)(), now, now);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }

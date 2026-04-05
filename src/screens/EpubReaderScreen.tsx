@@ -41,7 +41,7 @@ type Props = {
   onBack: () => void;
 };
 
-type EpubHighlightPromptState = { highlightId: string; x: number; y: number } | null;
+type EpubHighlightMenuState = { highlightId: string; x: number; y: number } | null;
 type EpubHighlightEditorState = {
   highlightId: string;
   x: number;
@@ -50,6 +50,10 @@ type EpubHighlightEditorState = {
   saving: boolean;
   error: string | null;
 } | null;
+type PendingEpubHighlightDeletion = {
+  id: string;
+  highlight: Highlight;
+};
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -316,9 +320,11 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const iframeBookmarkCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingDeletionTimeoutsRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const latestCfiRef = React.useRef<string | null>(null);
   const toggleCurrentBookmarkRef = React.useRef<() => Promise<void>>(async () => {});
   const epubHighlightsRef = React.useRef<Highlight[]>([]);
+  const renderedHighlightCfisRef = React.useRef<Set<string>>(new Set());
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
@@ -331,8 +337,9 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
   const [bookmarksError, setBookmarksError] = React.useState<string | null>(null);
   const [epubHighlights, setEpubHighlights] = React.useState<Highlight[]>([]);
-  const [highlightPrompt, setHighlightPrompt] = React.useState<EpubHighlightPromptState>(null);
+  const [highlightMenu, setHighlightMenu] = React.useState<EpubHighlightMenuState>(null);
   const [highlightEditor, setHighlightEditor] = React.useState<EpubHighlightEditorState>(null);
+  const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingEpubHighlightDeletion[]>([]);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
   const currentBookmarkLabel = React.useMemo(
@@ -398,7 +405,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const openHighlightEditor = React.useCallback(
     (highlight: Highlight, x: number, y: number) => {
       const position = clampPopoverPosition(x, y);
-      setHighlightPrompt(null);
+      setHighlightMenu(null);
       setHighlightEditor({
         highlightId: highlight.id,
         x: position.x,
@@ -411,6 +418,19 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     [clampPopoverPosition]
   );
 
+  const openHighlightMenu = React.useCallback(
+    (highlight: Highlight, x: number, y: number) => {
+      const position = clampPopoverPosition(x, y);
+      setHighlightEditor(null);
+      setHighlightMenu({
+        highlightId: highlight.id,
+        x: position.x,
+        y: position.y
+      });
+    },
+    [clampPopoverPosition]
+  );
+
   const renderHighlights = React.useCallback(
     (highlights: Highlight[]) => {
       const rendition = renditionRef.current;
@@ -418,6 +438,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         return;
       }
 
+      const nextCfis = new Set<string>();
       const seen = new Set<string>();
       for (const highlight of highlights) {
         const cfiRange = highlight.cfiRange?.trim();
@@ -425,6 +446,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           continue;
         }
         seen.add(cfiRange);
+        nextCfis.add(cfiRange);
         rendition.annotations.remove?.(cfiRange, 'highlight');
         rendition.annotations.add?.(
           'highlight',
@@ -441,7 +463,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             }
             const stageRect = stage.getBoundingClientRect();
             const targetRect = target.getBoundingClientRect();
-            openHighlightEditor(
+            openHighlightMenu(
               highlight,
               targetRect.left - stageRect.left + targetRect.width / 2,
               targetRect.bottom - stageRect.top + 8
@@ -450,8 +472,14 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           highlight.note ? 'epub-highlight epub-highlight-with-note' : 'epub-highlight'
         );
       }
+      for (const cfiRange of renderedHighlightCfisRef.current) {
+        if (!nextCfis.has(cfiRange)) {
+          rendition.annotations.remove?.(cfiRange, 'highlight');
+        }
+      }
+      renderedHighlightCfisRef.current = nextCfis;
     },
-    [openHighlightEditor, registerActivity]
+    [openHighlightMenu, registerActivity]
   );
 
   const loadHighlights = React.useCallback(async () => {
@@ -461,16 +489,17 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     }
 
     try {
-      const result = await window.api.highlights.list({ bookId });
+      const result = await window.api.epubHighlights.list({ bookId });
       if (!result.ok) {
         setEpubHighlights([]);
+        renderHighlights([]);
         return;
       }
-      const nextHighlights = result.highlights.filter((highlight) => Boolean(highlight.cfiRange));
-      setEpubHighlights(nextHighlights);
-      renderHighlights(nextHighlights);
+      setEpubHighlights(result.highlights);
+      renderHighlights(result.highlights);
     } catch {
       setEpubHighlights([]);
+      renderHighlights([]);
     }
   }, [bookId, renderHighlights]);
 
@@ -635,13 +664,92 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         renderHighlights(next);
         return next;
       });
-      setHighlightPrompt(null);
+      setHighlightMenu(null);
       setHighlightEditor(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setHighlightEditor((prev) => (prev ? { ...prev, saving: false, error: message } : prev));
     }
   }, [epubHighlights, highlightEditor, renderHighlights]);
+
+  const finalizeHighlightDelete = React.useCallback(
+    async (highlight: Highlight) => {
+      if (!window.api) {
+        return;
+      }
+      const safeId = highlight.id.trim();
+      if (!safeId) {
+        return;
+      }
+      try {
+        const result = await window.api.highlights.delete({ highlightId: safeId });
+        if (!result.ok) {
+          await loadHighlights();
+        }
+      } catch {
+        await loadHighlights();
+      }
+    },
+    [loadHighlights]
+  );
+
+  const queueHighlightDeletion = React.useCallback(
+    (highlight: Highlight) => {
+      const safeId = highlight.id.trim();
+      if (!safeId) {
+        return;
+      }
+
+      const existingTimeout = pendingDeletionTimeoutsRef.current.get(safeId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+
+      setEpubHighlights((prev) => {
+        const next = prev.filter((item) => item.id !== safeId);
+        renderHighlights(next);
+        return next;
+      });
+      setPendingHighlightDeletions((prev) => {
+        const filtered = prev.filter((item) => item.id !== safeId);
+        return [...filtered, { id: safeId, highlight }];
+      });
+      setHighlightMenu((prev) => (prev?.highlightId === safeId ? null : prev));
+      setHighlightEditor((prev) => (prev?.highlightId === safeId ? null : prev));
+
+      const timeoutId = setTimeout(() => {
+        pendingDeletionTimeoutsRef.current.delete(safeId);
+        setPendingHighlightDeletions((prev) => prev.filter((item) => item.id !== safeId));
+        void finalizeHighlightDelete(highlight);
+      }, 5000);
+
+      pendingDeletionTimeoutsRef.current.set(safeId, timeoutId);
+    },
+    [finalizeHighlightDelete, renderHighlights]
+  );
+
+  const undoHighlightDeletion = React.useCallback(
+    (pendingId: string) => {
+      const timeoutId = pendingDeletionTimeoutsRef.current.get(pendingId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        pendingDeletionTimeoutsRef.current.delete(pendingId);
+      }
+
+      const pending = pendingHighlightDeletions.find((item) => item.id === pendingId);
+      if (!pending) {
+        return;
+      }
+
+      setPendingHighlightDeletions((prev) => prev.filter((item) => item.id !== pendingId));
+      setEpubHighlights((prev) => {
+        const next = [pending.highlight, ...prev.filter((item) => item.id !== pending.highlight.id)];
+        renderHighlights(next);
+        return next;
+      });
+    },
+    [pendingHighlightDeletions, renderHighlights]
+  );
 
   const createHighlightFromSelection = React.useCallback(
     async (cfiRange: string, contents: { document: Document; window: Window }) => {
@@ -659,11 +767,10 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       const popoverPosition = range ? getPopoverPositionForRange(range, contents.document) : null;
 
       try {
-        const result = await window.api.highlights.insertRaw({
+        const result = await window.api.epubHighlights.create({
           bookId,
           cfiRange: safeCfiRange,
-          text: selectedText,
-          note: null
+          text: selectedText
         });
         if (!result.ok) {
           return;
@@ -675,7 +782,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         });
         if (popoverPosition) {
           setHighlightEditor(null);
-          setHighlightPrompt({
+          setHighlightMenu({
             highlightId: result.highlight.id,
             x: popoverPosition.x,
             y: popoverPosition.y
@@ -747,9 +854,15 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     setCurrentCfi(null);
     setCurrentHref(null);
     setEpubHighlights([]);
-    setHighlightPrompt(null);
+    setHighlightMenu(null);
     setHighlightEditor(null);
+    setPendingHighlightDeletions([]);
     latestCfiRef.current = null;
+    for (const timeout of pendingDeletionTimeoutsRef.current.values()) {
+      clearTimeout(timeout);
+    }
+    pendingDeletionTimeoutsRef.current.clear();
+    renderedHighlightCfisRef.current = new Set();
     container.replaceChildren();
 
     const init = async () => {
@@ -957,6 +1070,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             bookRef.current?.destroy?.();
             renditionRef.current = null;
             bookRef.current = null;
+            renderedHighlightCfisRef.current = new Set();
             container.replaceChildren();
           }
         }
@@ -996,10 +1110,15 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       }
       iframeBookmarkCleanupRef.current.clear();
       flushReadingStats();
+      for (const timeout of pendingDeletionTimeoutsRef.current.values()) {
+        clearTimeout(timeout);
+      }
+      pendingDeletionTimeoutsRef.current.clear();
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
       renditionRef.current = null;
       bookRef.current = null;
+      renderedHighlightCfisRef.current = new Set();
     };
   }, [bindIframeActivity, bindIframeBookmarkHotkeys, bookId, createHighlightFromSelection, flushReadingStats, loadBookmarks, loadHighlights, persistCfi, registerActivity, renderHighlights, settings]);
 
@@ -1012,7 +1131,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       if (target.closest('[data-epub-highlight-popover="true"]')) {
         return;
       }
-      setHighlightPrompt(null);
+      setHighlightMenu(null);
       setHighlightEditor(null);
     };
 
@@ -1020,7 +1139,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       if (event.key !== 'Escape') {
         return;
       }
-      setHighlightPrompt(null);
+      setHighlightMenu(null);
       setHighlightEditor(null);
     };
 
@@ -1034,6 +1153,13 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   React.useEffect(() => {
     setBookmarksPanelOpen(false);
+    setHighlightMenu(null);
+    setHighlightEditor(null);
+    setPendingHighlightDeletions([]);
+    for (const timeout of pendingDeletionTimeoutsRef.current.values()) {
+      clearTimeout(timeout);
+    }
+    pendingDeletionTimeoutsRef.current.clear();
   }, [bookId]);
 
   React.useEffect(() => {
@@ -1289,45 +1415,78 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             <div ref={readerContainerRef} className="h-full w-full" />
           </div>
         </div>
-        {highlightPrompt ? (
+        {highlightMenu ? (
             <div
               data-epub-highlight-popover="true"
-              className="pointer-events-auto absolute z-20 w-[180px] rounded-md border p-2 shadow-lg"
+              className="pointer-events-auto absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
               style={{
-                left: `${highlightPrompt.x}px`,
-                top: `${highlightPrompt.y}px`,
+                left: `${highlightMenu.x}px`,
+                top: `${highlightMenu.y}px`,
                 backgroundColor: palette.panelBg,
                 borderColor: palette.chromeBorder,
                 color: palette.chromeText
               }}
             >
-              <p className="text-xs" style={{ color: palette.mutedText }}>
-                Highlight saved
-              </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="mt-2 w-full"
-                style={getReaderButtonStyles(settings.theme)}
-                onClick={() => {
-                  const targetHighlight = epubHighlights.find((item) => item.id === highlightPrompt.highlightId);
-                  if (!targetHighlight) {
-                    setHighlightPrompt(null);
-                    return;
-                  }
-                  openHighlightEditor(targetHighlight, highlightPrompt.x, highlightPrompt.y + 6);
-                }}
-              >
-                Add note
-              </Button>
-              <button
-                type="button"
-                className="mt-2 block w-full rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
-                onClick={() => setHighlightPrompt(null)}
-              >
-                Dismiss
-              </button>
+              {(() => {
+                const activeHighlight = epubHighlights.find((item) => item.id === highlightMenu.highlightId) ?? null;
+                if (!activeHighlight) {
+                  return (
+                    <p className="text-xs" style={{ color: palette.mutedText }}>
+                      Highlight not found.
+                    </p>
+                  );
+                }
+
+                return (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
+                      Highlight
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: palette.chromeText }}>
+                      {activeHighlight.text ?? '(highlight without text)'}
+                    </p>
+                    {activeHighlight.note ? (
+                      <>
+                        <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
+                          Note
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: palette.chromeText }}>
+                          {activeHighlight.note}
+                        </p>
+                      </>
+                    ) : null}
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        style={getReaderButtonStyles(settings.theme)}
+                        onClick={() => {
+                          openHighlightEditor(activeHighlight, highlightMenu.x, highlightMenu.y + 6);
+                        }}
+                      >
+                        {activeHighlight.note ? 'Edit note' : 'Add note'}
+                      </Button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
+                        onClick={() => {
+                          queueHighlightDeletion(activeHighlight);
+                        }}
+                      >
+                        Delete highlight
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                        onClick={() => setHighlightMenu(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           ) : null}
           {highlightEditor ? (
@@ -1401,6 +1560,32 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                 );
               })()}
             </div>
+        ) : null}
+        {pendingHighlightDeletions.length > 0 ? (
+          <div className="pointer-events-none absolute bottom-3 right-3 z-50 flex flex-col gap-2">
+            {pendingHighlightDeletions.map((pending) => (
+              <div
+                key={pending.id}
+                className="pointer-events-auto flex items-center gap-3 rounded-md border px-3 py-2 shadow-lg"
+                style={{
+                  backgroundColor: palette.panelBg,
+                  borderColor: palette.chromeBorder,
+                  color: palette.chromeText
+                }}
+              >
+                <p className="text-xs">Highlight deleted</p>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-blue-700 hover:text-blue-800"
+                  onClick={() => {
+                    undoHighlightDeletion(pending.id);
+                  }}
+                >
+                  Undo
+                </button>
+              </div>
+            ))}
+          </div>
         ) : null}
         {error ? (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

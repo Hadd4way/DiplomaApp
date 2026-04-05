@@ -19,6 +19,8 @@ exports.IPC_CHANNELS = {
     highlightsDelete: 'highlights:delete',
     highlightsInsertRaw: 'highlights:insert-raw',
     highlightsUpdateNote: 'highlights:update-note',
+    epubHighlightsList: 'epub-highlights:list',
+    epubHighlightsCreate: 'epub-highlights:create',
     bookmarksList: 'bookmarks:list',
     bookmarksToggle: 'bookmarks:toggle',
     bookmarksRemove: 'bookmarks:remove',

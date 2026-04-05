@@ -26,6 +26,10 @@ const api = {
         insertRaw: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsInsertRaw, payload),
         updateNote: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsUpdateNote, payload)
     },
+    epubHighlights: {
+        list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubHighlightsList, payload),
+        create: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubHighlightsCreate, payload)
+    },
     bookmarks: {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksList, payload),
         toggle: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksToggle, payload),

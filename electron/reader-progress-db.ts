@@ -187,6 +187,7 @@ export class ReaderProgressDb {
   >;
   private updateHighlightNoteStmt: Database.Statement<[string | null, number, string, string]>;
   private getHighlightStmt: Database.Statement<[string, string], HighlightRow | undefined>;
+  private getEpubHighlightByCfiStmt: Database.Statement<[string, string, string], HighlightRow | undefined>;
   private deleteHighlightsByIdsStmt: Database.Statement;
   private deleteHighlightStmt: Database.Statement<[string, string]>;
   private listHighlightsByPageStmt: Database.Statement<[string, string, number], HighlightRow>;
@@ -412,6 +413,12 @@ export class ReaderProgressDb {
       `SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND id = ?
+       LIMIT 1`
+    );
+    this.getEpubHighlightByCfiStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND book_id = ? AND cfi_range = ?
        LIMIT 1`
     );
     this.deleteHighlightsByIdsStmt = this.db.prepare(
@@ -655,6 +662,34 @@ export class ReaderProgressDb {
       createdAt: Math.floor(createdAt),
       updatedAt: Math.floor(updatedAt)
     };
+  }
+
+  createOrGetEpubHighlight(
+    userId: string,
+    bookId: string,
+    cfiRange: string,
+    text: string | null,
+    id: string,
+    createdAt: number,
+    updatedAt: number
+  ): Highlight | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeBookId = asNonEmptyString(bookId);
+    const safeCfiRange = asNonEmptyString(cfiRange);
+    const safeId = asNonEmptyString(id);
+    if (!safeUserId || !safeBookId || !safeCfiRange || !safeId) {
+      return null;
+    }
+
+    const run = this.db.transaction((): Highlight | null => {
+      const existing = this.getEpubHighlightByCfiStmt.get(safeUserId, safeBookId, safeCfiRange);
+      if (existing) {
+        return toHighlight(existing);
+      }
+      return this.insertHighlight(safeUserId, safeBookId, null, null, safeCfiRange, text, null, safeId, createdAt, updatedAt);
+    });
+
+    return run();
   }
 
   updateHighlightNote(userId: string, highlightId: string, note: string | null): Highlight | null {

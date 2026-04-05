@@ -3,6 +3,10 @@ import type Database from 'better-sqlite3';
 import type {
   Highlight,
   HighlightRect,
+  EpubHighlightsCreateRequest,
+  EpubHighlightsCreateResult,
+  EpubHighlightsListRequest,
+  EpubHighlightsListResult,
   HighlightsCreateMergedRequest,
   HighlightsCreateMergedResult,
   HighlightsDeleteRequest,
@@ -190,6 +194,22 @@ export function listHighlights(
   return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
 
+export function listEpubHighlights(
+  authDb: Database.Database,
+  readerDb: ReaderProgressDb,
+  userId: string,
+  payload: EpubHighlightsListRequest
+): EpubHighlightsListResult {
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+  return {
+    ok: true,
+    highlights: readerDb.listHighlights(userId, bookId, null).filter((highlight) => Boolean(highlight.cfiRange))
+  };
+}
+
 function normalizeHighlightNote(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -358,6 +378,46 @@ export function insertRawHighlight(
   }
 
   return { ok: true, highlight: created as Highlight };
+}
+
+export function createEpubHighlight(
+  authDb: Database.Database,
+  readerDb: ReaderProgressDb,
+  userId: string,
+  payload: EpubHighlightsCreateRequest
+): EpubHighlightsCreateResult {
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const cfiRange = payload.cfiRange?.trim();
+  if (!cfiRange) {
+    return { ok: false, error: 'Invalid EPUB range' };
+  }
+
+  const ownedBook = authDb
+    .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+    .get(bookId, userId) as { id: string } | undefined;
+  if (!ownedBook) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const now = Date.now();
+  const created = readerDb.createOrGetEpubHighlight(
+    userId,
+    bookId,
+    cfiRange,
+    normalizeHighlightText(payload.text),
+    randomUUID(),
+    now,
+    now
+  );
+  if (!created) {
+    return { ok: false, error: 'Failed to create highlight.' };
+  }
+
+  return { ok: true, highlight: created };
 }
 
 export function updateHighlightNote(

@@ -22,6 +22,8 @@ import {
   type EpubBookmarksToggleRequest,
   type HighlightsCreateMergedRequest,
   type HighlightsDeleteRequest,
+  type EpubHighlightsCreateRequest,
+  type EpubHighlightsListRequest,
   type HighlightsInsertRawRequest,
   type HighlightsListRequest,
   type HighlightsUpdateNoteRequest,
@@ -34,7 +36,15 @@ import {
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
-import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights, updateHighlightNote } from './highlights';
+import {
+  createEpubHighlight,
+  createMergedHighlight,
+  deleteHighlight,
+  insertRawHighlight,
+  listEpubHighlights,
+  listHighlights,
+  updateHighlightNote
+} from './highlights';
 import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
 import { listEpubBookmarks, toggleEpubBookmark } from './epub-bookmarks';
 import { getBookExportData, saveExportFile } from './export';
@@ -146,6 +156,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.highlightsUpdateNote, (_event, payload: HighlightsUpdateNoteRequest) =>
     updateHighlightNote(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubHighlightsList, (_event, payload: EpubHighlightsListRequest) =>
+    listEpubHighlights(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubHighlightsCreate, (_event, payload: EpubHighlightsCreateRequest) =>
+    createEpubHighlight(db, progressDb, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.bookmarksList, (_event, payload: BookmarksListRequest) =>
     listBookmarks(db, progressDb, libraryId, payload)

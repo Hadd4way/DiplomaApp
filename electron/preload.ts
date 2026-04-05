@@ -25,6 +25,10 @@ const api: RendererApi = {
     insertRaw: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsInsertRaw, payload),
     updateNote: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsUpdateNote, payload)
   },
+  epubHighlights: {
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubHighlightsList, payload),
+    create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubHighlightsCreate, payload)
+  },
   bookmarks: {
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksList, payload),
     toggle: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksToggle, payload),

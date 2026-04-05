@@ -16,6 +16,8 @@ export const IPC_CHANNELS = {
   highlightsDelete: 'highlights:delete',
   highlightsInsertRaw: 'highlights:insert-raw',
   highlightsUpdateNote: 'highlights:update-note',
+  epubHighlightsList: 'epub-highlights:list',
+  epubHighlightsCreate: 'epub-highlights:create',
   bookmarksList: 'bookmarks:list',
   bookmarksToggle: 'bookmarks:toggle',
   bookmarksRemove: 'bookmarks:remove',
@@ -141,6 +143,8 @@ export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | 
 export type HighlightsDeleteResult = { ok: true } | ErrorResult;
 export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | ErrorResult;
 export type HighlightsUpdateNoteResult = { ok: true; highlight: Highlight } | ErrorResult;
+export type EpubHighlightsListResult = { ok: true; highlights: Highlight[] } | ErrorResult;
+export type EpubHighlightsCreateResult = { ok: true; highlight: Highlight } | ErrorResult;
 export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | ErrorResult;
 export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | ErrorResult;
 export type BookmarksRemoveResult = { ok: true } | ErrorResult;
@@ -235,6 +239,16 @@ export type HighlightsUpdateNoteRequest = {
   note: string | null;
 };
 
+export type EpubHighlightsListRequest = {
+  bookId: string;
+};
+
+export type EpubHighlightsCreateRequest = {
+  bookId: string;
+  cfiRange: string;
+  text: string | null;
+};
+
 export type BookmarksListRequest = {
   bookId: string;
 };
@@ -326,6 +340,11 @@ export interface RendererHighlightsApi {
   updateNote: (payload: HighlightsUpdateNoteRequest) => Promise<HighlightsUpdateNoteResult>;
 }
 
+export interface RendererEpubHighlightsApi {
+  list: (payload: EpubHighlightsListRequest) => Promise<EpubHighlightsListResult>;
+  create: (payload: EpubHighlightsCreateRequest) => Promise<EpubHighlightsCreateResult>;
+}
+
 export interface RendererBookmarksApi {
   list: (payload: BookmarksListRequest) => Promise<BookmarksListResult>;
   toggle: (payload: BookmarksToggleRequest) => Promise<BookmarksToggleResult>;
@@ -362,6 +381,7 @@ export interface RendererApi {
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;
+  epubHighlights: RendererEpubHighlightsApi;
   bookmarks: RendererBookmarksApi;
   epubBookmarks: RendererEpubBookmarksApi;
   export: RendererExportApi;

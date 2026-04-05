@@ -312,6 +312,10 @@ class ReaderProgressDb {
        FROM highlights
        WHERE user_id = ? AND id = ?
        LIMIT 1`);
+        this.getEpubHighlightByCfiStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND book_id = ? AND cfi_range = ?
+       LIMIT 1`);
         this.deleteHighlightsByIdsStmt = this.db.prepare(`DELETE FROM highlights
        WHERE user_id = @user_id
          AND id IN (SELECT value FROM json_each(@ids_json))`);
@@ -486,6 +490,23 @@ class ReaderProgressDb {
             createdAt: Math.floor(createdAt),
             updatedAt: Math.floor(updatedAt)
         };
+    }
+    createOrGetEpubHighlight(userId, bookId, cfiRange, text, id, createdAt, updatedAt) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safeCfiRange = asNonEmptyString(cfiRange);
+        const safeId = asNonEmptyString(id);
+        if (!safeUserId || !safeBookId || !safeCfiRange || !safeId) {
+            return null;
+        }
+        const run = this.db.transaction(() => {
+            const existing = this.getEpubHighlightByCfiStmt.get(safeUserId, safeBookId, safeCfiRange);
+            if (existing) {
+                return toHighlight(existing);
+            }
+            return this.insertHighlight(safeUserId, safeBookId, null, null, safeCfiRange, text, null, safeId, createdAt, updatedAt);
+        });
+        return run();
     }
     updateHighlightNote(userId, highlightId, note) {
         const safeUserId = asNonEmptyString(userId);
