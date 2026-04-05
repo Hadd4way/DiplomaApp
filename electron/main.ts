@@ -22,6 +22,7 @@ import {
   type HighlightsDeleteRequest,
   type HighlightsInsertRawRequest,
   type HighlightsListRequest,
+  type HighlightsUpdateNoteRequest,
   type ReaderSettingsGetRequest,
   type ReaderSettingsUpdateRequest,
   type ProgressGetLastPageRequest,
@@ -31,7 +32,7 @@ import {
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
-import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights } from './highlights';
+import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights, updateHighlightNote } from './highlights';
 import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
 import { getBookExportData, saveExportFile } from './export';
 import { getEpubProgress, setEpubProgress } from './epub-progress';
@@ -139,6 +140,9 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.highlightsInsertRaw, (_event, payload: HighlightsInsertRawRequest) =>
     insertRawHighlight(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.highlightsUpdateNote, (_event, payload: HighlightsUpdateNoteRequest) =>
+    updateHighlightNote(db, progressDb, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.bookmarksList, (_event, payload: BookmarksListRequest) =>
     listBookmarks(db, progressDb, libraryId, payload)

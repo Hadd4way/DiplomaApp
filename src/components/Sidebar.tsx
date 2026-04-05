@@ -76,27 +76,6 @@ export function Sidebar({ currentView, onViewChange }: Props) {
           );
         })}
       </nav>
-
-      <div className="mt-4 space-y-3 border-t pt-4" style={{ borderColor: palette.chromeBorder }}>
-        <button
-          type="button"
-          className="w-full rounded-md border px-3 py-2 text-left text-sm transition-colors"
-          onClick={() => onViewChange('settings')}
-          style={{
-            borderColor: palette.buttonBorder,
-            backgroundColor: palette.buttonBg,
-            color: palette.mutedText
-          }}
-          onMouseEnter={(event) => {
-            event.currentTarget.style.backgroundColor = palette.panelHoverBg;
-          }}
-          onMouseLeave={(event) => {
-            event.currentTarget.style.backgroundColor = palette.buttonBg;
-          }}
-        >
-          App settings
-        </button>
-      </div>
     </aside>
   );
 }

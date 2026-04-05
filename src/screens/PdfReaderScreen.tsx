@@ -45,6 +45,15 @@ type Props = {
 
 type ScaleMode = 'fitWidth' | 'fitPage' | 'manual';
 type HighlightContextMenuState = { highlightId: string; x: number; y: number } | null;
+type HighlightNotePromptState = { highlightId: string; x: number; y: number } | null;
+type HighlightNoteEditorState = {
+  highlightId: string;
+  x: number;
+  y: number;
+  draftNote: string;
+  saving: boolean;
+  error: string | null;
+} | null;
 type PendingHighlightDeletion = {
   id: string;
   highlight: Highlight;
@@ -137,6 +146,14 @@ function getHighlightBounds(rects: HighlightRect[]): HighlightRect | null {
 
 function pointInRect(x: number, y: number, rect: HighlightRect): boolean {
   return x >= rect.x && y >= rect.y && x <= rect.x + rect.w && y <= rect.y + rect.h;
+}
+
+function normalizeHighlightNote(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 function normalizeSearchText(value: string): string {
@@ -483,6 +500,8 @@ export function PdfReaderScreen({
   );
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
   const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
+  const [highlightNotePrompt, setHighlightNotePrompt] = React.useState<HighlightNotePromptState>(null);
+  const [highlightNoteEditor, setHighlightNoteEditor] = React.useState<HighlightNoteEditorState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1089,6 +1108,54 @@ export function PdfReaderScreen({
     }
   }, [bookId, page]);
 
+  const clampPopoverPosition = React.useCallback((x: number, y: number) => {
+    const stage = pageStageRef.current;
+    if (!stage) {
+      return { x, y };
+    }
+    const stageRect = stage.getBoundingClientRect();
+    return {
+      x: Math.max(12, Math.min(stageRect.width - 12, x)),
+      y: Math.max(12, Math.min(stageRect.height - 12, y))
+    };
+  }, []);
+
+  const findHighlightAtPoint = React.useCallback(
+    (clientX: number, clientY: number) => {
+      const stage = pageStageRef.current;
+      if (!stage) {
+        return null;
+      }
+      const stageRect = stage.getBoundingClientRect();
+      if (stageRect.width <= 0 || stageRect.height <= 0) {
+        return null;
+      }
+      const xNormalized = (clientX - stageRect.left) / stageRect.width;
+      const yNormalized = (clientY - stageRect.top) / stageRect.height;
+      return (
+        pageHighlights.find((highlight) => highlight.rects.some((rect) => pointInRect(xNormalized, yNormalized, rect))) ?? null
+      );
+    },
+    [pageHighlights]
+  );
+
+  const openHighlightNoteEditor = React.useCallback(
+    (highlight: Highlight, x: number, y: number) => {
+      const position = clampPopoverPosition(x, y);
+      setHighlightContextMenu(null);
+      setHighlightNotePrompt(null);
+      setHighlightNoteEditor({
+        highlightId: highlight.id,
+        x: position.x,
+        y: position.y,
+        draftNote: highlight.note ?? '',
+        saving: false,
+        error: null
+      });
+    },
+    [clampPopoverPosition]
+  );
+
   const createHighlightFromSelection = React.useCallback(async () => {
     if (!window.api) {
       return;
@@ -1148,15 +1215,33 @@ export function PdfReaderScreen({
       return;
     }
 
+    const selectionBounds = range.getBoundingClientRect();
     try {
       const result = await window.api.highlights.createMerged({ bookId, page, rects, text: selectedText });
       if (result.ok) {
+        setPageHighlights((prev) => {
+          const remaining = prev.filter((item) => item.id !== result.highlight.id);
+          return [result.highlight, ...remaining];
+        });
+        if (selectionBounds.width > 0 || selectionBounds.height > 0) {
+          const position = clampPopoverPosition(
+            selectionBounds.right - pageRect.left,
+            selectionBounds.bottom - pageRect.top + 8
+          );
+          setHighlightContextMenu(null);
+          setHighlightNoteEditor(null);
+          setHighlightNotePrompt({
+            highlightId: result.highlight.id,
+            x: position.x,
+            y: position.y
+          });
+        }
         await loadPageHighlights();
       }
     } finally {
       selection.removeAllRanges();
     }
-  }, [bookId, loadPageHighlights, page]);
+  }, [bookId, clampPopoverPosition, loadPageHighlights, page]);
 
   const finalizeHighlightDelete = React.useCallback(
     async (highlight: Highlight) => {
@@ -1199,6 +1284,8 @@ export function PdfReaderScreen({
         return [...filtered, { id: safeId, highlight }];
       });
       setHighlightContextMenu(null);
+      setHighlightNotePrompt((prev) => (prev?.highlightId === safeId ? null : prev));
+      setHighlightNoteEditor((prev) => (prev?.highlightId === safeId ? null : prev));
 
       const timeoutId = setTimeout(() => {
         pendingDeletionTimeoutsRef.current.delete(safeId);
@@ -1234,7 +1321,8 @@ export function PdfReaderScreen({
           bookId: pending.highlight.bookId,
           page: pending.highlight.page,
           rects: pending.highlight.rects,
-          text: pending.highlight.text
+          text: pending.highlight.text,
+          note: pending.highlight.note
         });
         if (result.ok && pending.highlight.page === page && pending.highlight.bookId === bookId) {
           await loadPageHighlights();
@@ -1253,32 +1341,79 @@ export function PdfReaderScreen({
       }
 
       const stage = pageStageRef.current;
-      if (!stage) {
-        return;
-      }
-      const stageRect = stage.getBoundingClientRect();
-      if (stageRect.width <= 0 || stageRect.height <= 0) {
-        return;
-      }
-
-      const xNormalized = (event.clientX - stageRect.left) / stageRect.width;
-      const yNormalized = (event.clientY - stageRect.top) / stageRect.height;
-
-      const hit = pageHighlights.find((highlight) =>
-        highlight.rects.some((rect) => pointInRect(xNormalized, yNormalized, rect))
-      );
+      const hit = findHighlightAtPoint(event.clientX, event.clientY);
       if (!hit) {
         setHighlightContextMenu(null);
         return;
       }
+      if (!stage) {
+        return;
+      }
+      const stageRect = stage.getBoundingClientRect();
 
       event.preventDefault();
-      const x = Math.max(8, Math.min(stageRect.width - 8, event.clientX - stageRect.left));
-      const y = Math.max(8, Math.min(stageRect.height - 8, event.clientY - stageRect.top));
+      const { x, y } = clampPopoverPosition(event.clientX - stageRect.left, event.clientY - stageRect.top);
+      setHighlightNotePrompt(null);
+      setHighlightNoteEditor(null);
       setHighlightContextMenu({ highlightId: hit.id, x, y });
     },
-    [pageHighlights]
+    [clampPopoverPosition, findHighlightAtPoint]
   );
+
+  const openHighlightNoteFromClick = React.useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-popover="true"]'))
+      ) {
+        return;
+      }
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+        return;
+      }
+
+      const stage = pageStageRef.current;
+      const hit = findHighlightAtPoint(event.clientX, event.clientY);
+      if (!hit || !stage) {
+        return;
+      }
+
+      const stageRect = stage.getBoundingClientRect();
+      openHighlightNoteEditor(hit, event.clientX - stageRect.left, event.clientY - stageRect.top + 8);
+    },
+    [findHighlightAtPoint, openHighlightNoteEditor]
+  );
+
+  const saveHighlightNote = React.useCallback(async () => {
+    if (!window.api || !highlightNoteEditor) {
+      return;
+    }
+    if (!pageHighlights.some((item) => item.id === highlightNoteEditor.highlightId)) {
+      setHighlightNoteEditor(null);
+      return;
+    }
+
+    const normalizedNote = normalizeHighlightNote(highlightNoteEditor.draftNote);
+    setHighlightNoteEditor((prev) => (prev ? { ...prev, saving: true, error: null } : prev));
+    try {
+      const result = await window.api.highlights.updateNote({
+        highlightId: highlightNoteEditor.highlightId,
+        note: normalizedNote
+      });
+      if (!result.ok) {
+        setHighlightNoteEditor((prev) => (prev ? { ...prev, saving: false, error: result.error } : prev));
+        return;
+      }
+      setPageHighlights((prev) => prev.map((item) => (item.id === result.highlight.id ? result.highlight : item)));
+      setHighlightNotePrompt(null);
+      setHighlightNoteEditor(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setHighlightNoteEditor((prev) => (prev ? { ...prev, saving: false, error: message } : prev));
+    }
+  }, [highlightNoteEditor, pageHighlights]);
 
   React.useEffect(() => {
     setBookNotes([]);
@@ -1292,6 +1427,8 @@ export function PdfReaderScreen({
     setExportData(null);
     setNotesPanelOpen(false);
     setHighlightContextMenu(null);
+    setHighlightNotePrompt(null);
+    setHighlightNoteEditor(null);
     setSettingsPanelOpen(false);
     setSearchPanelOpen(false);
     clearQuery();
@@ -1336,23 +1473,34 @@ export function PdfReaderScreen({
 
   React.useEffect(() => {
     setHighlightContextMenu(null);
+    setHighlightNotePrompt(null);
+    setHighlightNoteEditor(null);
   }, [page, scale]);
 
   React.useEffect(() => {
     const closeMenuOnPointerDown = (event: MouseEvent) => {
       const target = event.target;
-      if (target instanceof HTMLElement && target.closest('[data-highlight-menu="true"]')) {
+      if (
+        target instanceof HTMLElement &&
+        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-popover="true"]'))
+      ) {
         return;
       }
       setHighlightContextMenu(null);
+      setHighlightNotePrompt(null);
+      setHighlightNoteEditor(null);
     };
     const closeMenuOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setHighlightContextMenu(null);
+        setHighlightNotePrompt(null);
+        setHighlightNoteEditor(null);
       }
     };
     const closeMenuOnScroll = () => {
       setHighlightContextMenu(null);
+      setHighlightNotePrompt(null);
+      setHighlightNoteEditor(null);
     };
     const viewportElement = readerViewportRef.current;
     document.addEventListener('pointerdown', closeMenuOnPointerDown);
@@ -2452,6 +2600,9 @@ export function PdfReaderScreen({
                       onContextMenu={(event) => {
                         openHighlightContextMenu(event);
                       }}
+                      onClick={(event) => {
+                        openHighlightNoteFromClick(event);
+                      }}
                     >
                       <canvas ref={canvasRef} className="block" />
                       <div
@@ -2481,7 +2632,7 @@ export function PdfReaderScreen({
                               {highlight.rects.map((rect, index) => (
                                 <div
                                   key={`${highlight.id}:${index}`}
-                                  className="absolute bg-yellow-300/45"
+                                  className={`absolute ${highlight.note ? 'bg-yellow-400/55' : 'bg-yellow-300/45'}`}
                                   style={{
                                     left: `${((rect.x - bounds.x) / bounds.w) * 100}%`,
                                     top: `${((rect.y - bounds.y) / bounds.h) * 100}%`,
@@ -2490,6 +2641,15 @@ export function PdfReaderScreen({
                                   }}
                                 />
                               ))}
+                              {highlight.note ? (
+                                <div
+                                  className="absolute h-2.5 w-2.5 rounded-full border border-amber-700 bg-amber-500 shadow-sm"
+                                  style={{
+                                    right: '-2px',
+                                    top: '-2px'
+                                  }}
+                                />
+                              ) : null}
                             </div>
                           );
                         })}
@@ -2528,6 +2688,126 @@ export function PdfReaderScreen({
                             >
                               Cancel
                             </button>
+                          </div>
+                        ) : null}
+                        {highlightNotePrompt ? (
+                          <div
+                            data-highlight-note-popover="true"
+                            className="pointer-events-auto absolute z-20 w-[180px] rounded-md border p-2 shadow-lg"
+                            style={{
+                              left: `${highlightNotePrompt.x}px`,
+                              top: `${highlightNotePrompt.y}px`,
+                              backgroundColor: readerPalette.panelBg,
+                              borderColor: readerPalette.chromeBorder,
+                              color: readerPalette.chromeText
+                            }}
+                          >
+                            <p className="text-xs" style={{ color: readerPalette.mutedText }}>
+                              Highlight saved
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="mt-2 w-full"
+                              style={getReaderButtonStyles(settings.theme)}
+                              onClick={() => {
+                                const targetHighlight = pageHighlights.find(
+                                  (item) => item.id === highlightNotePrompt.highlightId
+                                );
+                                if (!targetHighlight) {
+                                  setHighlightNotePrompt(null);
+                                  return;
+                                }
+                                openHighlightNoteEditor(targetHighlight, highlightNotePrompt.x, highlightNotePrompt.y + 6);
+                              }}
+                            >
+                              Add note
+                            </Button>
+                            <button
+                              type="button"
+                              className="mt-2 block w-full rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                              onClick={() => setHighlightNotePrompt(null)}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        ) : null}
+                        {highlightNoteEditor ? (
+                          <div
+                            data-highlight-note-popover="true"
+                            className="pointer-events-auto absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
+                            style={{
+                              left: `${highlightNoteEditor.x}px`,
+                              top: `${highlightNoteEditor.y}px`,
+                              backgroundColor: readerPalette.panelBg,
+                              borderColor: readerPalette.chromeBorder,
+                              color: readerPalette.chromeText
+                            }}
+                          >
+                            {(() => {
+                              const activeHighlight =
+                                pageHighlights.find((item) => item.id === highlightNoteEditor.highlightId) ?? null;
+                              if (!activeHighlight) {
+                                return (
+                                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>
+                                    Highlight not found.
+                                  </p>
+                                );
+                              }
+
+                              return (
+                                <>
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: readerPalette.mutedText }}>
+                                    Highlight
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: readerPalette.chromeText }}>
+                                    {activeHighlight.text ?? '(highlight without text)'}
+                                  </p>
+                                  <textarea
+                                    value={highlightNoteEditor.draftNote}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setHighlightNoteEditor((prev) =>
+                                        prev ? { ...prev, draftNote: value, error: null } : prev
+                                      );
+                                    }}
+                                    rows={5}
+                                    placeholder="Add a note to this highlight..."
+                                    className="mt-3 w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                    style={{
+                                      backgroundColor: readerPalette.inputBg,
+                                      borderColor: readerPalette.buttonBorder,
+                                      color: readerPalette.inputText
+                                    }}
+                                  />
+                                  {highlightNoteEditor.error ? (
+                                    <p className="mt-2 text-xs text-destructive">{highlightNoteEditor.error}</p>
+                                  ) : null}
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      style={getReaderButtonStyles(settings.theme)}
+                                      disabled={highlightNoteEditor.saving}
+                                      onClick={() => {
+                                        void saveHighlightNote();
+                                      }}
+                                    >
+                                      Save
+                                    </Button>
+                                    <button
+                                      type="button"
+                                      className="rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                                      onClick={() => setHighlightNoteEditor(null)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                         ) : null}
                       </div>

@@ -21,6 +21,7 @@ type HighlightRow = {
   page: number;
   rects: string;
   text: string | null;
+  note: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -56,6 +57,14 @@ function normalizeHighlightText(value: string | null | undefined): string | null
     return null;
   }
   const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeHighlightNote(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
 }
 
@@ -105,6 +114,7 @@ function toHighlight(row: HighlightRow): Highlight | null {
     page: row.page,
     rects,
     text: normalizeHighlightText(row.text),
+    note: normalizeHighlightNote(row.note),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -138,7 +148,9 @@ export class ReaderProgressDb {
   private deleteNoteStmt: Database.Statement<[string, string]>;
   private updateNoteStmt: Database.Statement<[string, number, string, string]>;
   private getNoteStmt: Database.Statement<[string, string], NoteRow | undefined>;
-  private insertHighlightStmt: Database.Statement<[string, string, string, number, string, string | null, number, number]>;
+  private insertHighlightStmt: Database.Statement<[string, string, string, number, string, string | null, string | null, number, number]>;
+  private updateHighlightNoteStmt: Database.Statement<[string | null, number, string, string]>;
+  private getHighlightStmt: Database.Statement<[string, string], HighlightRow | undefined>;
   private deleteHighlightsByIdsStmt: Database.Statement;
   private deleteHighlightStmt: Database.Statement<[string, string]>;
   private listHighlightsStmt: Database.Statement<[string, string, number], HighlightRow>;
@@ -164,6 +176,9 @@ export class ReaderProgressDb {
     }
     if (!columns.has('text')) {
       this.db.exec('ALTER TABLE highlights ADD COLUMN text TEXT');
+    }
+    if (!columns.has('note')) {
+      this.db.exec('ALTER TABLE highlights ADD COLUMN note TEXT');
     }
 
     this.db.exec(`
@@ -224,6 +239,7 @@ export class ReaderProgressDb {
         page INTEGER NOT NULL,
         rects TEXT NOT NULL,
         text TEXT,
+        note TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -282,8 +298,19 @@ export class ReaderProgressDb {
        LIMIT 1`
     );
     this.insertHighlightStmt = this.db.prepare(
-      `INSERT INTO highlights (id, user_id, book_id, page, rects, text, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO highlights (id, user_id, book_id, page, rects, text, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    this.updateHighlightNoteStmt = this.db.prepare(
+      `UPDATE highlights
+       SET note = ?, updated_at = ?
+       WHERE user_id = ? AND id = ?`
+    );
+    this.getHighlightStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND id = ?
+       LIMIT 1`
     );
     this.deleteHighlightsByIdsStmt = this.db.prepare(
       `DELETE FROM highlights
@@ -292,7 +319,7 @@ export class ReaderProgressDb {
     );
     this.deleteHighlightStmt = this.db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?');
     this.listHighlightsStmt = this.db.prepare(
-      `SELECT id, user_id, book_id, page, rects, text, created_at, updated_at
+      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`
@@ -304,7 +331,7 @@ export class ReaderProgressDb {
        ORDER BY page ASC, created_at ASC`
     );
     this.listHighlightsByBookStmt = this.db.prepare(
-      `SELECT id, user_id, book_id, page, rects, text, created_at, updated_at
+      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ?
        ORDER BY page ASC, created_at ASC`
@@ -464,6 +491,7 @@ export class ReaderProgressDb {
     page: number,
     rects: HighlightRect[],
     text: string | null,
+    note: string | null,
     id: string,
     createdAt: number,
     updatedAt: number
@@ -483,6 +511,7 @@ export class ReaderProgressDb {
       safePage,
       JSON.stringify(rects),
       normalizeHighlightText(text),
+      normalizeHighlightNote(note),
       Math.floor(createdAt),
       Math.floor(updatedAt)
     );
@@ -492,9 +521,27 @@ export class ReaderProgressDb {
       page: safePage,
       rects,
       text: normalizeHighlightText(text),
+      note: normalizeHighlightNote(note),
       createdAt: Math.floor(createdAt),
       updatedAt: Math.floor(updatedAt)
     };
+  }
+
+  updateHighlightNote(userId: string, highlightId: string, note: string | null): Highlight | null {
+    const safeUserId = asNonEmptyString(userId);
+    const safeHighlightId = asNonEmptyString(highlightId);
+    if (!safeUserId || !safeHighlightId) {
+      return null;
+    }
+
+    const now = Date.now();
+    const result = this.updateHighlightNoteStmt.run(normalizeHighlightNote(note), now, safeUserId, safeHighlightId);
+    if (result.changes === 0) {
+      return null;
+    }
+
+    const row = this.getHighlightStmt.get(safeUserId, safeHighlightId);
+    return row ? toHighlight(row) : null;
   }
 
   listHighlights(userId: string, bookId: string, page: number): Highlight[] {
@@ -544,6 +591,7 @@ export class ReaderProgressDb {
     page: number,
     rects: HighlightRect[],
     text: string | null,
+    note: string | null,
     id: string,
     createdAt: number,
     updatedAt: number,
@@ -551,7 +599,7 @@ export class ReaderProgressDb {
   ): Highlight | null {
     const run = this.db.transaction(() => {
       this.deleteHighlights(userId, removeIds);
-      return this.insertHighlight(userId, bookId, page, rects, text, id, createdAt, updatedAt);
+      return this.insertHighlight(userId, bookId, page, rects, text, note, id, createdAt, updatedAt);
     });
     return run();
   }

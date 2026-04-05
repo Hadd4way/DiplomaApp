@@ -82,6 +82,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsCreateMerged, (_event, payload) => (0, highlights_1.createMergedHighlight)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsDelete, (_event, payload) => (0, highlights_1.deleteHighlight)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsInsertRaw, (_event, payload) => (0, highlights_1.insertRawHighlight)(db, progressDb, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.highlightsUpdateNote, (_event, payload) => (0, highlights_1.updateHighlightNote)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksList, (_event, payload) => (0, bookmarks_1.listBookmarks)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksToggle, (_event, payload) => (0, bookmarks_1.toggleBookmark)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.bookmarksRemove, (_event, payload) => (0, bookmarks_1.removeBookmark)(db, progressDb, libraryId, payload));

@@ -23,7 +23,8 @@ const api = {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsList, payload),
         createMerged: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsCreateMerged, payload),
         delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsDelete, payload),
-        insertRaw: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsInsertRaw, payload)
+        insertRaw: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsInsertRaw, payload),
+        updateNote: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.highlightsUpdateNote, payload)
     },
     bookmarks: {
         list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksList, payload),

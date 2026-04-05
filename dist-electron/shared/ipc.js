@@ -18,6 +18,7 @@ exports.IPC_CHANNELS = {
     highlightsCreateMerged: 'highlights:create-merged',
     highlightsDelete: 'highlights:delete',
     highlightsInsertRaw: 'highlights:insert-raw',
+    highlightsUpdateNote: 'highlights:update-note',
     bookmarksList: 'bookmarks:list',
     bookmarksToggle: 'bookmarks:toggle',
     bookmarksRemove: 'bookmarks:remove',

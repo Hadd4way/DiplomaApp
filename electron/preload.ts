@@ -22,7 +22,8 @@ const api: RendererApi = {
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsList, payload),
     createMerged: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsCreateMerged, payload),
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsDelete, payload),
-    insertRaw: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsInsertRaw, payload)
+    insertRaw: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsInsertRaw, payload),
+    updateNote: (payload) => ipcRenderer.invoke(IPC_CHANNELS.highlightsUpdateNote, payload)
   },
   bookmarks: {
     list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksList, payload),

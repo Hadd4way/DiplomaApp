@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   highlightsCreateMerged: 'highlights:create-merged',
   highlightsDelete: 'highlights:delete',
   highlightsInsertRaw: 'highlights:insert-raw',
+  highlightsUpdateNote: 'highlights:update-note',
   bookmarksList: 'bookmarks:list',
   bookmarksToggle: 'bookmarks:toggle',
   bookmarksRemove: 'bookmarks:remove',
@@ -73,6 +74,7 @@ export type Highlight = {
   page: number;
   rects: HighlightRect[];
   text: string | null;
+  note: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -127,6 +129,7 @@ export type HighlightsListResult = { ok: true; highlights: Highlight[] } | Error
 export type HighlightsCreateMergedResult = { ok: true; highlight: Highlight } | ErrorResult;
 export type HighlightsDeleteResult = { ok: true } | ErrorResult;
 export type HighlightsInsertRawResult = { ok: true; highlight: Highlight } | ErrorResult;
+export type HighlightsUpdateNoteResult = { ok: true; highlight: Highlight } | ErrorResult;
 export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | ErrorResult;
 export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | ErrorResult;
 export type BookmarksRemoveResult = { ok: true } | ErrorResult;
@@ -208,6 +211,12 @@ export type HighlightsInsertRawRequest = {
   page: number;
   rects: HighlightRect[];
   text: string | null;
+  note?: string | null;
+};
+
+export type HighlightsUpdateNoteRequest = {
+  highlightId: string;
+  note: string | null;
 };
 
 export type BookmarksListRequest = {
@@ -288,6 +297,7 @@ export interface RendererHighlightsApi {
   createMerged: (payload: HighlightsCreateMergedRequest) => Promise<HighlightsCreateMergedResult>;
   delete: (payload: HighlightsDeleteRequest) => Promise<HighlightsDeleteResult>;
   insertRaw: (payload: HighlightsInsertRawRequest) => Promise<HighlightsInsertRawResult>;
+  updateNote: (payload: HighlightsUpdateNoteRequest) => Promise<HighlightsUpdateNoteResult>;
 }
 
 export interface RendererBookmarksApi {

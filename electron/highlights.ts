@@ -10,7 +10,9 @@ import type {
   HighlightsInsertRawRequest,
   HighlightsInsertRawResult,
   HighlightsListRequest,
-  HighlightsListResult
+  HighlightsListResult,
+  HighlightsUpdateNoteRequest,
+  HighlightsUpdateNoteResult
 } from '../shared/ipc';
 import type { ReaderProgressDb } from './reader-progress-db';
 
@@ -188,6 +190,31 @@ export function listHighlights(
   return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
 
+function normalizeHighlightNote(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function mergeHighlightNotes(values: Array<string | null | undefined>): string | null {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const value of values) {
+    const normalized = normalizeHighlightNote(value);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    merged.push(normalized);
+  }
+  if (merged.length === 0) {
+    return null;
+  }
+  return merged.join('\n\n');
+}
+
 export function createMergedHighlight(
   authDb: Database.Database,
   readerDb: ReaderProgressDb,
@@ -220,12 +247,14 @@ export function createMergedHighlight(
   const overlapIds: string[] = [];
   const allRectsToMerge: HighlightRect[] = [...incoming];
   const textParts: Array<string | null | undefined> = [payload.text];
+  const noteParts: Array<string | null | undefined> = [];
 
   for (const highlight of existing) {
     if (anyOverlap(incoming, highlight.rects)) {
       overlapIds.push(highlight.id);
       allRectsToMerge.push(...highlight.rects);
       textParts.push(highlight.text);
+      noteParts.push(highlight.note);
     }
   }
 
@@ -236,12 +265,14 @@ export function createMergedHighlight(
 
   const now = Date.now();
   const mergedText = mergeHighlightTexts(textParts);
+  const mergedNote = mergeHighlightNotes(noteParts);
   const created = readerDb.createMergedHighlight(
     userId,
     bookId,
     page,
     finalRects,
     mergedText,
+    mergedNote,
     randomUUID(),
     now,
     now,
@@ -309,6 +340,7 @@ export function insertRawHighlight(
     page,
     rects,
     normalizeHighlightText(payload.text),
+    normalizeHighlightNote(payload.note),
     randomUUID(),
     now,
     now
@@ -318,4 +350,23 @@ export function insertRawHighlight(
   }
 
   return { ok: true, highlight: created as Highlight };
+}
+
+export function updateHighlightNote(
+  authDb: Database.Database,
+  readerDb: ReaderProgressDb,
+  userId: string,
+  payload: HighlightsUpdateNoteRequest
+): HighlightsUpdateNoteResult {
+  const highlightId = payload.highlightId?.trim();
+  if (!highlightId) {
+    return { ok: false, error: 'Highlight not found' };
+  }
+
+  const updated = readerDb.updateHighlightNote(userId, highlightId, normalizeHighlightNote(payload.note));
+  if (!updated) {
+    return { ok: false, error: 'Highlight not found' };
+  }
+
+  return { ok: true, highlight: updated };
 }

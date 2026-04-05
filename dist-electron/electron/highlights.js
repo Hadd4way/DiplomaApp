@@ -4,6 +4,7 @@ exports.listHighlights = listHighlights;
 exports.createMergedHighlight = createMergedHighlight;
 exports.deleteHighlight = deleteHighlight;
 exports.insertRawHighlight = insertRawHighlight;
+exports.updateHighlightNote = updateHighlightNote;
 const node_crypto_1 = require("node:crypto");
 const EPSILON = 0.002;
 const LINE_EPSILON = 0.01;
@@ -159,6 +160,29 @@ function listHighlights(authDb, readerDb, userId, payload) {
     }
     return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
 }
+function normalizeHighlightNote(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+}
+function mergeHighlightNotes(values) {
+    const seen = new Set();
+    const merged = [];
+    for (const value of values) {
+        const normalized = normalizeHighlightNote(value);
+        if (!normalized || seen.has(normalized)) {
+            continue;
+        }
+        seen.add(normalized);
+        merged.push(normalized);
+    }
+    if (merged.length === 0) {
+        return null;
+    }
+    return merged.join('\n\n');
+}
 function createMergedHighlight(authDb, readerDb, userId, payload) {
     const bookId = payload.bookId?.trim();
     if (!bookId) {
@@ -182,11 +206,13 @@ function createMergedHighlight(authDb, readerDb, userId, payload) {
     const overlapIds = [];
     const allRectsToMerge = [...incoming];
     const textParts = [payload.text];
+    const noteParts = [];
     for (const highlight of existing) {
         if (anyOverlap(incoming, highlight.rects)) {
             overlapIds.push(highlight.id);
             allRectsToMerge.push(...highlight.rects);
             textParts.push(highlight.text);
+            noteParts.push(highlight.note);
         }
     }
     const finalRects = mergeRectsByLine(allRectsToMerge);
@@ -195,7 +221,8 @@ function createMergedHighlight(authDb, readerDb, userId, payload) {
     }
     const now = Date.now();
     const mergedText = mergeHighlightTexts(textParts);
-    const created = readerDb.createMergedHighlight(userId, bookId, page, finalRects, mergedText, (0, node_crypto_1.randomUUID)(), now, now, overlapIds);
+    const mergedNote = mergeHighlightNotes(noteParts);
+    const created = readerDb.createMergedHighlight(userId, bookId, page, finalRects, mergedText, mergedNote, (0, node_crypto_1.randomUUID)(), now, now, overlapIds);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }
@@ -234,9 +261,20 @@ function insertRawHighlight(authDb, readerDb, userId, payload) {
         return { ok: false, error: 'Book not found' };
     }
     const now = Date.now();
-    const created = readerDb.insertHighlight(userId, bookId, page, rects, normalizeHighlightText(payload.text), (0, node_crypto_1.randomUUID)(), now, now);
+    const created = readerDb.insertHighlight(userId, bookId, page, rects, normalizeHighlightText(payload.text), normalizeHighlightNote(payload.note), (0, node_crypto_1.randomUUID)(), now, now);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }
     return { ok: true, highlight: created };
+}
+function updateHighlightNote(authDb, readerDb, userId, payload) {
+    const highlightId = payload.highlightId?.trim();
+    if (!highlightId) {
+        return { ok: false, error: 'Highlight not found' };
+    }
+    const updated = readerDb.updateHighlightNote(userId, highlightId, normalizeHighlightNote(payload.note));
+    if (!updated) {
+        return { ok: false, error: 'Highlight not found' };
+    }
+    return { ok: true, highlight: updated };
 }

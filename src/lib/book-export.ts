@@ -39,7 +39,11 @@ export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlig
       const pageHighlights = highlightsByPage.get(page) ?? [];
       for (const highlight of pageHighlights) {
         const text = normalizeText(highlight.text);
+        const note = normalizeText(highlight.note);
         lines.push(`> ${text || '(highlight without text)'}`);
+        if (note) {
+          lines.push(`Note: ${note}`);
+        }
         lines.push('');
       }
     }
@@ -72,6 +76,7 @@ export function toJSON(book: Book, notes: Note[], highlights: Highlight[]): stri
       highlights: highlights.map((highlight) => ({
         page: highlight.page,
         text: highlight.text,
+        note: highlight.note,
         rects: highlight.rects,
         createdAt: highlight.createdAt
       })),

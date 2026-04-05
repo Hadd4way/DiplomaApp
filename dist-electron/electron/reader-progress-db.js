@@ -30,6 +30,13 @@ function normalizeHighlightText(value) {
     const normalized = value.replace(/\s+/g, ' ').trim();
     return normalized.length > 0 ? normalized : null;
 }
+function normalizeHighlightNote(value) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const normalized = value.trim();
+    return normalized.length > 0 ? normalized : null;
+}
 function toNote(row) {
     return {
         id: row.id,
@@ -74,6 +81,7 @@ function toHighlight(row) {
         page: row.page,
         rects,
         text: normalizeHighlightText(row.text),
+        note: normalizeHighlightNote(row.note),
         createdAt: row.created_at,
         updatedAt: row.updated_at
     };
@@ -107,6 +115,9 @@ class ReaderProgressDb {
         }
         if (!columns.has('text')) {
             this.db.exec('ALTER TABLE highlights ADD COLUMN text TEXT');
+        }
+        if (!columns.has('note')) {
+            this.db.exec('ALTER TABLE highlights ADD COLUMN note TEXT');
         }
         this.db.exec(`
       UPDATE highlights
@@ -165,6 +176,7 @@ class ReaderProgressDb {
         page INTEGER NOT NULL,
         rects TEXT NOT NULL,
         text TEXT,
+        note TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
@@ -211,13 +223,20 @@ class ReaderProgressDb {
        FROM notes
        WHERE user_id = ? AND id = ?
        LIMIT 1`);
-        this.insertHighlightStmt = this.db.prepare(`INSERT INTO highlights (id, user_id, book_id, page, rects, text, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+        this.insertHighlightStmt = this.db.prepare(`INSERT INTO highlights (id, user_id, book_id, page, rects, text, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+        this.updateHighlightNoteStmt = this.db.prepare(`UPDATE highlights
+       SET note = ?, updated_at = ?
+       WHERE user_id = ? AND id = ?`);
+        this.getHighlightStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
+       FROM highlights
+       WHERE user_id = ? AND id = ?
+       LIMIT 1`);
         this.deleteHighlightsByIdsStmt = this.db.prepare(`DELETE FROM highlights
        WHERE user_id = @user_id
          AND id IN (SELECT value FROM json_each(@ids_json))`);
         this.deleteHighlightStmt = this.db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?');
-        this.listHighlightsStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, text, created_at, updated_at
+        this.listHighlightsStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`);
@@ -225,7 +244,7 @@ class ReaderProgressDb {
        FROM notes
        WHERE user_id = ? AND book_id = ?
        ORDER BY page ASC, created_at ASC`);
-        this.listHighlightsByBookStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, text, created_at, updated_at
+        this.listHighlightsByBookStmt = this.db.prepare(`SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ?
        ORDER BY page ASC, created_at ASC`);
@@ -350,7 +369,7 @@ class ReaderProgressDb {
         const row = this.getNoteStmt.get(safeUserId, safeNoteId);
         return row ? toNote(row) : null;
     }
-    insertHighlight(userId, bookId, page, rects, text, id, createdAt, updatedAt) {
+    insertHighlight(userId, bookId, page, rects, text, note, id, createdAt, updatedAt) {
         const safeUserId = asNonEmptyString(userId);
         const safeBookId = asNonEmptyString(bookId);
         const safeId = asNonEmptyString(id);
@@ -358,16 +377,31 @@ class ReaderProgressDb {
         if (!safeUserId || !safeBookId || !safeId || !safePage || rects.length === 0) {
             return null;
         }
-        this.insertHighlightStmt.run(safeId, safeUserId, safeBookId, safePage, JSON.stringify(rects), normalizeHighlightText(text), Math.floor(createdAt), Math.floor(updatedAt));
+        this.insertHighlightStmt.run(safeId, safeUserId, safeBookId, safePage, JSON.stringify(rects), normalizeHighlightText(text), normalizeHighlightNote(note), Math.floor(createdAt), Math.floor(updatedAt));
         return {
             id: safeId,
             bookId: safeBookId,
             page: safePage,
             rects,
             text: normalizeHighlightText(text),
+            note: normalizeHighlightNote(note),
             createdAt: Math.floor(createdAt),
             updatedAt: Math.floor(updatedAt)
         };
+    }
+    updateHighlightNote(userId, highlightId, note) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeHighlightId = asNonEmptyString(highlightId);
+        if (!safeUserId || !safeHighlightId) {
+            return null;
+        }
+        const now = Date.now();
+        const result = this.updateHighlightNoteStmt.run(normalizeHighlightNote(note), now, safeUserId, safeHighlightId);
+        if (result.changes === 0) {
+            return null;
+        }
+        const row = this.getHighlightStmt.get(safeUserId, safeHighlightId);
+        return row ? toHighlight(row) : null;
     }
     listHighlights(userId, bookId, page) {
         const safeUserId = asNonEmptyString(userId);
@@ -406,10 +440,10 @@ class ReaderProgressDb {
         const result = this.deleteHighlightStmt.run(safeHighlightId, safeUserId);
         return result.changes > 0;
     }
-    createMergedHighlight(userId, bookId, page, rects, text, id, createdAt, updatedAt, removeIds) {
+    createMergedHighlight(userId, bookId, page, rects, text, note, id, createdAt, updatedAt, removeIds) {
         const run = this.db.transaction(() => {
             this.deleteHighlights(userId, removeIds);
-            return this.insertHighlight(userId, bookId, page, rects, text, id, createdAt, updatedAt);
+            return this.insertHighlight(userId, bookId, page, rects, text, note, id, createdAt, updatedAt);
         });
         return run();
     }
