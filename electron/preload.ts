@@ -30,6 +30,10 @@ const api: RendererApi = {
     toggle: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksToggle, payload),
     remove: (payload) => ipcRenderer.invoke(IPC_CHANNELS.bookmarksRemove, payload)
   },
+  epubBookmarks: {
+    list: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubBookmarksList, payload),
+    toggle: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubBookmarksToggle, payload)
+  },
   export: {
     getBookData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportGetBookData, payload),
     saveFile: (payload) => ipcRenderer.invoke(IPC_CHANNELS.exportSaveFile, payload)

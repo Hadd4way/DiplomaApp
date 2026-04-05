@@ -19,6 +19,8 @@ export const IPC_CHANNELS = {
   bookmarksList: 'bookmarks:list',
   bookmarksToggle: 'bookmarks:toggle',
   bookmarksRemove: 'bookmarks:remove',
+  epubBookmarksList: 'epub-bookmarks:list',
+  epubBookmarksToggle: 'epub-bookmarks:toggle',
   exportGetBookData: 'export:get-book-data',
   exportSaveFile: 'export:save-file',
   epubProgressGet: 'epub-progress:get',
@@ -87,6 +89,14 @@ export type Bookmark = {
   createdAt: number;
 };
 
+export type EpubBookmark = {
+  id: string;
+  bookId: string;
+  cfi: string;
+  label: string | null;
+  createdAt: number;
+};
+
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
 
 export type ReaderSettings = {
@@ -134,6 +144,10 @@ export type HighlightsUpdateNoteResult = { ok: true; highlight: Highlight } | Er
 export type BookmarksListResult = { ok: true; bookmarks: Bookmark[] } | ErrorResult;
 export type BookmarksToggleResult = { ok: true; bookmarked: boolean } | ErrorResult;
 export type BookmarksRemoveResult = { ok: true } | ErrorResult;
+export type EpubBookmarksListResult = { ok: true; bookmarks: EpubBookmark[] } | ErrorResult;
+export type EpubBookmarksToggleResult =
+  | { ok: true; bookmarked: boolean; bookmark?: EpubBookmark }
+  | ErrorResult;
 export type ExportGetBookDataResult =
   | {
       ok: true;
@@ -235,6 +249,16 @@ export type BookmarksRemoveRequest = {
   page: number;
 };
 
+export type EpubBookmarksListRequest = {
+  bookId: string;
+};
+
+export type EpubBookmarksToggleRequest = {
+  bookId: string;
+  cfi: string;
+  label: string | null;
+};
+
 export type ExportGetBookDataRequest = {
   bookId: string;
 };
@@ -308,6 +332,11 @@ export interface RendererBookmarksApi {
   remove: (payload: BookmarksRemoveRequest) => Promise<BookmarksRemoveResult>;
 }
 
+export interface RendererEpubBookmarksApi {
+  list: (payload: EpubBookmarksListRequest) => Promise<EpubBookmarksListResult>;
+  toggle: (payload: EpubBookmarksToggleRequest) => Promise<EpubBookmarksToggleResult>;
+}
+
 export interface RendererExportApi {
   getBookData: (payload: ExportGetBookDataRequest) => Promise<ExportGetBookDataResult>;
   saveFile: (payload: ExportSaveFileRequest) => Promise<ExportSaveFileResult>;
@@ -334,6 +363,7 @@ export interface RendererApi {
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;
   bookmarks: RendererBookmarksApi;
+  epubBookmarks: RendererEpubBookmarksApi;
   export: RendererExportApi;
   epubProgress: RendererEpubProgressApi;
   readerSettings: RendererReaderSettingsApi;

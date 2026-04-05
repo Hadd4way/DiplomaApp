@@ -31,6 +31,10 @@ const api = {
         toggle: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksToggle, payload),
         remove: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.bookmarksRemove, payload)
     },
+    epubBookmarks: {
+        list: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubBookmarksList, payload),
+        toggle: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubBookmarksToggle, payload)
+    },
     export: {
         getBookData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.exportGetBookData, payload),
         saveFile: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.exportSaveFile, payload)

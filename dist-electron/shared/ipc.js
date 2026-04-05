@@ -22,6 +22,8 @@ exports.IPC_CHANNELS = {
     bookmarksList: 'bookmarks:list',
     bookmarksToggle: 'bookmarks:toggle',
     bookmarksRemove: 'bookmarks:remove',
+    epubBookmarksList: 'epub-bookmarks:list',
+    epubBookmarksToggle: 'epub-bookmarks:toggle',
     exportGetBookData: 'export:get-book-data',
     exportSaveFile: 'export:save-file',
     epubProgressGet: 'epub-progress:get',

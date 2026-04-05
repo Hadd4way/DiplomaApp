@@ -6,12 +6,15 @@ import {
   Download,
   Highlighter,
   ListTree,
+  Star,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
+  Trash2,
   SlidersHorizontal
 } from 'lucide-react';
 import { ReaderShell } from '@/components/reader/ReaderShell';
+import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
@@ -22,7 +25,7 @@ import {
 } from '@/lib/reader-theme';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
-import type { Highlight } from '../../shared/ipc';
+import type { EpubBookmark, Highlight } from '../../shared/ipc';
 
 type TocItem = {
   id?: string;
@@ -102,6 +105,69 @@ function normalizeHighlightNote(value: string | null | undefined): string | null
   }
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tagName = target.tagName;
+  return tagName === 'INPUT' || tagName === 'TEXTAREA' || target.isContentEditable;
+}
+
+function normalizeHrefForMatch(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const withoutHash = trimmed.split('#')[0]?.trim() ?? '';
+  return withoutHash || trimmed;
+}
+
+function findTocLabelByHref(items: TocItem[], href: string | null): string | null {
+  const safeHref = normalizeHrefForMatch(href);
+  if (!safeHref) {
+    return null;
+  }
+  for (const item of items) {
+    const itemHref = normalizeHrefForMatch(item.href);
+    if (itemHref && (itemHref === safeHref || safeHref.startsWith(itemHref) || itemHref.startsWith(safeHref))) {
+      const label = item.label?.trim();
+      return label || 'Location';
+    }
+    const nested = findTocLabelByHref(item.subitems ?? [], safeHref);
+    if (nested) {
+      return nested;
+    }
+  }
+  return null;
+}
+
+function toComparableCfi(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isMatchingBookmarkCfi(currentCfi: string | null, savedCfi: string | null): boolean {
+  const current = toComparableCfi(currentCfi);
+  const saved = toComparableCfi(savedCfi);
+  if (!current || !saved) {
+    return false;
+  }
+  return current === saved || current.startsWith(saved) || saved.startsWith(current);
+}
+
+function formatTimestamp(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+  return new Date(value).toLocaleString();
 }
 
 const EPUB_SETTINGS_STYLE_ID = 'reader-settings-style';
@@ -248,19 +314,36 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const bookRef = React.useRef<any>(null);
   const renditionRef = React.useRef<any>(null);
   const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
+  const iframeBookmarkCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCfiRef = React.useRef<string | null>(null);
+  const toggleCurrentBookmarkRef = React.useRef<() => Promise<void>>(async () => {});
   const epubHighlightsRef = React.useRef<Highlight[]>([]);
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
+  const [currentCfi, setCurrentCfi] = React.useState<string | null>(null);
+  const [currentHref, setCurrentHref] = React.useState<string | null>(null);
+  const [epubBookmarks, setEpubBookmarks] = React.useState<EpubBookmark[]>([]);
+  const [bookmarksLoading, setBookmarksLoading] = React.useState(false);
+  const [bookmarksError, setBookmarksError] = React.useState<string | null>(null);
   const [epubHighlights, setEpubHighlights] = React.useState<Highlight[]>([]);
   const [highlightPrompt, setHighlightPrompt] = React.useState<EpubHighlightPromptState>(null);
   const [highlightEditor, setHighlightEditor] = React.useState<EpubHighlightEditorState>(null);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const currentBookmarkLabel = React.useMemo(
+    () => findTocLabelByHref(tocItems, currentHref) ?? 'Location',
+    [currentHref, tocItems]
+  );
+  const activeBookmark = React.useMemo(
+    () => epubBookmarks.find((bookmark) => isMatchingBookmarkCfi(currentCfi, bookmark.cfi)) ?? null,
+    [currentCfi, epubBookmarks]
+  );
+  const isCurrentLocationBookmarked = activeBookmark !== null;
   const { registerActivity, bindActivityTarget, flush: flushReadingStats } = useReadingSessionStats({
     bookId,
     format: 'epub',
@@ -390,6 +473,107 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       setEpubHighlights([]);
     }
   }, [bookId, renderHighlights]);
+
+  const loadBookmarks = React.useCallback(async () => {
+    if (!window.api?.epubBookmarks) {
+      setEpubBookmarks([]);
+      setBookmarksError('Bookmarks API is unavailable. Restart the app to reload Electron preload.');
+      return;
+    }
+
+    setBookmarksLoading(true);
+    setBookmarksError(null);
+    try {
+      const result = await window.api.epubBookmarks.list({ bookId });
+      if (!result.ok) {
+        setBookmarksError(result.error);
+        setEpubBookmarks([]);
+        return;
+      }
+      setEpubBookmarks(result.bookmarks);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setBookmarksError(message);
+      setEpubBookmarks([]);
+    } finally {
+      setBookmarksLoading(false);
+    }
+  }, [bookId]);
+
+  const toggleCurrentBookmark = React.useCallback(async () => {
+    if (!window.api?.epubBookmarks) {
+      setBookmarksError('Bookmarks API is unavailable. Restart the app to reload Electron preload.');
+      return;
+    }
+
+    const safeCfi = toComparableCfi(currentCfi);
+    if (!safeCfi) {
+      setBookmarksError('Current EPUB location is unavailable.');
+      return;
+    }
+
+    setBookmarksError(null);
+    try {
+      const result = await window.api.epubBookmarks.toggle({
+        bookId,
+        cfi: safeCfi,
+        label: currentBookmarkLabel
+      });
+      if (!result.ok) {
+        setBookmarksError(result.error);
+        return;
+      }
+      setEpubBookmarks((prev) => {
+        const withoutMatches = prev.filter((bookmark) => !isMatchingBookmarkCfi(bookmark.cfi, safeCfi));
+        if (!result.bookmarked || !result.bookmark) {
+          return withoutMatches;
+        }
+        return [...withoutMatches, result.bookmark].sort((a, b) => a.createdAt - b.createdAt);
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setBookmarksError(message);
+    }
+  }, [bookId, currentBookmarkLabel, currentCfi]);
+
+  React.useEffect(() => {
+    toggleCurrentBookmarkRef.current = toggleCurrentBookmark;
+  }, [toggleCurrentBookmark]);
+
+  const bindIframeBookmarkHotkeys = React.useCallback(() => {
+    for (const cleanup of iframeBookmarkCleanupRef.current.values()) {
+      cleanup();
+    }
+    iframeBookmarkCleanupRef.current.clear();
+
+    const container = readerContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const frames = Array.from(container.querySelectorAll('iframe'));
+    for (const frame of frames) {
+      if (!(frame instanceof HTMLIFrameElement) || !frame.contentDocument) {
+        continue;
+      }
+      const documentNode = frame.contentDocument;
+      const handleKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== 'b' && event.key !== 'B') {
+          return;
+        }
+        if (isTypingTarget(event.target)) {
+          return;
+        }
+        event.preventDefault();
+        registerActivity();
+        void toggleCurrentBookmarkRef.current();
+      };
+      documentNode.addEventListener('keydown', handleKeyDown);
+      iframeBookmarkCleanupRef.current.set(frame, () => {
+        documentNode.removeEventListener('keydown', handleKeyDown);
+      });
+    }
+  }, [registerActivity]);
 
   const bindIframeActivity = React.useCallback(() => {
     for (const cleanup of iframeActivityCleanupRef.current.values()) {
@@ -539,7 +723,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     }
     renderHighlights(epubHighlights);
     bindIframeActivity();
-  }, [bindIframeActivity, epubHighlights, renderHighlights, settings]);
+    bindIframeBookmarkHotkeys();
+  }, [bindIframeActivity, bindIframeBookmarkHotkeys, epubHighlights, renderHighlights, settings]);
 
   React.useEffect(() => {
     const container = readerContainerRef.current;
@@ -557,6 +742,10 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     setReady(false);
     setError(null);
     setTocItems([]);
+    setEpubBookmarks([]);
+    setBookmarksError(null);
+    setCurrentCfi(null);
+    setCurrentHref(null);
     setEpubHighlights([]);
     setHighlightPrompt(null);
     setHighlightEditor(null);
@@ -641,6 +830,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                 elapsed: elapsed()
               });
               latestCfiRef.current = cfi;
+              setCurrentCfi(cfi);
+              setCurrentHref(location?.start && 'href' in location.start ? String((location.start as { href?: string }).href ?? '') : null);
               if (saveTimerRef.current) {
                 clearTimeout(saveTimerRef.current);
               }
@@ -664,6 +855,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
               }
               renderHighlights(epubHighlightsRef.current);
               bindIframeActivity();
+              bindIframeBookmarkHotkeys();
             };
             const onSelected = (selectedCfiRange: string, contents: { document: Document; window: Window }) => {
               registerActivity();
@@ -734,6 +926,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             }
 
             await loadHighlights();
+            await loadBookmarks();
 
             if (!canceled) {
               setReady(true);
@@ -798,23 +991,17 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         cleanup();
       }
       iframeActivityCleanupRef.current.clear();
+      for (const cleanup of iframeBookmarkCleanupRef.current.values()) {
+        cleanup();
+      }
+      iframeBookmarkCleanupRef.current.clear();
       flushReadingStats();
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
       renditionRef.current = null;
       bookRef.current = null;
     };
-  }, [
-    bindIframeActivity,
-    bookId,
-    createHighlightFromSelection,
-    flushReadingStats,
-    loadHighlights,
-    persistCfi,
-    registerActivity,
-    renderHighlights,
-    settings
-  ]);
+  }, [bindIframeActivity, bindIframeBookmarkHotkeys, bookId, createHighlightFromSelection, flushReadingStats, loadBookmarks, loadHighlights, persistCfi, registerActivity, renderHighlights, settings]);
 
   React.useEffect(() => {
     const closeOnPointerDown = (event: PointerEvent) => {
@@ -844,6 +1031,29 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, []);
+
+  React.useEffect(() => {
+    setBookmarksPanelOpen(false);
+  }, [bookId]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'b' && event.key !== 'B') {
+        return;
+      }
+      if (isTypingTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      registerActivity();
+      void toggleCurrentBookmarkRef.current();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [registerActivity]);
 
   return (
     <ReaderShell
@@ -912,7 +1122,13 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             <Search className="h-4 w-4" />
             Search
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setBookmarksPanelOpen(true)}
+            style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
+          >
             <Bookmark className="h-4 w-4" />
             Bookmarks
           </Button>
@@ -926,6 +1142,21 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
             <Download className="h-4 w-4" />
             Export
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              registerActivity();
+              void toggleCurrentBookmark();
+            }}
+            disabled={!currentCfi}
+            aria-label={isCurrentLocationBookmarked ? 'Remove bookmark from current location' : 'Bookmark current location'}
+            title={isCurrentLocationBookmarked ? 'Remove bookmark' : 'Add bookmark'}
+            style={getReaderButtonStyles(settings.theme, isCurrentLocationBookmarked)}
+          >
+            <Star className={`h-4 w-4 ${isCurrentLocationBookmarked ? 'fill-amber-400 text-amber-500' : ''}`} />
           </Button>
           <Button
             type="button"
@@ -947,14 +1178,86 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         ) : null
       }
       rightPanel={
-        <ReaderSettingsPanel
-          open={settingsPanelOpen}
-          settings={settings}
-          onClose={() => setSettingsPanelOpen(false)}
-          onChange={updateSettings}
-          palette={palette}
-          showEpubControls
-        />
+        <>
+          <ReaderSidePanel
+            open={bookmarksPanelOpen}
+            title="Bookmarks"
+            theme={settings.theme}
+            onClose={() => setBookmarksPanelOpen(false)}
+            icon={<Bookmark className="h-4 w-4" />}
+            rightOffset={settingsPanelOpen ? 344 : 12}
+          >
+            <div className="space-y-2">
+              {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
+              {bookmarksLoading ? <p className="text-xs" style={{ color: palette.mutedText }}>Loading...</p> : null}
+              {!bookmarksLoading && epubBookmarks.length === 0 ? (
+                <p className="text-xs" style={{ color: palette.mutedText }}>No bookmarks for this book.</p>
+              ) : null}
+              {epubBookmarks.map((bookmark) => {
+                const active = isMatchingBookmarkCfi(currentCfi, bookmark.cfi);
+                return (
+                  <div
+                    key={bookmark.id}
+                    className="flex items-start gap-2 rounded-md border p-2 transition-colors"
+                    style={{ borderColor: active ? palette.accentBorder : palette.chromeBorder, backgroundColor: active ? palette.accentBg : 'transparent' }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        registerActivity();
+                        void renditionRef.current?.display?.(bookmark.cfi);
+                        setBookmarksPanelOpen(false);
+                      }}
+                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <p className="text-xs font-semibold" style={{ color: palette.chromeText }}>
+                        {bookmark.label ?? 'Location'}
+                      </p>
+                      <p className="mt-1 truncate text-[11px]" style={{ color: palette.mutedText }}>
+                        {bookmark.cfi}
+                      </p>
+                      <p className="mt-1 text-[11px]" style={{ color: palette.mutedText }}>
+                        {formatTimestamp(bookmark.createdAt)}
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 transition-colors"
+                      style={{ color: palette.mutedText }}
+                      aria-label={`Remove bookmark ${bookmark.label ?? 'location'}`}
+                      onClick={async () => {
+                        try {
+                          const result = await window.api?.epubBookmarks.toggle({
+                            bookId,
+                            cfi: bookmark.cfi,
+                            label: bookmark.label
+                          });
+                          if (!result || !result.ok) {
+                            setBookmarksError(result && !result.ok ? result.error : 'Failed to remove bookmark.');
+                            return;
+                          }
+                          setEpubBookmarks((prev) => prev.filter((item) => item.id !== bookmark.id));
+                        } catch (err) {
+                          setBookmarksError(err instanceof Error ? err.message : String(err));
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </ReaderSidePanel>
+          <ReaderSettingsPanel
+            open={settingsPanelOpen}
+            settings={settings}
+            onClose={() => setSettingsPanelOpen(false)}
+            onChange={updateSettings}
+            palette={palette}
+            showEpubControls
+          />
+        </>
       }
       footer={
         <div className="flex items-center justify-between gap-3">

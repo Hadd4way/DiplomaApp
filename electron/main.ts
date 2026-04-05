@@ -18,6 +18,8 @@ import {
   type BookmarksListRequest,
   type BookmarksToggleRequest,
   type BookmarksRemoveRequest,
+  type EpubBookmarksListRequest,
+  type EpubBookmarksToggleRequest,
   type HighlightsCreateMergedRequest,
   type HighlightsDeleteRequest,
   type HighlightsInsertRawRequest,
@@ -34,6 +36,7 @@ import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBoo
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import { createMergedHighlight, deleteHighlight, insertRawHighlight, listHighlights, updateHighlightNote } from './highlights';
 import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
+import { listEpubBookmarks, toggleEpubBookmark } from './epub-bookmarks';
 import { getBookExportData, saveExportFile } from './export';
 import { getEpubProgress, setEpubProgress } from './epub-progress';
 import { getReaderProgressDb } from './reader-progress-db';
@@ -152,6 +155,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.bookmarksRemove, (_event, payload: BookmarksRemoveRequest) =>
     removeBookmark(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubBookmarksList, (_event, payload: EpubBookmarksListRequest) =>
+    listEpubBookmarks(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.epubBookmarksToggle, (_event, payload: EpubBookmarksToggleRequest) =>
+    toggleEpubBookmark(db, progressDb, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.exportGetBookData, (_event, payload: ExportGetBookDataRequest) =>
     getBookExportData(db, progressDb, libraryId, payload)

@@ -100,11 +100,26 @@ function toBookmark(row) {
         createdAt: row.created_at
     };
 }
+function toEpubBookmark(row) {
+    return {
+        id: row.id,
+        bookId: row.book_id,
+        cfi: row.cfi,
+        label: normalizeHighlightNote(row.label),
+        createdAt: row.created_at
+    };
+}
 function isBookmarkUniqueConstraintError(error) {
     if (!(error instanceof Error)) {
         return false;
     }
     return error.message.includes('UNIQUE constraint failed: bookmarks.user_id, bookmarks.book_id, bookmarks.page');
+}
+function isEpubBookmarkUniqueConstraintError(error) {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+    return error.message.includes('UNIQUE constraint failed: epub_bookmarks.user_id, epub_bookmarks.book_id, epub_bookmarks.cfi');
 }
 class ReaderProgressDb {
     ensureHighlightsSchema() {
@@ -243,12 +258,23 @@ class ReaderProgressDb {
         UNIQUE(user_id, book_id, page)
       );
 
+      CREATE TABLE IF NOT EXISTS epub_bookmarks (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        cfi TEXT NOT NULL,
+        label TEXT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(user_id, book_id, cfi)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_notes_user_created_at ON notes(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_notes_user_book_page ON notes(user_id, book_id, page);
       CREATE INDEX IF NOT EXISTS idx_highlights_user_book_page ON highlights(user_id, book_id, page);
       CREATE INDEX IF NOT EXISTS idx_highlights_user_book_cfi ON highlights(user_id, book_id, cfi_range);
       CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_created_at ON bookmarks(user_id, book_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_page ON bookmarks(user_id, book_id, page);
+      CREATE INDEX IF NOT EXISTS idx_epub_bookmarks_user_book_created_at ON epub_bookmarks(user_id, book_id, created_at DESC);
     `);
         this.ensureHighlightsSchema();
         this.getStmt = this.db.prepare('SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1');
@@ -310,6 +336,18 @@ class ReaderProgressDb {
        VALUES (?, ?, ?, ?, ?)`);
         this.deleteBookmarkByPageStmt = this.db.prepare(`DELETE FROM bookmarks
        WHERE user_id = ? AND book_id = ? AND page = ?`);
+        this.listEpubBookmarksStmt = this.db.prepare(`SELECT id, user_id, book_id, cfi, label, created_at
+       FROM epub_bookmarks
+       WHERE user_id = ? AND book_id = ?
+       ORDER BY created_at ASC`);
+        this.getEpubBookmarkByCfiStmt = this.db.prepare(`SELECT id, user_id, book_id, cfi, label, created_at
+       FROM epub_bookmarks
+       WHERE user_id = ? AND book_id = ? AND cfi = ?
+       LIMIT 1`);
+        this.insertEpubBookmarkStmt = this.db.prepare(`INSERT INTO epub_bookmarks (id, user_id, book_id, cfi, label, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`);
+        this.deleteEpubBookmarkByCfiStmt = this.db.prepare(`DELETE FROM epub_bookmarks
+       WHERE user_id = ? AND book_id = ? AND cfi = ?`);
     }
     getLastPage(userId, bookId) {
         const safeUserId = asNonEmptyString(userId);
@@ -591,6 +629,52 @@ class ReaderProgressDb {
         });
         return run();
     }
+    listEpubBookmarks(userId, bookId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        if (!safeUserId || !safeBookId) {
+            return [];
+        }
+        const rows = this.listEpubBookmarksStmt.all(safeUserId, safeBookId);
+        return rows.map(toEpubBookmark);
+    }
+    toggleEpubBookmark(userId, bookId, cfi, label, idFactory) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safeCfi = asNonEmptyString(cfi);
+        if (!safeUserId || !safeBookId || !safeCfi) {
+            return null;
+        }
+        const safeLabel = normalizeHighlightNote(label);
+        const run = this.db.transaction(() => {
+            try {
+                const safeId = asNonEmptyString(idFactory());
+                if (!safeId) {
+                    throw new Error('Invalid bookmark id');
+                }
+                const createdAt = Date.now();
+                this.insertEpubBookmarkStmt.run(safeId, safeUserId, safeBookId, safeCfi, safeLabel, createdAt);
+                const inserted = this.getEpubBookmarkByCfiStmt.get(safeUserId, safeBookId, safeCfi) ??
+                    {
+                        id: safeId,
+                        user_id: safeUserId,
+                        book_id: safeBookId,
+                        cfi: safeCfi,
+                        label: safeLabel,
+                        created_at: createdAt
+                    };
+                return { bookmarked: true, bookmark: toEpubBookmark(inserted) };
+            }
+            catch (error) {
+                if (!isEpubBookmarkUniqueConstraintError(error)) {
+                    throw error;
+                }
+                this.deleteEpubBookmarkByCfiStmt.run(safeUserId, safeBookId, safeCfi);
+                return { bookmarked: false, bookmark: null };
+            }
+        });
+        return run();
+    }
     migrateLegacyUserData(localUserId) {
         const safeLocalUserId = asNonEmptyString(localUserId);
         if (!safeLocalUserId) {
@@ -602,8 +686,9 @@ class ReaderProgressDb {
            (SELECT COUNT(*) FROM reading_progress_epub WHERE user_id = ?) +
            (SELECT COUNT(*) FROM notes WHERE user_id = ?) +
            (SELECT COUNT(*) FROM highlights WHERE user_id = ?) +
-           (SELECT COUNT(*) FROM bookmarks WHERE user_id = ?) AS count`)
-            .get(safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId);
+           (SELECT COUNT(*) FROM bookmarks WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM epub_bookmarks WHERE user_id = ?) AS count`)
+            .get(safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId);
         if (localCountRow.count > 0) {
             return;
         }
@@ -619,6 +704,8 @@ class ReaderProgressDb {
            SELECT user_id FROM highlights
            UNION
            SELECT user_id FROM bookmarks
+           UNION
+           SELECT user_id FROM epub_bookmarks
          )
          WHERE user_id != ?
          ORDER BY user_id ASC`)
@@ -635,6 +722,7 @@ class ReaderProgressDb {
             this.db.prepare('UPDATE notes SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
             this.db.prepare('UPDATE highlights SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
             this.db.prepare('UPDATE bookmarks SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
+            this.db.prepare('UPDATE epub_bookmarks SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
         });
         migrate();
     }
