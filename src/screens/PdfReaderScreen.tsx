@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Highlighter,
   ListTree,
   Minus,
   PanelLeftClose,
@@ -12,15 +13,16 @@ import {
   Search,
   SlidersHorizontal,
   Star,
-  Trash2,
-  X
+  Trash2
 } from 'lucide-react';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
+import { ReaderShell } from '@/components/reader/ReaderShell';
+import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
-import { getReaderButtonStyles, getReaderThemePalette, getReaderThemeStyles } from '@/lib/reader-theme';
+import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
@@ -2223,229 +2225,99 @@ export function PdfReaderScreen({
     };
   }, [zoomIn, zoomOut]);
 
-  return (
-    <div
-      ref={readerRootRef}
-      tabIndex={-1}
-      className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden"
-      style={getReaderThemeStyles(settings.theme)}
-    >
-      <header
-        className="shrink-0 border-b backdrop-blur"
-        style={{
-          backgroundColor: readerPalette.chromeBg,
-          borderColor: readerPalette.chromeBorder,
-          color: readerPalette.chromeText
-        }}
+  const headerStatus =
+    pageInputError || noteSuccess || settingsError ? (
+      <>
+        {pageInputError ? <p className="text-xs text-destructive">{pageInputError}</p> : null}
+        {noteSuccess ? <p className="text-xs text-emerald-700">{noteSuccess}</p> : null}
+        {settingsError ? (
+          <p className="text-xs" style={{ color: '#dc2626' }}>
+            {settingsError}
+          </p>
+        ) : null}
+      </>
+    ) : null;
+
+  const leftPanel = sidebarOpen ? (
+    <PdfSidebar
+      outlineItems={outlineItems}
+      outlineLoading={outlineLoading}
+      palette={readerPalette}
+      onOutlineSelect={async (item, key) => {
+        const resolvedPage = await resolveOutlineItemPage(item, key);
+        if (!resolvedPage) {
+          return;
+        }
+        setPage(resolvedPage);
+        setPageInputError(null);
+      }}
+    />
+  ) : undefined;
+
+  const footer = (
+    <div className="flex items-center gap-3">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={goPrev}
+        disabled={loading || page <= 1}
+        style={getReaderButtonStyles(settings.theme)}
       >
-        <div className="flex h-14 items-center gap-2 px-3">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleBack}
-            disabled={loading}
-            style={getReaderButtonStyles(settings.theme)}
-          >
-            Back
-          </Button>
-
-          <div className="min-w-0 max-w-[320px] flex-1 px-2">
-            <p className="truncate text-sm font-semibold">{title}</p>
-          </div>
-
-          <div
-            className="ml-auto flex items-center gap-1 rounded-lg border px-1 py-1"
-            style={{ borderColor: readerPalette.chromeBorder, backgroundColor: readerPalette.accentBg }}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={goPrev}
-              disabled={loading || page <= 1}
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Input
-              ref={pageInputRef}
-              value={pageInputValue}
-              onChange={(event) => {
-                setPageInputValue(event.target.value.replace(/\D+/g, ''));
-                setPageInputError(null);
-              }}
-              onFocus={() => pageInputRef.current?.select()}
-              onBlur={() => {
-                const trimmed = pageInputValue.trim();
-                if (trimmed.length === 0) {
-                  setPageInputValue(String(page));
-                  setPageInputError(null);
-                  return;
-                }
-                const ok = tryJumpToPage(trimmed);
-                if (!ok) {
-                  setPageInputValue(String(page));
-                }
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  const ok = tryJumpToPage(pageInputValue);
-                  if (ok) {
-                    pageInputRef.current?.blur();
-                  }
-                }
-              }}
-              className="h-8 w-14 text-center text-sm"
-              style={{
-                backgroundColor: readerPalette.inputBg,
-                borderColor: readerPalette.buttonBorder,
-                color: readerPalette.inputText
-              }}
-              disabled={loading || rendering}
-              aria-label="Page number"
-              inputMode="numeric"
-            />
-            <span className="px-1 text-xs" style={{ color: readerPalette.mutedText }}>
-              / {pageCount}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={goNext}
-              disabled={loading || page >= pageCount}
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div
-            className="ml-2 flex items-center gap-1 rounded-lg border px-1 py-1"
-            style={{ borderColor: readerPalette.chromeBorder, backgroundColor: readerPalette.accentBg }}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                zoomOut();
-              }}
-              disabled={loading || rendering}
-              aria-label="Zoom out"
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <span className="w-16 text-center text-xs font-medium" style={{ color: readerPalette.chromeText }}>
-              {`${Math.round(scale * 100)}%`}
-            </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setScaleMode('fitWidth')}
-              disabled={loading || rendering}
-              style={getReaderButtonStyles(settings.theme, scaleMode === 'fitWidth')}
-            >
-              Fit
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setScaleMode('fitPage')}
-              disabled={loading || rendering}
-              style={getReaderButtonStyles(settings.theme, scaleMode === 'fitPage')}
-            >
-              Page
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setScaleMode('manual');
-                setScale(1);
-              }}
-              disabled={loading || rendering}
-              style={getReaderButtonStyles(settings.theme, scaleMode === 'manual' && Math.round(scale * 100) === 100)}
-            >
-              100%
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                zoomIn();
-              }}
-              disabled={loading || rendering}
-              aria-label="Zoom in"
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2"
-            onClick={openAddNote}
-            disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme)}
-          >
-            Add note
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2"
-            onClick={toggleBookNotesPanel}
-            disabled={loading}
-            style={getReaderButtonStyles(settings.theme, notesPanelOpen)}
-          >
-            Notes
-          </Button>
-
-          <Button
-            type="button"
-            variant={bookmarksPanelOpen ? 'default' : 'outline'}
-            size="sm"
-            className="ml-2"
-            onClick={openBookmarksPanel}
-            disabled={loading}
-            style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
-          >
-            Bookmarks
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2"
-            onClick={() => {
-              void openExportDialog();
+        <ChevronLeft className="mr-1 h-4 w-4" />
+        Prev
+      </Button>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-center gap-2">
+        <div
+          className="flex items-center gap-1 rounded-lg border px-1 py-1"
+          style={{ borderColor: readerPalette.chromeBorder, backgroundColor: readerPalette.accentBg }}
+        >
+          <Input
+            ref={pageInputRef}
+            value={pageInputValue}
+            onChange={(event) => {
+              setPageInputValue(event.target.value.replace(/\D+/g, ''));
+              setPageInputError(null);
             }}
-            disabled={loading}
-            style={getReaderButtonStyles(settings.theme)}
-          >
-            <Download className="mr-1 h-4 w-4" />
-            Export
-          </Button>
-
+            onFocus={() => pageInputRef.current?.select()}
+            onBlur={() => {
+              const trimmed = pageInputValue.trim();
+              if (trimmed.length === 0) {
+                setPageInputValue(String(page));
+                setPageInputError(null);
+                return;
+              }
+              const ok = tryJumpToPage(trimmed);
+              if (!ok) {
+                setPageInputValue(String(page));
+              }
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                const ok = tryJumpToPage(pageInputValue);
+                if (ok) {
+                  pageInputRef.current?.blur();
+                }
+              }
+            }}
+            className="h-8 w-14 text-center text-sm"
+            style={{
+              backgroundColor: readerPalette.inputBg,
+              borderColor: readerPalette.buttonBorder,
+              color: readerPalette.inputText
+            }}
+            disabled={loading || rendering}
+            aria-label="Page number"
+            inputMode="numeric"
+          />
+          <span className="px-1 text-xs" style={{ color: readerPalette.mutedText }}>
+            / {pageCount}
+          </span>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="ml-2"
             onClick={() => {
               void toggleBookmarkForPage(page);
             }}
@@ -2456,83 +2328,440 @@ export function PdfReaderScreen({
           >
             <Star className={`h-4 w-4 ${isCurrentPageBookmarked ? 'fill-amber-400 text-amber-500' : ''}`} />
           </Button>
+        </div>
 
+        <div
+          className="flex items-center gap-1 rounded-lg border px-1 py-1"
+          style={{ borderColor: readerPalette.chromeBorder, backgroundColor: readerPalette.accentBg }}
+        >
           <Button
             type="button"
-            variant={searchPanelOpen ? 'default' : 'outline'}
+            variant="outline"
             size="sm"
-            className="ml-2"
-            onClick={openSearchPanel}
+            onClick={() => {
+              zoomOut();
+            }}
+            disabled={loading || rendering}
+            aria-label="Zoom out"
+            style={getReaderButtonStyles(settings.theme)}
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <span className="w-16 text-center text-xs font-medium" style={{ color: readerPalette.chromeText }}>
+            {`${Math.round(scale * 100)}%`}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setScaleMode('fitWidth')}
+            disabled={loading || rendering}
+            style={getReaderButtonStyles(settings.theme, scaleMode === 'fitWidth')}
+          >
+            Fit
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setScaleMode('fitPage')}
+            disabled={loading || rendering}
+            style={getReaderButtonStyles(settings.theme, scaleMode === 'fitPage')}
+          >
+            Page
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setScaleMode('manual');
+              setScale(1);
+            }}
+            disabled={loading || rendering}
+            style={getReaderButtonStyles(settings.theme, scaleMode === 'manual' && Math.round(scale * 100) === 100)}
+          >
+            100%
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              zoomIn();
+            }}
+            disabled={loading || rendering}
+            aria-label="Zoom in"
+            style={getReaderButtonStyles(settings.theme)}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={openAddNote}
+          disabled={loading || rendering}
+          style={getReaderButtonStyles(settings.theme)}
+        >
+          Add note
+        </Button>
+
+        <div className="inline-flex items-center gap-2 text-xs" style={{ color: readerPalette.mutedText }}>
+          <ListTree className="h-3.5 w-3.5" />
+          {rendering ? 'Rendering...' : `Page ${page} of ${pageCount}`}
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={goNext}
+        disabled={loading || page >= pageCount}
+        style={getReaderButtonStyles(settings.theme)}
+      >
+        Next
+        <ChevronRight className="ml-1 h-4 w-4" />
+      </Button>
+    </div>
+  );
+
+  const notesPanel = (
+    <ReaderSidePanel
+      open={notesPanelOpen}
+      title="Notes"
+      theme={settings.theme}
+      onClose={() => setNotesPanelOpen(false)}
+      rightOffset={12}
+      headerActions={
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={openAddNote}
+          disabled={loading || rendering}
+          style={getReaderButtonStyles(settings.theme)}
+        >
+          Add
+        </Button>
+      }
+    >
+      <div className="space-y-2">
+        {bookNotesError ? <p className="text-xs text-destructive">{bookNotesError}</p> : null}
+        {bookNotesLoading ? <p className="text-xs" style={{ color: readerPalette.mutedText }}>Loading...</p> : null}
+        {!bookNotesLoading && bookNotes.length === 0 ? (
+          <p className="text-xs" style={{ color: readerPalette.mutedText }}>No notes for this book.</p>
+        ) : null}
+        {bookNotes.map((note) => (
+          <button
+            key={note.id}
+            type="button"
+            onClick={() => {
+              setPage(clampPage(note.page, pageCount));
+              setPageInputError(null);
+              setNotesPanelOpen(false);
+              focusReader();
+            }}
+            className="w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{ borderColor: readerPalette.chromeBorder }}
+          >
+            <p className="text-xs font-semibold" style={{ color: readerPalette.chromeText }}>Page {note.page}</p>
+            <p className="mt-1 line-clamp-2 text-xs" style={{ color: readerPalette.mutedText }}>{note.content}</p>
+          </button>
+        ))}
+      </div>
+    </ReaderSidePanel>
+  );
+
+  const bookmarksPanel = (
+    <ReaderSidePanel
+      open={bookmarksPanelOpen}
+      title="Bookmarks"
+      theme={settings.theme}
+      onClose={() => setBookmarksPanelOpen(false)}
+      icon={<Bookmark className="h-4 w-4" />}
+      rightOffset={notesPanelOpen ? 344 : 12}
+    >
+      <div className="space-y-2">
+        {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
+        {bookmarksLoading ? <p className="text-xs" style={{ color: readerPalette.mutedText }}>Loading...</p> : null}
+        {!bookmarksLoading && bookmarks.length === 0 ? (
+          <p className="text-xs" style={{ color: readerPalette.mutedText }}>No bookmarks for this book.</p>
+        ) : null}
+        {bookmarks.map((bookmark) => (
+          <div
+            key={bookmark.id}
+            className="flex items-start gap-2 rounded-md border p-2 transition-colors"
+            style={{ borderColor: readerPalette.chromeBorder }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setPage(clampPage(bookmark.page, pageCount));
+                setPageInputError(null);
+                focusReader();
+              }}
+              className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <p className="text-xs font-semibold" style={{ color: readerPalette.chromeText }}>Page {bookmark.page}</p>
+              <p className="mt-1 text-[11px]" style={{ color: readerPalette.mutedText }}>
+                {formatTimestamp(bookmark.createdAt)}
+              </p>
+            </button>
+            <button
+              type="button"
+              className="rounded p-1 transition-colors"
+              style={{ color: readerPalette.mutedText }}
+              aria-label={`Remove bookmark from page ${bookmark.page}`}
+              onClick={() => {
+                void removeBookmarkByPage(bookmark.page);
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </ReaderSidePanel>
+  );
+
+  const searchPanel = (
+    <ReaderSidePanel
+      open={searchPanelOpen}
+      title="Search"
+      theme={settings.theme}
+      onClose={() => setSearchPanelOpen(false)}
+      icon={<Search className="h-4 w-4" />}
+      rightOffset={notesPanelOpen ? 344 : 12}
+    >
+      <div className="space-y-3">
+        <div className="space-y-2 border-b pb-3" style={{ borderColor: readerPalette.chromeBorder }}>
+          <Input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(event) => {
+              registerActivity();
+              setSearchQuery(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter') {
+                return;
+              }
+              event.preventDefault();
+              if (event.shiftKey) {
+                goToPrevSearchMatch();
+              } else {
+                goToNextSearchMatch();
+              }
+            }}
+            placeholder="Search in this PDF..."
+            aria-label="Search in document"
+            style={{
+              backgroundColor: readerPalette.inputBg,
+              borderColor: readerPalette.buttonBorder,
+              color: readerPalette.inputText
+            }}
+          />
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={goToPrevSearchMatch}
+              disabled={searchResults.length === 0}
+              style={getReaderButtonStyles(settings.theme)}
+            >
+              Prev
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={goToNextSearchMatch}
+              disabled={searchResults.length === 0}
+              style={getReaderButtonStyles(settings.theme)}
+            >
+              Next
+            </Button>
+            <span className="text-xs" style={{ color: readerPalette.mutedText }}>
+              {searchResults.length > 0 && activeSearchIndex >= 0
+                ? `${activeSearchIndex + 1} / ${searchResults.length}`
+                : `0 / ${searchResults.length}`}
+            </span>
+          </div>
+          <p className="text-xs" style={{ color: readerPalette.mutedText }}>
+            {isSearching ? 'Searching...' : `${searchResults.length} results`}
+          </p>
+        </div>
+        {!searchQuery.trim() ? (
+          <p className="text-xs" style={{ color: readerPalette.mutedText }}>Type a query to search all pages.</p>
+        ) : null}
+        {searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
+          <p className="text-xs" style={{ color: readerPalette.mutedText }}>No matches found.</p>
+        ) : null}
+        <div className="space-y-2">
+          {searchResults.map((result, index) => {
+            const safeStart = Math.max(0, Math.min(result.start, result.snippet.length));
+            const safeEnd = Math.max(safeStart, Math.min(result.end, result.snippet.length));
+            const before = result.snippet.slice(0, safeStart);
+            const match = result.snippet.slice(safeStart, safeEnd);
+            const after = result.snippet.slice(safeEnd);
+            return (
+              <button
+                key={`${result.page}:${result.start}:${result.end}:${index}`}
+                type="button"
+                onClick={() => {
+                  navigateToSearchIndex(index);
+                }}
+                className={`w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  index === activeSearchIndex ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span
+                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  style={{
+                    backgroundColor: readerPalette.accentBg,
+                    borderColor: readerPalette.accentBorder,
+                    color: readerPalette.accentText
+                  }}
+                >
+                  Page {result.page}
+                </span>
+                <p className="mt-1 text-xs leading-relaxed" style={{ color: readerPalette.chromeText }}>
+                  {before}
+                  <mark className="rounded bg-yellow-200 px-0.5">{match}</mark>
+                  {after}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </ReaderSidePanel>
+  );
+
+  const rightPanel = (
+    <>
+      <ReaderSettingsPanel
+        open={settingsPanelOpen}
+        settings={settings}
+        onClose={() => setSettingsPanelOpen(false)}
+        onChange={updateSettings}
+        palette={readerPalette}
+        showEpubControls={false}
+      />
+      {notesPanel}
+      {bookmarksPanel}
+      {searchPanel}
+    </>
+  );
+
+  return (
+    <ReaderShell
+      title={title}
+      theme={settings.theme}
+      rootRef={readerRootRef}
+      rootTabIndex={-1}
+      leftPanel={leftPanel}
+      headerLeft={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleBack}
             disabled={loading}
-            aria-label="Search document"
-            style={getReaderButtonStyles(settings.theme, searchPanelOpen)}
+            style={getReaderButtonStyles(settings.theme)}
           >
-            <Search className="h-4 w-4" />
+            Back
           </Button>
-
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="ml-2"
-            onClick={openSettingsPanel}
-            disabled={loading || settingsLoading}
-            aria-label="Reader settings"
-            style={getReaderButtonStyles(settings.theme, settingsPanelOpen)}
-          >
-            <SlidersHorizontal className="h-4 w-4" />
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ml-2"
             onClick={toggleContents}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
             style={getReaderButtonStyles(settings.theme, sidebarOpen)}
           >
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </Button>
-        </div>
-        {pageInputError ? <p className="px-4 pb-2 text-xs text-destructive">{pageInputError}</p> : null}
-        {noteSuccess ? <p className="px-4 pb-2 text-xs text-emerald-700">{noteSuccess}</p> : null}
-        {settingsError ? (
-          <p className="px-4 pb-2 text-xs" style={{ color: '#dc2626' }}>
-            {settingsError}
-          </p>
-        ) : null}
-      </header>
-
-      <main className="flex w-full flex-1 min-h-0 min-w-0">
-        {sidebarOpen ? (
-          <div
-            className="h-full w-[300px] shrink-0 border-r"
-            style={{
-              backgroundColor: readerPalette.panelBg,
-              borderColor: readerPalette.chromeBorder,
-              color: readerPalette.chromeText
-            }}
+        </>
+      }
+      headerRight={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openSearchPanel}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme, searchPanelOpen)}
           >
-            <PdfSidebar
-              outlineItems={outlineItems}
-              outlineLoading={outlineLoading}
-              onOutlineSelect={async (item, key) => {
-                const resolvedPage = await resolveOutlineItemPage(item, key);
-                if (!resolvedPage) {
-                  return;
-                }
-                setPage(resolvedPage);
-                setPageInputError(null);
-              }}
-            />
-          </div>
-        ) : null}
-
-        <div
-          className="relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col"
-          style={{ backgroundColor: readerPalette.viewportBg }}
-        >
+            <Search className="h-4 w-4" />
+            Search
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openBookmarksPanel}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
+          >
+            <Bookmark className="h-4 w-4" />
+            Bookmarks
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleBookNotesPanel}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme, notesPanelOpen)}
+          >
+            Notes
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            <Highlighter className="h-4 w-4" />
+            Highlights
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void openExportDialog();
+            }}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme)}
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openSettingsPanel}
+            disabled={loading || settingsLoading}
+            style={getReaderButtonStyles(settings.theme, settingsPanelOpen)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Settings
+          </Button>
+        </>
+      }
+      headerStatus={headerStatus}
+      rightPanel={rightPanel}
+      footer={footer}
+      viewportClassName="flex-col"
+    >
+      <div
+        className="relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col"
+        style={{ backgroundColor: readerPalette.viewportBg }}
+      >
           <div ref={readerViewportRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             <div className="w-full min-h-full flex justify-center px-8 py-6">
               <div
@@ -2818,263 +3047,6 @@ export function PdfReaderScreen({
             </div>
           </div>
 
-          <ReaderSettingsPanel
-            open={settingsPanelOpen}
-            settings={settings}
-            onClose={() => setSettingsPanelOpen(false)}
-            onChange={updateSettings}
-            palette={readerPalette}
-            showEpubControls={false}
-          />
-
-          {notesPanelOpen ? (
-            <aside
-              className="absolute right-3 top-3 bottom-3 z-40 flex w-[320px] flex-col rounded-lg border shadow-xl"
-              style={{
-                backgroundColor: readerPalette.panelBg,
-                borderColor: readerPalette.chromeBorder,
-                color: readerPalette.chromeText
-              }}
-            >
-              <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: readerPalette.chromeBorder }}>
-                <p className="text-sm font-semibold">Book Notes</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setNotesPanelOpen(false)}
-                  style={getReaderButtonStyles(settings.theme)}
-                >
-                  Close
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-                {bookNotesError ? <p className="text-xs text-destructive">{bookNotesError}</p> : null}
-                {bookNotesLoading ? <p className="text-xs" style={{ color: readerPalette.mutedText }}>Loading...</p> : null}
-                {!bookNotesLoading && bookNotes.length === 0 ? (
-                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>No notes for this book.</p>
-                ) : null}
-                {bookNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    type="button"
-                    onClick={() => {
-                      setPage(clampPage(note.page, pageCount));
-                      setPageInputError(null);
-                      setNotesPanelOpen(false);
-                      focusReader();
-                    }}
-                    className="w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    style={{ borderColor: readerPalette.chromeBorder }}
-                  >
-                    <p className="text-xs font-semibold" style={{ color: readerPalette.chromeText }}>Page {note.page}</p>
-                    <p className="mt-1 line-clamp-2 text-xs" style={{ color: readerPalette.mutedText }}>{note.content}</p>
-                  </button>
-                ))}
-              </div>
-            </aside>
-          ) : null}
-
-          {bookmarksPanelOpen ? (
-            <aside
-              className={`absolute top-3 bottom-3 z-40 flex w-[320px] flex-col rounded-lg border shadow-xl ${
-                notesPanelOpen ? 'right-[336px]' : 'right-3'
-              }`}
-              style={{
-                backgroundColor: readerPalette.panelBg,
-                borderColor: readerPalette.chromeBorder,
-                color: readerPalette.chromeText
-              }}
-            >
-              <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: readerPalette.chromeBorder }}>
-                <div className="flex items-center gap-2">
-                  <Bookmark className="h-4 w-4" />
-                  <p className="text-sm font-semibold">Bookmarks</p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setBookmarksPanelOpen(false)}
-                  style={getReaderButtonStyles(settings.theme)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
-                {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
-                {bookmarksLoading ? <p className="text-xs" style={{ color: readerPalette.mutedText }}>Loading...</p> : null}
-                {!bookmarksLoading && bookmarks.length === 0 ? (
-                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>No bookmarks for this book.</p>
-                ) : null}
-                {bookmarks.map((bookmark) => (
-                  <div
-                    key={bookmark.id}
-                    className="flex items-start gap-2 rounded-md border p-2 transition-colors"
-                    style={{ borderColor: readerPalette.chromeBorder }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPage(clampPage(bookmark.page, pageCount));
-                        setPageInputError(null);
-                        focusReader();
-                      }}
-                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <p className="text-xs font-semibold" style={{ color: readerPalette.chromeText }}>Page {bookmark.page}</p>
-                      <p className="mt-1 text-[11px]" style={{ color: readerPalette.mutedText }}>
-                        {formatTimestamp(bookmark.createdAt)}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded p-1 transition-colors"
-                      style={{ color: readerPalette.mutedText }}
-                      aria-label={`Remove bookmark from page ${bookmark.page}`}
-                      onClick={() => {
-                        void removeBookmarkByPage(bookmark.page);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </aside>
-          ) : null}
-
-          {searchPanelOpen ? (
-            <aside
-              className={`absolute top-3 bottom-3 z-40 flex w-[360px] flex-col rounded-lg border shadow-xl ${
-                notesPanelOpen ? 'right-[336px]' : 'right-3'
-              }`}
-              style={{
-                backgroundColor: readerPalette.panelBg,
-                borderColor: readerPalette.chromeBorder,
-                color: readerPalette.chromeText
-              }}
-            >
-              <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: readerPalette.chromeBorder }}>
-                <p className="text-sm font-semibold">Search</p>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSearchPanelOpen(false)}
-                  style={getReaderButtonStyles(settings.theme)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-              <div className="space-y-2 border-b p-3" style={{ borderColor: readerPalette.chromeBorder }}>
-                <Input
-                  ref={searchInputRef}
-                  value={searchQuery}
-                  onChange={(event) => {
-                    registerActivity();
-                    setSearchQuery(event.target.value);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== 'Enter') {
-                      return;
-                    }
-                    event.preventDefault();
-                    if (event.shiftKey) {
-                      goToPrevSearchMatch();
-                    } else {
-                      goToNextSearchMatch();
-                    }
-                  }}
-                  placeholder="Search in this PDF..."
-                  aria-label="Search in document"
-                  style={{
-                    backgroundColor: readerPalette.inputBg,
-                    borderColor: readerPalette.buttonBorder,
-                    color: readerPalette.inputText
-                  }}
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={goToPrevSearchMatch}
-                    disabled={searchResults.length === 0}
-                    style={getReaderButtonStyles(settings.theme)}
-                  >
-                    Prev
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={goToNextSearchMatch}
-                    disabled={searchResults.length === 0}
-                    style={getReaderButtonStyles(settings.theme)}
-                  >
-                    Next
-                  </Button>
-                  <span className="text-xs" style={{ color: readerPalette.mutedText }}>
-                    {searchResults.length > 0 && activeSearchIndex >= 0
-                      ? `${activeSearchIndex + 1} / ${searchResults.length}`
-                      : `0 / ${searchResults.length}`}
-                  </span>
-                </div>
-                <p className="text-xs" style={{ color: readerPalette.mutedText }}>
-                  {isSearching ? 'Searching...' : `${searchResults.length} results`}
-                </p>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                {!searchQuery.trim() ? (
-                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>Type a query to search all pages.</p>
-                ) : null}
-                {searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
-                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>No matches found.</p>
-                ) : null}
-                <div className="space-y-2">
-                  {searchResults.map((result, index) => {
-                    const safeStart = Math.max(0, Math.min(result.start, result.snippet.length));
-                    const safeEnd = Math.max(safeStart, Math.min(result.end, result.snippet.length));
-                    const before = result.snippet.slice(0, safeStart);
-                    const match = result.snippet.slice(safeStart, safeEnd);
-                    const after = result.snippet.slice(safeEnd);
-                    return (
-                      <button
-                        key={`${result.page}:${result.start}:${result.end}:${index}`}
-                        type="button"
-                        onClick={() => {
-                          navigateToSearchIndex(index);
-                        }}
-                        className={`w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                          index === activeSearchIndex
-                            ? 'border-amber-400 bg-amber-50'
-                            : 'border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span
-                          className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                          style={{
-                            backgroundColor: readerPalette.accentBg,
-                            borderColor: readerPalette.accentBorder,
-                            color: readerPalette.accentText
-                          }}
-                        >
-                          Page {result.page}
-                        </span>
-                        <p className="mt-1 text-xs leading-relaxed" style={{ color: readerPalette.chromeText }}>
-                          {before}
-                          <mark className="rounded bg-yellow-200 px-0.5">{match}</mark>
-                          {after}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </aside>
-          ) : null}
-
           {pendingHighlightDeletions.length > 0 ? (
             <div className="pointer-events-none absolute bottom-3 right-3 z-50 flex flex-col gap-2">
               {pendingHighlightDeletions.map((pending) => (
@@ -3101,8 +3073,7 @@ export function PdfReaderScreen({
               ))}
             </div>
           ) : null}
-        </div>
-      </main>
+      </div>
 
       <NoteEditorDialog
         open={noteOpen}
@@ -3143,6 +3114,6 @@ export function PdfReaderScreen({
           setExportDialogOpen(false);
         }}
       />
-    </div>
+    </ReaderShell>
   );
 }

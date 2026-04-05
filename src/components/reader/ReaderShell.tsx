@@ -1,0 +1,101 @@
+import * as React from 'react';
+import type { ReactNode } from 'react';
+import type { ReaderTheme } from '../../../shared/ipc';
+import { cn } from '@/lib/utils';
+import { getReaderThemePalette, getReaderThemeStyles } from '@/lib/reader-theme';
+
+export type ReaderShellProps = {
+  title: string;
+  theme: ReaderTheme;
+  leftPanel?: ReactNode;
+  rightPanel?: ReactNode;
+  headerLeft?: ReactNode;
+  headerRight?: ReactNode;
+  headerStatus?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+  rootRef?: React.Ref<HTMLDivElement>;
+  rootTabIndex?: number;
+  leftPanelWidthClassName?: string;
+  mainClassName?: string;
+  viewportClassName?: string;
+};
+
+export function ReaderShell({
+  title,
+  theme,
+  leftPanel,
+  rightPanel,
+  headerLeft,
+  headerRight,
+  headerStatus,
+  footer,
+  children,
+  rootRef,
+  rootTabIndex,
+  leftPanelWidthClassName = 'w-[320px]',
+  mainClassName,
+  viewportClassName
+}: ReaderShellProps) {
+  const palette = React.useMemo(() => getReaderThemePalette(theme), [theme]);
+
+  return (
+    <div
+      ref={rootRef}
+      tabIndex={rootTabIndex}
+      className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden"
+      style={getReaderThemeStyles(theme)}
+    >
+      <header
+        className="shrink-0 border-b backdrop-blur"
+        style={{
+          backgroundColor: palette.chromeBg,
+          borderColor: palette.chromeBorder,
+          color: palette.chromeText
+        }}
+      >
+        <div className="flex min-h-14 items-center gap-3 px-3 py-2">
+          <div className="flex shrink-0 items-center gap-2">{headerLeft}</div>
+          <div className="min-w-0 flex-1 px-1">
+            <p className="truncate text-sm font-semibold">{title}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">{headerRight}</div>
+        </div>
+        {headerStatus ? <div className="px-4 pb-2">{headerStatus}</div> : null}
+      </header>
+
+      <main className={cn('flex w-full flex-1 min-h-0 min-w-0', mainClassName)}>
+        {leftPanel ? (
+          <aside
+            className={cn('h-full shrink-0 border-r', leftPanelWidthClassName)}
+            style={{
+              backgroundColor: palette.panelBg,
+              borderColor: palette.chromeBorder,
+              color: palette.chromeText
+            }}
+          >
+            {leftPanel}
+          </aside>
+        ) : null}
+
+        <div className={cn('relative flex min-h-0 min-w-0 flex-1 basis-0', viewportClassName)}>
+          {children}
+          {rightPanel}
+        </div>
+      </main>
+
+      {footer ? (
+        <footer
+          className="shrink-0 border-t px-3 py-2"
+          style={{
+            backgroundColor: palette.chromeBg,
+            borderColor: palette.chromeBorder,
+            color: palette.chromeText
+          }}
+        >
+          {footer}
+        </footer>
+      ) : null}
+    </div>
+  );
+}

@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { SlidersHorizontal } from 'lucide-react';
 import type { ReaderSettings, ReaderTheme } from '../../shared/ipc';
-import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { getReaderButtonStyles, type ReaderThemePalette } from '@/lib/reader-theme';
+import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 
 const THEMES: Array<{ value: ReaderTheme; label: string }> = [
   { value: 'light', label: 'Light' },
@@ -46,28 +46,15 @@ export function ReaderSettingsPanel({
   }
 
   return (
-    <aside
-      className={cn('absolute top-3 bottom-3 right-3 z-40 flex w-[320px] flex-col rounded-lg border shadow-xl', className)}
-      style={{
-        backgroundColor: palette.panelBg,
-        borderColor: palette.chromeBorder,
-        color: palette.chromeText
-      }}
+    <ReaderSidePanel
+      title="Reader Settings"
+      theme={settings.theme}
+      open={open}
+      onClose={onClose}
+      icon={<SlidersHorizontal className="h-4 w-4" />}
+      className={cn('', className)}
     >
-      <div
-        className="flex items-center justify-between border-b px-3 py-2"
-        style={{ borderColor: palette.chromeBorder }}
-      >
-        <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-4 w-4" />
-          <p className="text-sm font-semibold">Reader Settings</p>
-        </div>
-        <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings.theme)}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
+      <div className="space-y-5 p-1">
         <section className="space-y-2">
           <div>
             <p className="text-sm font-semibold">Theme</p>
@@ -166,6 +153,6 @@ export function ReaderSettingsPanel({
           </section>
         )}
       </div>
-    </aside>
+    </ReaderSidePanel>
   );
 }

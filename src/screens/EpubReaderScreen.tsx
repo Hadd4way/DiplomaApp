@@ -1,20 +1,24 @@
 import * as React from 'react';
 import {
+  Bookmark,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Highlighter,
   ListTree,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   SlidersHorizontal
 } from 'lucide-react';
+import { ReaderShell } from '@/components/reader/ReaderShell';
 import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import {
   getEpubThemeBodyStyles,
   getReaderButtonStyles,
-  getReaderThemePalette,
-  getReaderThemeStyles
+  getReaderThemePalette
 } from '@/lib/reader-theme';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
@@ -842,16 +846,41 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   }, []);
 
   return (
-    <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden" style={getReaderThemeStyles(settings.theme)}>
-      <header
-        className="shrink-0 border-b backdrop-blur"
-        style={{
-          backgroundColor: palette.chromeBg,
-          borderColor: palette.chromeBorder,
-          color: palette.chromeText
-        }}
-      >
-        <div className="flex h-14 items-center gap-2 px-3">
+    <ReaderShell
+      title={title}
+      theme={settings.theme}
+      leftPanel={
+        sidebarOpen ? (
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="border-b px-4 py-3" style={{ borderColor: palette.chromeBorder }}>
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
+                Contents
+              </h3>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+              {tocItems.length > 0 ? (
+                <TocTree
+                  items={tocItems}
+                  onSelect={(item) => {
+                    if (!item.href) {
+                      return;
+                    }
+                    registerActivity();
+                    void renditionRef.current?.display?.(item.href);
+                  }}
+                  palette={palette}
+                />
+              ) : (
+                <p className="px-2 py-1 text-sm" style={{ color: palette.mutedText }}>
+                  No table of contents found.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : undefined
+      }
+      headerLeft={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -865,9 +894,39 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           >
             Back
           </Button>
-          <div className="min-w-0 max-w-[420px] flex-1 px-2">
-            <p className="truncate text-sm font-semibold">{title}</p>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSidebarOpen((prev) => !prev)}
+            style={getReaderButtonStyles(settings.theme, sidebarOpen)}
+            aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
+          >
+            {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </Button>
+        </>
+      }
+      headerRight={
+        <>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            <Search className="h-4 w-4" />
+            Search
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            <Bookmark className="h-4 w-4" />
+            Bookmarks
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            Notes
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            <Highlighter className="h-4 w-4" />
+            Highlights
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -878,84 +937,56 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             <SlidersHorizontal className="h-4 w-4" />
             Settings
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setSidebarOpen((prev) => !prev)}
-            style={getReaderButtonStyles(settings.theme, sidebarOpen)}
-          >
-            {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-          </Button>
-        </div>
-        {settingsError ? (
-          <p className="px-4 pb-2 text-xs" style={{ color: '#dc2626' }}>
+        </>
+      }
+      headerStatus={
+        settingsError ? (
+          <p className="text-xs" style={{ color: '#dc2626' }}>
             {settingsError}
           </p>
-        ) : null}
-      </header>
-
-      <main className="flex w-full flex-1 min-h-0 min-w-0">
-        {sidebarOpen ? (
-          <aside
-            className="h-full w-[300px] shrink-0 border-r"
+        ) : null
+      }
+      rightPanel={
+        <ReaderSettingsPanel
+          open={settingsPanelOpen}
+          settings={settings}
+          onClose={() => setSettingsPanelOpen(false)}
+          onChange={updateSettings}
+          palette={palette}
+          showEpubControls
+        />
+      }
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={goPrev} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Prev
+          </Button>
+          <div className="inline-flex items-center gap-2 text-xs" style={{ color: palette.mutedText }}>
+            <ListTree className="h-3.5 w-3.5" />
+            {settingsLoading ? 'Loading settings...' : ready ? 'Ready' : 'Loading EPUB...'}
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={goNext} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
+            Next
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+      }
+    >
+      <div ref={readerStageRef} className="relative flex min-h-0 min-w-0 flex-1" style={{ backgroundColor: palette.viewportBg }}>
+        <div className="flex h-full w-full items-center justify-center p-4">
+          <div
+            className="relative h-full w-full max-w-5xl overflow-hidden rounded-sm border"
             style={{
-              backgroundColor: palette.panelBg,
-              borderColor: palette.chromeBorder,
-              color: palette.chromeText
+              backgroundColor: palette.epubBodyBackground,
+              borderColor: palette.buttonBorder,
+              boxShadow: palette.shadow
             }}
           >
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="border-b px-4 py-3" style={{ borderColor: palette.chromeBorder }}>
-                <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
-                  Contents
-                </h3>
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-                {tocItems.length > 0 ? (
-                  <TocTree
-                    items={tocItems}
-                    onSelect={(item) => {
-                      if (!item.href) {
-                        return;
-                      }
-                      registerActivity();
-                      void renditionRef.current?.display?.(item.href);
-                    }}
-                    palette={palette}
-                  />
-                ) : (
-                  <p className="px-2 py-1 text-sm" style={{ color: palette.mutedText }}>
-                    No table of contents found.
-                  </p>
-                )}
-              </div>
-            </div>
-          </aside>
-        ) : null}
-
-        <div ref={readerStageRef} className="relative flex min-h-0 min-w-0 flex-1" style={{ backgroundColor: palette.viewportBg }}>
-          <div className="flex h-full w-full items-center justify-center p-4">
-            <div
-              className="relative h-full w-full max-w-5xl overflow-hidden rounded-sm border"
-              style={{
-                backgroundColor: palette.epubBodyBackground,
-                borderColor: palette.buttonBorder,
-                boxShadow: palette.shadow
-              }}
-            >
-              <div ref={readerContainerRef} className="h-full w-full" />
-            </div>
+            <div ref={readerContainerRef} className="h-full w-full" />
           </div>
-          <ReaderSettingsPanel
-            open={settingsPanelOpen}
-            settings={settings}
-            onClose={() => setSettingsPanelOpen(false)}
-            onChange={updateSettings}
-            palette={palette}
-            showEpubControls
-          />
-          {highlightPrompt ? (
+        </div>
+        {highlightPrompt ? (
             <div
               data-epub-highlight-popover="true"
               className="pointer-events-auto absolute z-20 w-[180px] rounded-md border p-2 shadow-lg"
@@ -1067,47 +1098,22 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                 );
               })()}
             </div>
-          ) : null}
-          {error ? (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <p
-                className="rounded-md border px-3 py-2 text-sm"
-                style={{
-                  borderColor: '#fca5a5',
-                  backgroundColor: palette.panelBg,
-                  color: '#b91c1c'
-                }}
-              >
-                {error}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </main>
-
-      <footer
-        className="shrink-0 border-t px-3 py-2"
-        style={{
-          backgroundColor: palette.chromeBg,
-          borderColor: palette.chromeBorder,
-          color: palette.chromeText
-        }}
-      >
-        <div className="flex items-center justify-between">
-          <Button type="button" variant="outline" size="sm" onClick={goPrev} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            Prev
-          </Button>
-          <div className="inline-flex items-center gap-2 text-xs" style={{ color: palette.mutedText }}>
-            <ListTree className="h-3.5 w-3.5" />
-            {settingsLoading ? 'Loading settings...' : ready ? 'Ready' : 'Loading EPUB...'}
+        ) : null}
+        {error ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <p
+              className="rounded-md border px-3 py-2 text-sm"
+              style={{
+                borderColor: '#fca5a5',
+                backgroundColor: palette.panelBg,
+                color: '#b91c1c'
+              }}
+            >
+              {error}
+            </p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={goNext} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
-            Next
-            <ChevronRight className="ml-1 h-4 w-4" />
-          </Button>
-        </div>
-      </footer>
-    </div>
+        ) : null}
+      </div>
+    </ReaderShell>
   );
 }
