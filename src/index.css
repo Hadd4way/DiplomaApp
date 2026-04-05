@@ -60,3 +60,13 @@
 .pdf-text-layer ::selection {
   background: rgba(59, 130, 246, 0.35);
 }
+
+.epub-highlight {
+  fill: rgba(255, 235, 59, 0.4);
+  fill-opacity: 1;
+}
+
+.epub-highlight-with-note {
+  stroke: rgba(180, 83, 9, 0.85);
+  stroke-width: 1.5px;
+}

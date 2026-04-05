@@ -18,8 +18,9 @@ type HighlightRow = {
   id: string;
   user_id: string;
   book_id: string;
-  page: number;
-  rects: string;
+  page: number | null;
+  rects: string | null;
+  cfi_range: string | null;
   text: string | null;
   note: string | null;
   created_at: number;
@@ -80,39 +81,47 @@ function toNote(row: NoteRow): Note {
 }
 
 function toHighlight(row: HighlightRow): Highlight | null {
-  let parsedRects: unknown;
-  try {
-    parsedRects = JSON.parse(row.rects);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsedRects)) {
-    return null;
-  }
-  const rects = parsedRects.filter((item): item is HighlightRect => {
-    if (!item || typeof item !== 'object') {
-      return false;
+  let rects: HighlightRect[] = [];
+  if (typeof row.rects === 'string' && row.rects.trim().length > 0) {
+    let parsedRects: unknown;
+    try {
+      parsedRects = JSON.parse(row.rects);
+    } catch {
+      return null;
     }
-    const rect = item as Partial<HighlightRect>;
-    return (
-      typeof rect.x === 'number' &&
-      Number.isFinite(rect.x) &&
-      typeof rect.y === 'number' &&
-      Number.isFinite(rect.y) &&
-      typeof rect.w === 'number' &&
-      Number.isFinite(rect.w) &&
-      typeof rect.h === 'number' &&
-      Number.isFinite(rect.h)
-    );
-  });
-  if (rects.length === 0) {
+    if (!Array.isArray(parsedRects)) {
+      return null;
+    }
+    rects = parsedRects.filter((item): item is HighlightRect => {
+      if (!item || typeof item !== 'object') {
+        return false;
+      }
+      const rect = item as Partial<HighlightRect>;
+      return (
+        typeof rect.x === 'number' &&
+        Number.isFinite(rect.x) &&
+        typeof rect.y === 'number' &&
+        Number.isFinite(rect.y) &&
+        typeof rect.w === 'number' &&
+        Number.isFinite(rect.w) &&
+        typeof rect.h === 'number' &&
+        Number.isFinite(rect.h)
+      );
+    });
+  }
+
+  const cfiRange = typeof row.cfi_range === 'string' && row.cfi_range.trim().length > 0 ? row.cfi_range.trim() : null;
+  const page = row.page === null ? null : normalizeLastPage(row.page);
+  if (rects.length === 0 && !cfiRange) {
     return null;
   }
+
   return {
     id: row.id,
     bookId: row.book_id,
-    page: row.page,
+    page,
     rects,
+    cfiRange,
     text: normalizeHighlightText(row.text),
     note: normalizeHighlightNote(row.note),
     createdAt: row.created_at,
@@ -148,26 +157,27 @@ export class ReaderProgressDb {
   private deleteNoteStmt: Database.Statement<[string, string]>;
   private updateNoteStmt: Database.Statement<[string, number, string, string]>;
   private getNoteStmt: Database.Statement<[string, string], NoteRow | undefined>;
-  private insertHighlightStmt: Database.Statement<[string, string, string, number, string, string | null, string | null, number, number]>;
+  private insertHighlightStmt: Database.Statement<
+    [string, string, string, number | null, string | null, string | null, string | null, string | null, number, number]
+  >;
   private updateHighlightNoteStmt: Database.Statement<[string | null, number, string, string]>;
   private getHighlightStmt: Database.Statement<[string, string], HighlightRow | undefined>;
   private deleteHighlightsByIdsStmt: Database.Statement;
   private deleteHighlightStmt: Database.Statement<[string, string]>;
-  private listHighlightsStmt: Database.Statement<[string, string, number], HighlightRow>;
-  private listNotesByBookForExportStmt: Database.Statement<[string, string], NoteRow>;
+  private listHighlightsByPageStmt: Database.Statement<[string, string, number], HighlightRow>;
   private listHighlightsByBookStmt: Database.Statement<[string, string], HighlightRow>;
+  private listNotesByBookForExportStmt: Database.Statement<[string, string], NoteRow>;
   private listBookmarksStmt: Database.Statement<[string, string], BookmarkRow>;
   private insertBookmarkStmt: Database.Statement<[string, string, string, number, number]>;
   private deleteBookmarkByPageStmt: Database.Statement<[string, string, number]>;
 
   private ensureHighlightsSchema(): void {
-    const rows = this.db.prepare('PRAGMA table_info(highlights)').all() as Array<{ name: string }>;
+    const rows = this.db.prepare('PRAGMA table_info(highlights)').all() as Array<{ name: string; notnull: number }>;
     if (rows.length === 0) {
       return;
     }
 
     const columns = new Set(rows.map((row) => row.name));
-
     if (!columns.has('created_at')) {
       this.db.exec('ALTER TABLE highlights ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0');
     }
@@ -179,6 +189,53 @@ export class ReaderProgressDb {
     }
     if (!columns.has('note')) {
       this.db.exec('ALTER TABLE highlights ADD COLUMN note TEXT');
+    }
+
+    const normalizedRows = this.db.prepare('PRAGMA table_info(highlights)').all() as Array<{ name: string; notnull: number }>;
+    const normalizedColumns = new Set(normalizedRows.map((row) => row.name));
+    const pageColumn = normalizedRows.find((row) => row.name === 'page');
+    const rectsColumn = normalizedRows.find((row) => row.name === 'rects');
+    const needsTableRebuild =
+      !normalizedColumns.has('cfi_range') || Boolean(pageColumn && pageColumn.notnull) || Boolean(rectsColumn && rectsColumn.notnull);
+
+    if (needsTableRebuild) {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS highlights_v2 (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          book_id TEXT NOT NULL,
+          page INTEGER NULL,
+          rects TEXT NULL,
+          cfi_range TEXT NULL,
+          text TEXT,
+          note TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        INSERT INTO highlights_v2 (id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at)
+        SELECT
+          id,
+          user_id,
+          book_id,
+          page,
+          rects,
+          NULL AS cfi_range,
+          text,
+          note,
+          created_at,
+          updated_at
+        FROM highlights;
+
+        DROP TABLE highlights;
+        ALTER TABLE highlights_v2 RENAME TO highlights;
+      `);
+    }
+
+    const refreshedRows = this.db.prepare('PRAGMA table_info(highlights)').all() as Array<{ name: string }>;
+    const refreshedColumns = new Set(refreshedRows.map((row) => row.name));
+    if (!refreshedColumns.has('cfi_range')) {
+      this.db.exec('ALTER TABLE highlights ADD COLUMN cfi_range TEXT');
     }
 
     this.db.exec(`
@@ -197,6 +254,9 @@ export class ReaderProgressDb {
         WHEN created_at IS NULL OR created_at <= 0 THEN updated_at
         ELSE created_at
       END;
+
+      CREATE INDEX IF NOT EXISTS idx_highlights_user_book_page ON highlights(user_id, book_id, page);
+      CREATE INDEX IF NOT EXISTS idx_highlights_user_book_cfi ON highlights(user_id, book_id, cfi_range);
     `);
   }
 
@@ -236,8 +296,9 @@ export class ReaderProgressDb {
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
         book_id TEXT NOT NULL,
-        page INTEGER NOT NULL,
-        rects TEXT NOT NULL,
+        page INTEGER NULL,
+        rects TEXT NULL,
+        cfi_range TEXT NULL,
         text TEXT,
         note TEXT,
         created_at INTEGER NOT NULL,
@@ -256,6 +317,7 @@ export class ReaderProgressDb {
       CREATE INDEX IF NOT EXISTS idx_notes_user_created_at ON notes(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_notes_user_book_page ON notes(user_id, book_id, page);
       CREATE INDEX IF NOT EXISTS idx_highlights_user_book_page ON highlights(user_id, book_id, page);
+      CREATE INDEX IF NOT EXISTS idx_highlights_user_book_cfi ON highlights(user_id, book_id, cfi_range);
       CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_created_at ON bookmarks(user_id, book_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_bookmarks_user_book_page ON bookmarks(user_id, book_id, page);
     `);
@@ -298,8 +360,8 @@ export class ReaderProgressDb {
        LIMIT 1`
     );
     this.insertHighlightStmt = this.db.prepare(
-      `INSERT INTO highlights (id, user_id, book_id, page, rects, text, note, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO highlights (id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     this.updateHighlightNoteStmt = this.db.prepare(
       `UPDATE highlights
@@ -307,7 +369,7 @@ export class ReaderProgressDb {
        WHERE user_id = ? AND id = ?`
     );
     this.getHighlightStmt = this.db.prepare(
-      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
+      `SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND id = ?
        LIMIT 1`
@@ -318,8 +380,8 @@ export class ReaderProgressDb {
          AND id IN (SELECT value FROM json_each(@ids_json))`
     );
     this.deleteHighlightStmt = this.db.prepare('DELETE FROM highlights WHERE id = ? AND user_id = ?');
-    this.listHighlightsStmt = this.db.prepare(
-      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
+    this.listHighlightsByPageStmt = this.db.prepare(
+      `SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ? AND page = ?
        ORDER BY created_at DESC`
@@ -331,10 +393,10 @@ export class ReaderProgressDb {
        ORDER BY page ASC, created_at ASC`
     );
     this.listHighlightsByBookStmt = this.db.prepare(
-      `SELECT id, user_id, book_id, page, rects, text, note, created_at, updated_at
+      `SELECT id, user_id, book_id, page, rects, cfi_range, text, note, created_at, updated_at
        FROM highlights
        WHERE user_id = ? AND book_id = ?
-       ORDER BY page ASC, created_at ASC`
+       ORDER BY CASE WHEN page IS NULL THEN 1 ELSE 0 END ASC, page ASC, created_at ASC`
     );
     this.listBookmarksStmt = this.db.prepare(
       `SELECT id, user_id, book_id, page, created_at
@@ -488,8 +550,9 @@ export class ReaderProgressDb {
   insertHighlight(
     userId: string,
     bookId: string,
-    page: number,
-    rects: HighlightRect[],
+    page: number | null,
+    rects: HighlightRect[] | null,
+    cfiRange: string | null,
     text: string | null,
     note: string | null,
     id: string,
@@ -499,8 +562,13 @@ export class ReaderProgressDb {
     const safeUserId = asNonEmptyString(userId);
     const safeBookId = asNonEmptyString(bookId);
     const safeId = asNonEmptyString(id);
-    const safePage = normalizeLastPage(page);
-    if (!safeUserId || !safeBookId || !safeId || !safePage || rects.length === 0) {
+    const safePage = page === null || page === undefined ? null : normalizeLastPage(page);
+    const safeCfiRange = cfiRange ? asNonEmptyString(cfiRange) : null;
+    const safeRects = Array.isArray(rects) ? rects : [];
+    if (!safeUserId || !safeBookId || !safeId) {
+      return null;
+    }
+    if ((safePage === null || safeRects.length === 0) && !safeCfiRange) {
       return null;
     }
 
@@ -509,7 +577,8 @@ export class ReaderProgressDb {
       safeUserId,
       safeBookId,
       safePage,
-      JSON.stringify(rects),
+      safeRects.length > 0 ? JSON.stringify(safeRects) : null,
+      safeCfiRange,
       normalizeHighlightText(text),
       normalizeHighlightNote(note),
       Math.floor(createdAt),
@@ -519,7 +588,8 @@ export class ReaderProgressDb {
       id: safeId,
       bookId: safeBookId,
       page: safePage,
-      rects,
+      rects: safeRects,
+      cfiRange: safeCfiRange,
       text: normalizeHighlightText(text),
       note: normalizeHighlightNote(note),
       createdAt: Math.floor(createdAt),
@@ -544,15 +614,18 @@ export class ReaderProgressDb {
     return row ? toHighlight(row) : null;
   }
 
-  listHighlights(userId: string, bookId: string, page: number): Highlight[] {
+  listHighlights(userId: string, bookId: string, page?: number | null): Highlight[] {
     const safeUserId = asNonEmptyString(userId);
     const safeBookId = asNonEmptyString(bookId);
-    const safePage = normalizeLastPage(page);
-    if (!safeUserId || !safeBookId || !safePage) {
+    if (!safeUserId || !safeBookId) {
       return [];
     }
 
-    const rows = this.listHighlightsStmt.all(safeUserId, safeBookId, safePage);
+    const safePage = page === null || page === undefined ? null : normalizeLastPage(page);
+    const rows =
+      safePage === null
+        ? this.listHighlightsByBookStmt.all(safeUserId, safeBookId)
+        : this.listHighlightsByPageStmt.all(safeUserId, safeBookId, safePage);
     const highlights: Highlight[] = [];
     for (const row of rows) {
       const parsed = toHighlight(row);
@@ -599,7 +672,7 @@ export class ReaderProgressDb {
   ): Highlight | null {
     const run = this.db.transaction(() => {
       this.deleteHighlights(userId, removeIds);
-      return this.insertHighlight(userId, bookId, page, rects, text, note, id, createdAt, updatedAt);
+      return this.insertHighlight(userId, bookId, page, rects, null, text, note, id, createdAt, updatedAt);
     });
     return run();
   }

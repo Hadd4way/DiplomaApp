@@ -18,6 +18,7 @@ import {
 } from '@/lib/reader-theme';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
+import type { Highlight } from '../../shared/ipc';
 
 type TocItem = {
   id?: string;
@@ -32,6 +33,16 @@ type Props = {
   loading: boolean;
   onBack: () => void;
 };
+
+type EpubHighlightPromptState = { highlightId: string; x: number; y: number } | null;
+type EpubHighlightEditorState = {
+  highlightId: string;
+  x: number;
+  y: number;
+  draftNote: string;
+  saving: boolean;
+  error: string | null;
+} | null;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -71,6 +82,22 @@ function normalizeToc(items: unknown): TocItem[] {
       subitems: normalizeToc(entry.subitems)
     };
   });
+}
+
+function normalizeHighlightText(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeHighlightNote(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
 }
 
 const EPUB_SETTINGS_STYLE_ID = 'reader-settings-style';
@@ -212,17 +239,22 @@ function TocTree({
 }
 
 export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
+  const readerStageRef = React.useRef<HTMLDivElement | null>(null);
   const readerContainerRef = React.useRef<HTMLDivElement | null>(null);
   const bookRef = React.useRef<any>(null);
   const renditionRef = React.useRef<any>(null);
   const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestCfiRef = React.useRef<string | null>(null);
+  const epubHighlightsRef = React.useRef<Highlight[]>([]);
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
+  const [epubHighlights, setEpubHighlights] = React.useState<Highlight[]>([]);
+  const [highlightPrompt, setHighlightPrompt] = React.useState<EpubHighlightPromptState>(null);
+  const [highlightEditor, setHighlightEditor] = React.useState<EpubHighlightEditorState>(null);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
   const { registerActivity, bindActivityTarget, flush: flushReadingStats } = useReadingSessionStats({
@@ -230,6 +262,130 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     format: 'epub',
     rootRef: readerContainerRef
   });
+
+  const findFrameForDocument = React.useCallback((documentNode: Document): HTMLIFrameElement | null => {
+    const container = readerContainerRef.current;
+    if (!container) {
+      return null;
+    }
+
+    const frames = Array.from(container.querySelectorAll('iframe'));
+    for (const frame of frames) {
+      if (frame instanceof HTMLIFrameElement && frame.contentDocument === documentNode) {
+        return frame;
+      }
+    }
+    return null;
+  }, []);
+
+  const clampPopoverPosition = React.useCallback((x: number, y: number) => {
+    const stage = readerStageRef.current;
+    if (!stage) {
+      return { x, y };
+    }
+    const stageRect = stage.getBoundingClientRect();
+    return {
+      x: Math.max(12, Math.min(stageRect.width - 12, x)),
+      y: Math.max(12, Math.min(stageRect.height - 12, y))
+    };
+  }, []);
+
+  const getPopoverPositionForRange = React.useCallback(
+    (range: Range, documentNode: Document) => {
+      const stage = readerStageRef.current;
+      const frame = findFrameForDocument(documentNode);
+      if (!stage || !frame) {
+        return null;
+      }
+      const stageRect = stage.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+      const rangeRect = range.getBoundingClientRect();
+      return clampPopoverPosition(
+        frameRect.left - stageRect.left + rangeRect.right,
+        frameRect.top - stageRect.top + rangeRect.bottom + 8
+      );
+    },
+    [clampPopoverPosition, findFrameForDocument]
+  );
+
+  const openHighlightEditor = React.useCallback(
+    (highlight: Highlight, x: number, y: number) => {
+      const position = clampPopoverPosition(x, y);
+      setHighlightPrompt(null);
+      setHighlightEditor({
+        highlightId: highlight.id,
+        x: position.x,
+        y: position.y,
+        draftNote: highlight.note ?? '',
+        saving: false,
+        error: null
+      });
+    },
+    [clampPopoverPosition]
+  );
+
+  const renderHighlights = React.useCallback(
+    (highlights: Highlight[]) => {
+      const rendition = renditionRef.current;
+      if (!rendition?.annotations) {
+        return;
+      }
+
+      const seen = new Set<string>();
+      for (const highlight of highlights) {
+        const cfiRange = highlight.cfiRange?.trim();
+        if (!cfiRange || seen.has(cfiRange)) {
+          continue;
+        }
+        seen.add(cfiRange);
+        rendition.annotations.remove?.(cfiRange, 'highlight');
+        rendition.annotations.add?.(
+          'highlight',
+          cfiRange,
+          {},
+          (event: Event) => {
+            event.preventDefault();
+            event.stopPropagation?.();
+            registerActivity();
+            const stage = readerStageRef.current;
+            const target = event.target;
+            if (!(stage instanceof HTMLDivElement) || !(target instanceof SVGElement)) {
+              return;
+            }
+            const stageRect = stage.getBoundingClientRect();
+            const targetRect = target.getBoundingClientRect();
+            openHighlightEditor(
+              highlight,
+              targetRect.left - stageRect.left + targetRect.width / 2,
+              targetRect.bottom - stageRect.top + 8
+            );
+          },
+          highlight.note ? 'epub-highlight epub-highlight-with-note' : 'epub-highlight'
+        );
+      }
+    },
+    [openHighlightEditor, registerActivity]
+  );
+
+  const loadHighlights = React.useCallback(async () => {
+    if (!window.api) {
+      setEpubHighlights([]);
+      return;
+    }
+
+    try {
+      const result = await window.api.highlights.list({ bookId });
+      if (!result.ok) {
+        setEpubHighlights([]);
+        return;
+      }
+      const nextHighlights = result.highlights.filter((highlight) => Boolean(highlight.cfiRange));
+      setEpubHighlights(nextHighlights);
+      renderHighlights(nextHighlights);
+    } catch {
+      setEpubHighlights([]);
+    }
+  }, [bookId, renderHighlights]);
 
   const bindIframeActivity = React.useCallback(() => {
     for (const cleanup of iframeActivityCleanupRef.current.values()) {
@@ -266,6 +422,84 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     [bookId]
   );
 
+  const saveHighlightNote = React.useCallback(async () => {
+    if (!window.api || !highlightEditor) {
+      return;
+    }
+    if (!epubHighlights.some((item) => item.id === highlightEditor.highlightId)) {
+      setHighlightEditor(null);
+      return;
+    }
+
+    const normalizedNote = normalizeHighlightNote(highlightEditor.draftNote);
+    setHighlightEditor((prev) => (prev ? { ...prev, saving: true, error: null } : prev));
+    try {
+      const result = await window.api.highlights.updateNote({
+        highlightId: highlightEditor.highlightId,
+        note: normalizedNote
+      });
+      if (!result.ok) {
+        setHighlightEditor((prev) => (prev ? { ...prev, saving: false, error: result.error } : prev));
+        return;
+      }
+      setEpubHighlights((prev) => {
+        const next = prev.map((item) => (item.id === result.highlight.id ? result.highlight : item));
+        renderHighlights(next);
+        return next;
+      });
+      setHighlightPrompt(null);
+      setHighlightEditor(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setHighlightEditor((prev) => (prev ? { ...prev, saving: false, error: message } : prev));
+    }
+  }, [epubHighlights, highlightEditor, renderHighlights]);
+
+  const createHighlightFromSelection = React.useCallback(
+    async (cfiRange: string, contents: { document: Document; window: Window }) => {
+      if (!window.api) {
+        return;
+      }
+
+      const safeCfiRange = cfiRange.trim();
+      if (!safeCfiRange) {
+        return;
+      }
+
+      const selectedText = normalizeHighlightText(contents.window.getSelection()?.toString() ?? null);
+      const range = renditionRef.current?.getRange?.(safeCfiRange) ?? null;
+      const popoverPosition = range ? getPopoverPositionForRange(range, contents.document) : null;
+
+      try {
+        const result = await window.api.highlights.insertRaw({
+          bookId,
+          cfiRange: safeCfiRange,
+          text: selectedText,
+          note: null
+        });
+        if (!result.ok) {
+          return;
+        }
+        setEpubHighlights((prev) => {
+          const next = [result.highlight, ...prev.filter((item) => item.id !== result.highlight.id)];
+          renderHighlights(next);
+          return next;
+        });
+        if (popoverPosition) {
+          setHighlightEditor(null);
+          setHighlightPrompt({
+            highlightId: result.highlight.id,
+            x: popoverPosition.x,
+            y: popoverPosition.y
+          });
+        }
+      } finally {
+        contents.window.getSelection()?.removeAllRanges();
+      }
+    },
+    [bookId, getPopoverPositionForRange, renderHighlights]
+  );
+
   const goPrev = React.useCallback(() => {
     registerActivity();
     renditionRef.current?.prev?.();
@@ -275,6 +509,10 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     registerActivity();
     renditionRef.current?.next?.();
   }, [registerActivity]);
+
+  React.useEffect(() => {
+    epubHighlightsRef.current = epubHighlights;
+  }, [epubHighlights]);
 
   React.useEffect(() => {
     const rendition = renditionRef.current;
@@ -295,8 +533,9 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         applyInlineEpubStyles(documentNode, settings);
       }
     }
+    renderHighlights(epubHighlights);
     bindIframeActivity();
-  }, [bindIframeActivity, settings]);
+  }, [bindIframeActivity, epubHighlights, renderHighlights, settings]);
 
   React.useEffect(() => {
     const container = readerContainerRef.current;
@@ -314,6 +553,9 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     setReady(false);
     setError(null);
     setTocItems([]);
+    setEpubHighlights([]);
+    setHighlightPrompt(null);
+    setHighlightEditor(null);
     latestCfiRef.current = null;
     container.replaceChildren();
 
@@ -403,8 +645,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                 void persistCfi(cfi);
               }, 400);
             };
-            rendition.on?.('relocated', onRelocated);
-            rendition.on?.('rendered', (_section: unknown, view: { document?: Document } | undefined) => {
+            const onRendered = (_section: unknown, view: { document?: Document } | undefined) => {
               applyRenditionSettings(rendition, settings);
               if (view?.document) {
                 applyInlineEpubStyles(view.document, settings);
@@ -417,8 +658,16 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                   applyInlineEpubStyles(documentNode, settings);
                 }
               }
+              renderHighlights(epubHighlightsRef.current);
               bindIframeActivity();
-            });
+            };
+            const onSelected = (selectedCfiRange: string, contents: { document: Document; window: Window }) => {
+              registerActivity();
+              void createHighlightFromSelection(selectedCfiRange, contents);
+            };
+            rendition.on?.('relocated', onRelocated);
+            rendition.on?.('rendered', onRendered);
+            rendition.on?.('selected', onSelected);
             const onDisplayError = (errorPayload: unknown) => {
               warn('event:displayError', { candidate: candidate.label, errorPayload, elapsed: elapsed() });
             };
@@ -480,6 +729,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
               log('display:ok', { candidate: candidate.label, target: 'default', elapsed: elapsed() });
             }
 
+            await loadHighlights();
+
             if (!canceled) {
               setReady(true);
             }
@@ -491,6 +742,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
             return () => {
               rendition.off?.('relocated', onRelocated);
+              rendition.off?.('rendered', onRendered);
+              rendition.off?.('selected', onSelected);
               rendition.off?.('displayError', onDisplayError);
               book.off?.('error', onBookError);
               book.off?.('openFailed', onOpenFailed);
@@ -547,7 +800,46 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       renditionRef.current = null;
       bookRef.current = null;
     };
-  }, [bindIframeActivity, bookId, flushReadingStats, persistCfi, registerActivity, settings]);
+  }, [
+    bindIframeActivity,
+    bookId,
+    createHighlightFromSelection,
+    flushReadingStats,
+    loadHighlights,
+    persistCfi,
+    registerActivity,
+    renderHighlights,
+    settings
+  ]);
+
+  React.useEffect(() => {
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (target.closest('[data-epub-highlight-popover="true"]')) {
+        return;
+      }
+      setHighlightPrompt(null);
+      setHighlightEditor(null);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      setHighlightPrompt(null);
+      setHighlightEditor(null);
+    };
+
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
 
   return (
     <div className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden" style={getReaderThemeStyles(settings.theme)}>
@@ -642,7 +934,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           </aside>
         ) : null}
 
-        <div className="relative flex min-h-0 min-w-0 flex-1" style={{ backgroundColor: palette.viewportBg }}>
+        <div ref={readerStageRef} className="relative flex min-h-0 min-w-0 flex-1" style={{ backgroundColor: palette.viewportBg }}>
           <div className="flex h-full w-full items-center justify-center p-4">
             <div
               className="relative h-full w-full max-w-5xl overflow-hidden rounded-sm border"
@@ -663,6 +955,119 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             palette={palette}
             showEpubControls
           />
+          {highlightPrompt ? (
+            <div
+              data-epub-highlight-popover="true"
+              className="pointer-events-auto absolute z-20 w-[180px] rounded-md border p-2 shadow-lg"
+              style={{
+                left: `${highlightPrompt.x}px`,
+                top: `${highlightPrompt.y}px`,
+                backgroundColor: palette.panelBg,
+                borderColor: palette.chromeBorder,
+                color: palette.chromeText
+              }}
+            >
+              <p className="text-xs" style={{ color: palette.mutedText }}>
+                Highlight saved
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="mt-2 w-full"
+                style={getReaderButtonStyles(settings.theme)}
+                onClick={() => {
+                  const targetHighlight = epubHighlights.find((item) => item.id === highlightPrompt.highlightId);
+                  if (!targetHighlight) {
+                    setHighlightPrompt(null);
+                    return;
+                  }
+                  openHighlightEditor(targetHighlight, highlightPrompt.x, highlightPrompt.y + 6);
+                }}
+              >
+                Add note
+              </Button>
+              <button
+                type="button"
+                className="mt-2 block w-full rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                onClick={() => setHighlightPrompt(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+          {highlightEditor ? (
+            <div
+              data-epub-highlight-popover="true"
+              className="pointer-events-auto absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
+              style={{
+                left: `${highlightEditor.x}px`,
+                top: `${highlightEditor.y}px`,
+                backgroundColor: palette.panelBg,
+                borderColor: palette.chromeBorder,
+                color: palette.chromeText
+              }}
+            >
+              {(() => {
+                const activeHighlight = epubHighlights.find((item) => item.id === highlightEditor.highlightId) ?? null;
+                if (!activeHighlight) {
+                  return (
+                    <p className="text-xs" style={{ color: palette.mutedText }}>
+                      Highlight not found.
+                    </p>
+                  );
+                }
+
+                return (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
+                      Highlight
+                    </p>
+                    <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: palette.chromeText }}>
+                      {activeHighlight.text ?? '(highlight without text)'}
+                    </p>
+                    <textarea
+                      value={highlightEditor.draftNote}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setHighlightEditor((prev) => (prev ? { ...prev, draftNote: value, error: null } : prev));
+                      }}
+                      rows={5}
+                      placeholder="Add a note to this highlight..."
+                      className="mt-3 w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{
+                        backgroundColor: palette.inputBg,
+                        borderColor: palette.buttonBorder,
+                        color: palette.inputText
+                      }}
+                    />
+                    {highlightEditor.error ? <p className="mt-2 text-xs text-destructive">{highlightEditor.error}</p> : null}
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        style={getReaderButtonStyles(settings.theme)}
+                        disabled={highlightEditor.saving}
+                        onClick={() => {
+                          void saveHighlightNote();
+                        }}
+                      >
+                        Save
+                      </Button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                        onClick={() => setHighlightEditor(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
           {error ? (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <p

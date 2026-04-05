@@ -154,8 +154,8 @@ function listHighlights(authDb, readerDb, userId, payload) {
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
-    const page = normalizePage(payload.page);
-    if (!page) {
+    const page = payload.page === null || payload.page === undefined ? null : normalizePage(payload.page);
+    if (payload.page !== null && payload.page !== undefined && !page) {
         return { ok: false, error: 'Invalid page' };
     }
     return { ok: true, highlights: readerDb.listHighlights(userId, bookId, page) };
@@ -244,24 +244,32 @@ function insertRawHighlight(authDb, readerDb, userId, payload) {
     if (!bookId) {
         return { ok: false, error: 'Book not found' };
     }
-    const page = normalizePage(payload.page);
-    if (!page) {
-        return { ok: false, error: 'Invalid page' };
-    }
     const rects = (payload.rects ?? [])
         .map((rect) => normalizeRect(rect))
         .filter((rect) => Boolean(rect));
-    if (rects.length === 0) {
-        return { ok: false, error: 'At least one highlight rect is required.' };
-    }
+    const cfiRange = payload.cfiRange?.trim() || null;
+    const page = payload.page === null || payload.page === undefined ? null : normalizePage(payload.page);
     const ownedBook = authDb
         .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? LIMIT 1')
         .get(bookId, userId);
     if (!ownedBook) {
         return { ok: false, error: 'Book not found' };
     }
+    if (cfiRange) {
+        if (rects.length > 0) {
+            return { ok: false, error: 'EPUB highlights cannot include PDF rects.' };
+        }
+    }
+    else {
+        if (!page) {
+            return { ok: false, error: 'Invalid page' };
+        }
+        if (rects.length === 0) {
+            return { ok: false, error: 'At least one highlight rect is required.' };
+        }
+    }
     const now = Date.now();
-    const created = readerDb.insertHighlight(userId, bookId, page, rects, normalizeHighlightText(payload.text), normalizeHighlightNote(payload.note), (0, node_crypto_1.randomUUID)(), now, now);
+    const created = readerDb.insertHighlight(userId, bookId, page, rects, cfiRange, normalizeHighlightText(payload.text), normalizeHighlightNote(payload.note), (0, node_crypto_1.randomUUID)(), now, now);
     if (!created) {
         return { ok: false, error: 'Failed to create highlight.' };
     }

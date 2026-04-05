@@ -71,8 +71,9 @@ export type HighlightRect = {
 export type Highlight = {
   id: string;
   bookId: string;
-  page: number;
+  page: number | null;
   rects: HighlightRect[];
+  cfiRange: string | null;
   text: string | null;
   note: string | null;
   createdAt: number;
@@ -192,7 +193,7 @@ export type NotesUpdateRequest = {
 
 export type HighlightsListRequest = {
   bookId: string;
-  page: number;
+  page?: number | null;
 };
 
 export type HighlightsCreateMergedRequest = {
@@ -208,8 +209,9 @@ export type HighlightsDeleteRequest = {
 
 export type HighlightsInsertRawRequest = {
   bookId: string;
-  page: number;
-  rects: HighlightRect[];
+  page?: number | null;
+  rects?: HighlightRect[] | null;
+  cfiRange?: string | null;
   text: string | null;
   note?: string | null;
 };
