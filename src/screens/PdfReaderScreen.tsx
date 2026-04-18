@@ -18,6 +18,7 @@ import {
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { ReaderShell } from '@/components/reader/ReaderShell';
 import { HighlightsPanel, type ReaderHighlightItem } from '@/components/reader/HighlightsPanel';
+import { SearchPanel, type ReaderSearchResultItem } from '@/components/reader/SearchPanel';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
@@ -545,6 +546,17 @@ export function PdfReaderScreen({
         createdAt: highlight.createdAt
       })),
     [bookHighlights]
+  );
+  const searchPanelResults = React.useMemo<ReaderSearchResultItem[]>(
+    () =>
+      searchResults.map((result, index) => ({
+        id: `${result.page}:${result.start}:${result.end}:${index}`,
+        excerpt: result.snippet,
+        start: result.start,
+        end: result.end,
+        locationLabel: `Page ${result.page}`
+      })),
+    [searchResults]
   );
 
   const goPrev = React.useCallback(() => {
@@ -2615,118 +2627,25 @@ export function PdfReaderScreen({
   );
 
   const searchPanel = (
-    <ReaderSidePanel
+    <SearchPanel
       open={searchPanelOpen}
-      title="Search"
       theme={settings.theme}
+      query={searchQuery}
+      results={searchPanelResults}
+      isSearching={isSearching}
+      activeIndex={activeSearchIndex}
       onClose={() => setSearchPanelOpen(false)}
-      icon={<Search className="h-4 w-4" />}
+      onQueryChange={setSearchQuery}
+      onPrev={goToPrevSearchMatch}
+      onNext={goToNextSearchMatch}
+      onSelectResult={navigateToSearchIndex}
+      onRegisterActivity={registerActivity}
+      inputRef={searchInputRef}
+      placeholder="Search in this PDF..."
       rightOffset={notesPanelOpen ? 344 : 12}
-    >
-      <div className="space-y-3">
-        <div className="space-y-2 border-b pb-3" style={{ borderColor: readerPalette.chromeBorder }}>
-          <Input
-            ref={searchInputRef}
-            value={searchQuery}
-            onChange={(event) => {
-              registerActivity();
-              setSearchQuery(event.target.value);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') {
-                return;
-              }
-              event.preventDefault();
-              if (event.shiftKey) {
-                goToPrevSearchMatch();
-              } else {
-                goToNextSearchMatch();
-              }
-            }}
-            placeholder="Search in this PDF..."
-            aria-label="Search in document"
-            style={{
-              backgroundColor: readerPalette.inputBg,
-              borderColor: readerPalette.buttonBorder,
-              color: readerPalette.inputText
-            }}
-          />
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={goToPrevSearchMatch}
-              disabled={searchResults.length === 0}
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              Prev
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={goToNextSearchMatch}
-              disabled={searchResults.length === 0}
-              style={getReaderButtonStyles(settings.theme)}
-            >
-              Next
-            </Button>
-            <span className="text-xs" style={{ color: readerPalette.mutedText }}>
-              {searchResults.length > 0 && activeSearchIndex >= 0
-                ? `${activeSearchIndex + 1} / ${searchResults.length}`
-                : `0 / ${searchResults.length}`}
-            </span>
-          </div>
-          <p className="text-xs" style={{ color: readerPalette.mutedText }}>
-            {isSearching ? 'Searching...' : `${searchResults.length} results`}
-          </p>
-        </div>
-        {!searchQuery.trim() ? (
-          <p className="text-xs" style={{ color: readerPalette.mutedText }}>Type a query to search all pages.</p>
-        ) : null}
-        {searchQuery.trim() && !isSearching && searchResults.length === 0 ? (
-          <p className="text-xs" style={{ color: readerPalette.mutedText }}>No matches found.</p>
-        ) : null}
-        <div className="space-y-2">
-          {searchResults.map((result, index) => {
-            const safeStart = Math.max(0, Math.min(result.start, result.snippet.length));
-            const safeEnd = Math.max(safeStart, Math.min(result.end, result.snippet.length));
-            const before = result.snippet.slice(0, safeStart);
-            const match = result.snippet.slice(safeStart, safeEnd);
-            const after = result.snippet.slice(safeEnd);
-            return (
-              <button
-                key={`${result.page}:${result.start}:${result.end}:${index}`}
-                type="button"
-                onClick={() => {
-                  navigateToSearchIndex(index);
-                }}
-                className={`w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  index === activeSearchIndex ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <span
-                  className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                  style={{
-                    backgroundColor: readerPalette.accentBg,
-                    borderColor: readerPalette.accentBorder,
-                    color: readerPalette.accentText
-                  }}
-                >
-                  Page {result.page}
-                </span>
-                <p className="mt-1 text-xs leading-relaxed" style={{ color: readerPalette.chromeText }}>
-                  {before}
-                  <mark className="rounded bg-yellow-200 px-0.5">{match}</mark>
-                  {after}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </ReaderSidePanel>
+      emptyQueryMessage="Type a query to search all pages."
+      noResultsMessage="No matches found."
+    />
   );
 
   const highlightsPanel = (

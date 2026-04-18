@@ -37,14 +37,33 @@ declare module 'epubjs' {
     annotations?: Annotations;
   };
 
+  type SectionSearchMatch = {
+    cfi?: string;
+    excerpt?: string;
+  };
+
+  type Section = {
+    href: string;
+    index: number;
+    load: (request?: (path: string) => Promise<unknown>) => Promise<unknown>;
+    unload?: () => void;
+    search?: (query: string, maxSeqEle?: number) => SectionSearchMatch[];
+    find?: (query: string) => SectionSearchMatch[];
+  };
+
   type Book = {
     ready: Promise<void>;
+    load: (path: string) => Promise<unknown>;
     locations?: {
       generate?: (chars?: number) => Promise<void>;
       length?: () => number;
       percentageFromCfi?: (cfi: string) => number;
     };
+    spine?: {
+      spineItems?: Section[];
+    };
     loaded: {
+      spine: Promise<unknown>;
       navigation: Promise<{ toc?: unknown }>;
     };
     renderTo: (element: HTMLElement, options: { width: string; height: string }) => Rendition;

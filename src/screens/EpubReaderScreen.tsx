@@ -14,6 +14,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { HighlightsPanel, type ReaderHighlightItem } from '@/components/reader/HighlightsPanel';
+import { SearchPanel, type ReaderSearchResultItem } from '@/components/reader/SearchPanel';
 import { ReaderShell } from '@/components/reader/ReaderShell';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import {
   getReaderButtonStyles,
   getReaderThemePalette
 } from '@/lib/reader-theme';
+import { useEpubSearch } from '@/lib/useEpubSearch';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
 import type { EpubBookmark, Highlight } from '../../shared/ipc';
@@ -175,6 +177,26 @@ function formatTimestamp(value: number): string {
   return new Date(value).toLocaleString();
 }
 
+function nextIndex(current: number, total: number): number {
+  if (total <= 0) {
+    return -1;
+  }
+  if (current < 0) {
+    return 0;
+  }
+  return (current + 1) % total;
+}
+
+function prevIndex(current: number, total: number): number {
+  if (total <= 0) {
+    return -1;
+  }
+  if (current < 0) {
+    return total - 1;
+  }
+  return (current - 1 + total) % total;
+}
+
 const EPUB_SETTINGS_STYLE_ID = 'reader-settings-style';
 
 function getEpubSettingsCss(settings: ReturnType<typeof useReaderSettings>['settings']): string {
@@ -316,6 +338,7 @@ function TocTree({
 export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const readerStageRef = React.useRef<HTMLDivElement | null>(null);
   const readerContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null);
   const bookRef = React.useRef<any>(null);
   const renditionRef = React.useRef<any>(null);
   const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
@@ -329,6 +352,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const renderedHighlightCfisRef = React.useRef<Set<string>>(new Set());
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
+  const [searchPanelOpen, setSearchPanelOpen] = React.useState(false);
   const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
   const [highlightsPanelOpen, setHighlightsPanelOpen] = React.useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
@@ -353,6 +377,18 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     () => epubBookmarks.find((bookmark) => isMatchingBookmarkCfi(currentCfi, bookmark.cfi)) ?? null,
     [currentCfi, epubBookmarks]
   );
+  const getChapterLabelForHref = React.useCallback(
+    (href: string | null) => findTocLabelByHref(tocItems, href),
+    [tocItems]
+  );
+  const {
+    query: searchQuery,
+    results: epubSearchResults,
+    isSearching,
+    setQuery: setSearchQuery,
+    clearQuery
+  } = useEpubSearch(bookRef.current, bookId, getChapterLabelForHref);
+  const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
   const highlightItems = React.useMemo<ReaderHighlightItem[]>(
     () =>
       epubHighlights.map((highlight) => ({
@@ -364,6 +400,18 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         createdAt: highlight.createdAt
       })),
     [epubHighlights]
+  );
+  const searchPanelResults = React.useMemo<ReaderSearchResultItem[]>(
+    () =>
+      epubSearchResults.map((result) => ({
+        id: result.id,
+        excerpt: result.excerpt,
+        start: result.start,
+        end: result.end,
+        locationLabel: `Section ${result.spineIndex + 1}`,
+        chapterLabel: result.chapterLabel
+      })),
+    [epubSearchResults]
   );
   const isCurrentLocationBookmarked = activeBookmark !== null;
   const { registerActivity, bindActivityTarget, flush: flushReadingStats } = useReadingSessionStats({
@@ -632,6 +680,23 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     toggleCurrentBookmarkRef.current = toggleCurrentBookmark;
   }, [toggleCurrentBookmark]);
 
+  React.useEffect(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      setActiveSearchIndex(-1);
+      return;
+    }
+    setActiveSearchIndex((prev) => {
+      if (epubSearchResults.length <= 0) {
+        return -1;
+      }
+      if (prev < 0) {
+        return 0;
+      }
+      return Math.min(prev, epubSearchResults.length - 1);
+    });
+  }, [searchQuery, epubSearchResults]);
+
   const bindIframeBookmarkHotkeys = React.useCallback(() => {
     for (const cleanup of iframeBookmarkCleanupRef.current.values()) {
       cleanup();
@@ -870,12 +935,52 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   const openHighlightsPanel = React.useCallback(() => {
     registerActivity();
+    setSearchPanelOpen(false);
     setBookmarksPanelOpen(false);
     setSettingsPanelOpen(false);
     setHighlightMenu(null);
     setHighlightEditor(null);
     setHighlightsPanelOpen(true);
   }, [registerActivity]);
+
+  const openSearchPanel = React.useCallback(() => {
+    registerActivity();
+    setBookmarksPanelOpen(false);
+    setHighlightsPanelOpen(false);
+    setSettingsPanelOpen(false);
+    setHighlightMenu(null);
+    setHighlightEditor(null);
+    setSearchPanelOpen(true);
+  }, [registerActivity]);
+
+  const navigateToSearchIndex = React.useCallback(
+    (nextActiveIndex: number) => {
+      const target = epubSearchResults[nextActiveIndex];
+      if (!target) {
+        return;
+      }
+      registerActivity();
+      setActiveSearchIndex(nextActiveIndex);
+      void renditionRef.current?.display?.(target.cfi);
+    },
+    [epubSearchResults, registerActivity]
+  );
+
+  const goToNextSearchMatch = React.useCallback(() => {
+    const nextActiveIndex = nextIndex(activeSearchIndex, epubSearchResults.length);
+    if (nextActiveIndex < 0) {
+      return;
+    }
+    navigateToSearchIndex(nextActiveIndex);
+  }, [activeSearchIndex, epubSearchResults.length, navigateToSearchIndex]);
+
+  const goToPrevSearchMatch = React.useCallback(() => {
+    const nextActiveIndex = prevIndex(activeSearchIndex, epubSearchResults.length);
+    if (nextActiveIndex < 0) {
+      return;
+    }
+    navigateToSearchIndex(nextActiveIndex);
+  }, [activeSearchIndex, epubSearchResults.length, navigateToSearchIndex]);
 
   React.useEffect(() => {
     epubHighlightsRef.current = epubHighlights;
@@ -1234,6 +1339,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   React.useEffect(() => {
     setBookmarksPanelOpen(false);
+    setSearchPanelOpen(false);
     setHighlightsPanelOpen(false);
     setHighlightMenu(null);
     setHighlightEditor(null);
@@ -1242,14 +1348,76 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       clearTimeout(timeout);
     }
     pendingDeletionTimeoutsRef.current.clear();
-  }, [bookId]);
+    clearQuery();
+    setActiveSearchIndex(-1);
+  }, [bookId, clearQuery]);
+
+  React.useEffect(() => {
+    if (!searchPanelOpen) {
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+    return () => clearTimeout(timeoutId);
+  }, [searchPanelOpen]);
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'b' && event.key !== 'B') {
+      const activeElement = document.activeElement;
+      const typing = isTypingTarget(event.target ?? activeElement);
+      const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+      if (event.key === 'Escape') {
+        if (settingsPanelOpen) {
+          event.preventDefault();
+          setSettingsPanelOpen(false);
+          return;
+        }
+        if (searchPanelOpen) {
+          event.preventDefault();
+          setSearchPanelOpen(false);
+          return;
+        }
+        if (bookmarksPanelOpen) {
+          event.preventDefault();
+          setBookmarksPanelOpen(false);
+          return;
+        }
+        if (highlightsPanelOpen) {
+          event.preventDefault();
+          setHighlightsPanelOpen(false);
+          return;
+        }
+        if (sidebarOpen) {
+          event.preventDefault();
+          setSidebarOpen(false);
+        }
         return;
       }
-      if (isTypingTarget(event.target)) {
+
+      if (typing) {
+        return;
+      }
+
+      if (ctrlOrMeta && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        openSearchPanel();
+        return;
+      }
+
+      if (event.key === 'F3') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          goToPrevSearchMatch();
+        } else {
+          goToNextSearchMatch();
+        }
+        return;
+      }
+
+      if (event.key !== 'b' && event.key !== 'B') {
         return;
       }
       event.preventDefault();
@@ -1261,7 +1429,17 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [registerActivity]);
+  }, [
+    bookmarksPanelOpen,
+    goToNextSearchMatch,
+    goToPrevSearchMatch,
+    highlightsPanelOpen,
+    openSearchPanel,
+    registerActivity,
+    searchPanelOpen,
+    settingsPanelOpen,
+    sidebarOpen
+  ]);
 
   return (
     <ReaderShell
@@ -1326,7 +1504,13 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       }
       headerRight={
         <>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openSearchPanel}
+            style={getReaderButtonStyles(settings.theme, searchPanelOpen)}
+          >
             <Search className="h-4 w-4" />
             Search
           </Button>
@@ -1335,6 +1519,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             variant="outline"
             size="sm"
             onClick={() => {
+              setSearchPanelOpen(false);
               setHighlightsPanelOpen(false);
               setSettingsPanelOpen(false);
               setBookmarksPanelOpen(true);
@@ -1381,6 +1566,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             variant="outline"
             size="sm"
             onClick={() => {
+              setSearchPanelOpen(false);
               setBookmarksPanelOpen(false);
               setHighlightsPanelOpen(false);
               setSettingsPanelOpen((prev) => !prev);
@@ -1401,6 +1587,25 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       }
       rightPanel={
         <>
+          <SearchPanel
+            open={searchPanelOpen}
+            theme={settings.theme}
+            query={searchQuery}
+            results={searchPanelResults}
+            isSearching={isSearching}
+            activeIndex={activeSearchIndex}
+            onClose={() => setSearchPanelOpen(false)}
+            onQueryChange={setSearchQuery}
+            onPrev={goToPrevSearchMatch}
+            onNext={goToNextSearchMatch}
+            onSelectResult={navigateToSearchIndex}
+            onRegisterActivity={registerActivity}
+            inputRef={searchInputRef}
+            placeholder="Search in this EPUB..."
+            rightOffset={settingsPanelOpen ? 344 : 12}
+            emptyQueryMessage="Type a query to search the whole book."
+            noResultsMessage="No matches found."
+          />
           <ReaderSidePanel
             open={bookmarksPanelOpen}
             title="Bookmarks"
