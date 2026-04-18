@@ -47,7 +47,6 @@ type Props = {
 
 type ScaleMode = 'fitWidth' | 'fitPage' | 'manual';
 type HighlightContextMenuState = { highlightId: string; x: number; y: number } | null;
-type HighlightNotePromptState = { highlightId: string; x: number; y: number } | null;
 type HighlightNoteEditorState = {
   highlightId: string;
   x: number;
@@ -502,7 +501,6 @@ export function PdfReaderScreen({
   );
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
   const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
-  const [highlightNotePrompt, setHighlightNotePrompt] = React.useState<HighlightNotePromptState>(null);
   const [highlightNoteEditor, setHighlightNoteEditor] = React.useState<HighlightNoteEditorState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
   const outlinePageCacheRef = React.useRef<Map<string, number>>(new Map());
@@ -1110,15 +1108,20 @@ export function PdfReaderScreen({
     }
   }, [bookId, page]);
 
-  const clampPopoverPosition = React.useCallback((x: number, y: number) => {
+  const clampPopoverPosition = React.useCallback((x: number, y: number, width = 280, height = 180) => {
     const stage = pageStageRef.current;
     if (!stage) {
       return { x, y };
     }
     const stageRect = stage.getBoundingClientRect();
+    const maxX = Math.max(12, stageRect.width - width - 12);
+    const maxY = Math.max(12, stageRect.height - height - 12);
+    const nextX = Math.max(12, Math.min(maxX, x));
+    const fitsBelow = y + height <= stageRect.height - 12;
+    const nextY = fitsBelow ? Math.max(12, y) : Math.max(12, Math.min(maxY, y - height - 16));
     return {
-      x: Math.max(12, Math.min(stageRect.width - 12, x)),
-      y: Math.max(12, Math.min(stageRect.height - 12, y))
+      x: nextX,
+      y: nextY
     };
   }, []);
 
@@ -1143,9 +1146,8 @@ export function PdfReaderScreen({
 
   const openHighlightNoteEditor = React.useCallback(
     (highlight: Highlight, x: number, y: number) => {
-      const position = clampPopoverPosition(x, y);
+      const position = clampPopoverPosition(x, y, 280, 260);
       setHighlightContextMenu(null);
-      setHighlightNotePrompt(null);
       setHighlightNoteEditor({
         highlightId: highlight.id,
         x: position.x,
@@ -1226,16 +1228,17 @@ export function PdfReaderScreen({
           return [result.highlight, ...remaining];
         });
         if (selectionBounds.width > 0 || selectionBounds.height > 0) {
-          const position = clampPopoverPosition(
-            selectionBounds.right - pageRect.left,
-            selectionBounds.bottom - pageRect.top + 8
-          );
-          setHighlightContextMenu(null);
-          setHighlightNoteEditor(null);
-          setHighlightNotePrompt({
-            highlightId: result.highlight.id,
-            x: position.x,
-            y: position.y
+            const position = clampPopoverPosition(
+              selectionBounds.right - pageRect.left,
+              selectionBounds.bottom - pageRect.top + 8,
+              280,
+              140
+            );
+            setHighlightNoteEditor(null);
+            setHighlightContextMenu({
+              highlightId: result.highlight.id,
+              x: position.x,
+              y: position.y
           });
         }
         await loadPageHighlights();
@@ -1286,7 +1289,6 @@ export function PdfReaderScreen({
         return [...filtered, { id: safeId, highlight }];
       });
       setHighlightContextMenu(null);
-      setHighlightNotePrompt((prev) => (prev?.highlightId === safeId ? null : prev));
       setHighlightNoteEditor((prev) => (prev?.highlightId === safeId ? null : prev));
 
       const timeoutId = setTimeout(() => {
@@ -1354,8 +1356,9 @@ export function PdfReaderScreen({
       const stageRect = stage.getBoundingClientRect();
 
       event.preventDefault();
-      const { x, y } = clampPopoverPosition(event.clientX - stageRect.left, event.clientY - stageRect.top);
-      setHighlightNotePrompt(null);
+      const targetHighlight = pageHighlights.find((item) => item.id === hit.id) ?? null;
+      const menuHeight = targetHighlight?.note ? 210 : 140;
+      const { x, y } = clampPopoverPosition(event.clientX - stageRect.left, event.clientY - stageRect.top, 280, menuHeight);
       setHighlightNoteEditor(null);
       setHighlightContextMenu({ highlightId: hit.id, x, y });
     },
@@ -1367,7 +1370,7 @@ export function PdfReaderScreen({
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-popover="true"]'))
+        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-editor="true"]'))
       ) {
         return;
       }
@@ -1409,7 +1412,7 @@ export function PdfReaderScreen({
         return;
       }
       setPageHighlights((prev) => prev.map((item) => (item.id === result.highlight.id ? result.highlight : item)));
-      setHighlightNotePrompt(null);
+      setHighlightContextMenu(null);
       setHighlightNoteEditor(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1429,7 +1432,6 @@ export function PdfReaderScreen({
     setExportData(null);
     setNotesPanelOpen(false);
     setHighlightContextMenu(null);
-    setHighlightNotePrompt(null);
     setHighlightNoteEditor(null);
     setSettingsPanelOpen(false);
     setSearchPanelOpen(false);
@@ -1475,7 +1477,6 @@ export function PdfReaderScreen({
 
   React.useEffect(() => {
     setHighlightContextMenu(null);
-    setHighlightNotePrompt(null);
     setHighlightNoteEditor(null);
   }, [page, scale]);
 
@@ -1484,24 +1485,21 @@ export function PdfReaderScreen({
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-popover="true"]'))
+        (target.closest('[data-highlight-menu="true"]') || target.closest('[data-highlight-note-editor="true"]'))
       ) {
         return;
       }
       setHighlightContextMenu(null);
-      setHighlightNotePrompt(null);
       setHighlightNoteEditor(null);
     };
     const closeMenuOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setHighlightContextMenu(null);
-        setHighlightNotePrompt(null);
         setHighlightNoteEditor(null);
       }
     };
     const closeMenuOnScroll = () => {
       setHighlightContextMenu(null);
-      setHighlightNotePrompt(null);
       setHighlightNoteEditor(null);
     };
     const viewportElement = readerViewportRef.current;
@@ -2850,7 +2848,7 @@ export function PdfReaderScreen({
                           return (
                             <div
                               key={highlight.id}
-                              className="absolute"
+                              className={`absolute ${highlight.note ? 'ring-1 ring-amber-700/75 ring-inset' : ''}`}
                               style={{
                                 left: `${bounds.x * 100}%`,
                                 top: `${bounds.y * 100}%`,
@@ -2861,7 +2859,7 @@ export function PdfReaderScreen({
                               {highlight.rects.map((rect, index) => (
                                 <div
                                   key={`${highlight.id}:${index}`}
-                                  className={`absolute ${highlight.note ? 'bg-yellow-400/55' : 'bg-yellow-300/45'}`}
+                                  className={`absolute ${highlight.note ? 'bg-yellow-300/45' : 'bg-yellow-300/40'}`}
                                   style={{
                                     left: `${((rect.x - bounds.x) / bounds.w) * 100}%`,
                                     top: `${((rect.y - bounds.y) / bounds.h) * 100}%`,
@@ -2870,22 +2868,13 @@ export function PdfReaderScreen({
                                   }}
                                 />
                               ))}
-                              {highlight.note ? (
-                                <div
-                                  className="absolute h-2.5 w-2.5 rounded-full border border-amber-700 bg-amber-500 shadow-sm"
-                                  style={{
-                                    right: '-2px',
-                                    top: '-2px'
-                                  }}
-                                />
-                              ) : null}
                             </div>
                           );
                         })}
                         {highlightContextMenu ? (
                           <div
                             data-highlight-menu="true"
-                            className="pointer-events-auto absolute z-20 min-w-[150px] rounded-md border p-1 shadow-lg"
+                            className="pointer-events-auto absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
                             style={{
                               left: `${highlightContextMenu.x}px`,
                               top: `${highlightContextMenu.y}px`,
@@ -2894,77 +2883,71 @@ export function PdfReaderScreen({
                               color: readerPalette.chromeText
                             }}
                           >
-                            <button
-                              type="button"
-                              className="block w-full rounded px-2 py-1 text-left text-xs text-red-700 transition-colors hover:bg-red-50"
-                              onClick={() => {
-                                const targetHighlight = pageHighlights.find(
-                                  (item) => item.id === highlightContextMenu.highlightId
+                            {(() => {
+                              const activeHighlight = pageHighlights.find((item) => item.id === highlightContextMenu.highlightId) ?? null;
+                              if (!activeHighlight) {
+                                return (
+                                  <p className="text-xs" style={{ color: readerPalette.mutedText }}>
+                                    Highlight not found.
+                                  </p>
                                 );
-                                if (!targetHighlight) {
-                                  setHighlightContextMenu(null);
-                                  return;
-                                }
-                                queueHighlightDeletion(targetHighlight);
-                              }}
-                            >
-                              Delete highlight
-                            </button>
-                            <button
-                              type="button"
-                              className="mt-1 block w-full rounded px-2 py-1 text-left text-xs text-slate-600 transition-colors hover:bg-slate-100"
-                              onClick={() => setHighlightContextMenu(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : null}
-                        {highlightNotePrompt ? (
-                          <div
-                            data-highlight-note-popover="true"
-                            className="pointer-events-auto absolute z-20 w-[180px] rounded-md border p-2 shadow-lg"
-                            style={{
-                              left: `${highlightNotePrompt.x}px`,
-                              top: `${highlightNotePrompt.y}px`,
-                              backgroundColor: readerPalette.panelBg,
-                              borderColor: readerPalette.chromeBorder,
-                              color: readerPalette.chromeText
-                            }}
-                          >
-                            <p className="text-xs" style={{ color: readerPalette.mutedText }}>
-                              Highlight saved
-                            </p>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="mt-2 w-full"
-                              style={getReaderButtonStyles(settings.theme)}
-                              onClick={() => {
-                                const targetHighlight = pageHighlights.find(
-                                  (item) => item.id === highlightNotePrompt.highlightId
-                                );
-                                if (!targetHighlight) {
-                                  setHighlightNotePrompt(null);
-                                  return;
-                                }
-                                openHighlightNoteEditor(targetHighlight, highlightNotePrompt.x, highlightNotePrompt.y + 6);
-                              }}
-                            >
-                              Add note
-                            </Button>
-                            <button
-                              type="button"
-                              className="mt-2 block w-full rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
-                              onClick={() => setHighlightNotePrompt(null)}
-                            >
-                              Dismiss
-                            </button>
+                              }
+
+                              return (
+                                <>
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: readerPalette.mutedText }}>
+                                    Highlight
+                                  </p>
+                                  <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: readerPalette.chromeText }}>
+                                    {activeHighlight.text ?? '(highlight without text)'}
+                                  </p>
+                                  {activeHighlight.note ? (
+                                    <>
+                                      <p className="mt-3 text-[11px] font-semibold uppercase tracking-wide" style={{ color: readerPalette.mutedText }}>
+                                        Note
+                                      </p>
+                                      <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: readerPalette.chromeText }}>
+                                        {activeHighlight.note}
+                                      </p>
+                                    </>
+                                  ) : null}
+                                  <div className="mt-3 flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      style={getReaderButtonStyles(settings.theme)}
+                                      onClick={() => {
+                                        openHighlightNoteEditor(activeHighlight, highlightContextMenu.x, highlightContextMenu.y + 6);
+                                      }}
+                                    >
+                                      {activeHighlight.note ? 'Edit note' : 'Add note'}
+                                    </Button>
+                                    <button
+                                      type="button"
+                                      className="rounded px-2 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-50"
+                                      onClick={() => {
+                                        queueHighlightDeletion(activeHighlight);
+                                      }}
+                                    >
+                                      Delete highlight
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                                      onClick={() => setHighlightContextMenu(null)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+                                </>
+                              );
+                            })()}
                           </div>
                         ) : null}
                         {highlightNoteEditor ? (
                           <div
-                            data-highlight-note-popover="true"
+                            data-highlight-note-editor="true"
                             className="pointer-events-auto absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
                             style={{
                               left: `${highlightNoteEditor.x}px`,

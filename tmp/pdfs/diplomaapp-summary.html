@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>DiplomaApp Summary</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 0.4in 0.5in;
+      }
+      :root {
+        --ink: #132238;
+        --muted: #56657a;
+        --line: #d6dde6;
+        --panel: #f5f7fa;
+        --accent: #0f4c81;
+        --accent-soft: #e8f1f8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Arial, sans-serif;
+        color: var(--ink);
+        background: white;
+      }
+      .page {
+        width: 100%;
+        min-height: 100vh;
+        padding: 26px 28px 22px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.35fr 1fr;
+        gap: 18px;
+        align-items: start;
+        margin-bottom: 16px;
+      }
+      .hero-card {
+        background: linear-gradient(135deg, var(--accent-soft), #ffffff 70%);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px 22px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        line-height: 1.1;
+        letter-spacing: 0.2px;
+      }
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      .summary {
+        margin: 12px 0 0;
+        font-size: 14px;
+        line-height: 1.48;
+      }
+      .persona {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 18px;
+        background: #fff;
+      }
+      .label {
+        margin: 0 0 6px;
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 11px;
+        letter-spacing: 0.8px;
+        text-transform: uppercase;
+      }
+      .persona p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.48;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 16px 18px;
+        background: var(--panel);
+      }
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 13px;
+        letter-spacing: 0.7px;
+        text-transform: uppercase;
+        color: var(--accent);
+      }
+      ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      li {
+        margin: 0 0 7px;
+        font-size: 12.3px;
+        line-height: 1.4;
+      }
+      .full {
+        margin-top: 16px;
+      }
+      .full .panel {
+        background: #fff;
+      }
+      .footer {
+        margin-top: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .note-box {
+        border-top: 1px solid var(--line);
+        padding-top: 10px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      code {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.94em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="hero">
+        <section class="hero-card">
+          <p class="subtitle">App Summary</p>
+          <h1>DiplomaApp</h1>
+          <p class="summary">Electron desktop app for managing and reading local PDF and EPUB books. It combines a library view with built-in readers, annotations, bookmarks, export, and saved reading progress.</p>
+        </section>
+        <section class="persona">
+          <p class="label">Who It&apos;s For</p>
+          <p>Primary persona (inferred from repo): a student, researcher, or heavy reader who keeps a personal local library and wants notes, highlights, bookmarks, and quick resume on desktop.</p>
+        </section>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>What It Does</h2>
+          <ul><li>Import PDF and EPUB files into a local library, or add sample books.</li><li>Open books in built-in PDF and EPUB readers with navigation controls.</li><li>Save PDF page progress and EPUB CFI progress, then resume later.</li><li>Create, edit, search, and reopen notes from a dedicated Notes screen.</li><li>Add bookmarks for PDF pages and EPUB locations.</li><li>Create highlights in both readers and attach notes to highlights.</li><li>Export a book&#39;s notes and highlights as Markdown or JSON.</li></ul>
+        </section>
+        <section class="panel">
+          <h2>How To Run</h2>
+          <ul><li>Run `npm install`.</li><li>Run `npm run dev`.</li><li>Use the Electron window that opens; renderer dev server runs on port 5173 via Vite.</li></ul>
+        </section>
+      </div>
+
+      <div class="full">
+        <section class="panel">
+          <h2>How It Works</h2>
+          <ul><li>Renderer: React 19 + Vite screens/components (`src/`) for library, PDF reader, EPUB reader, notes, and reader settings.</li><li>Bridge: `electron/preload.ts` exposes `window.api`; shared request/result types live in `shared/ipc.ts`.</li><li>Main process: `electron/main.ts` registers IPC handlers for books, notes, highlights, bookmarks, export, progress, reader settings, and recent books.</li><li>Storage: `auth.sqlite` stores books, users/local identity, reader settings, and reading stats; `reader.db` stores progress, notes, highlights, and bookmarks.</li><li>Files/data flow: imported books are copied into Electron `userData/books/&lt;bookId&gt;/original.(pdf|epub)`; renderer calls IPC -&gt; Electron services read/write SQLite and local files -&gt; responses return to UI.</li><li>External backend/API: Not found in repo.</li></ul>
+        </section>
+      </div>
+
+      <div class="footer">
+        <div class="note-box">README includes only basic dev/build commands.</div>
+        <div class="note-box">Automated tests or CI setup: Not found in repo.</div>
+      </div>
+    </div>
+  </body>
+</html>

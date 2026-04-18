@@ -320,6 +320,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const iframeActivityCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const iframeBookmarkCleanupRef = React.useRef(new Map<HTMLIFrameElement, () => void>());
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renderHighlightsFrameRef = React.useRef<number | null>(null);
   const pendingDeletionTimeoutsRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const latestCfiRef = React.useRef<string | null>(null);
   const toggleCurrentBookmarkRef = React.useRef<() => Promise<void>>(async () => {});
@@ -372,15 +373,20 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     return null;
   }, []);
 
-  const clampPopoverPosition = React.useCallback((x: number, y: number) => {
+  const clampPopoverPosition = React.useCallback((x: number, y: number, width = 280, height = 180) => {
     const stage = readerStageRef.current;
     if (!stage) {
       return { x, y };
     }
     const stageRect = stage.getBoundingClientRect();
+    const maxX = Math.max(12, stageRect.width - width - 12);
+    const maxY = Math.max(12, stageRect.height - height - 12);
+    const nextX = Math.max(12, Math.min(maxX, x));
+    const fitsBelow = y + height <= stageRect.height - 12;
+    const nextY = fitsBelow ? Math.max(12, y) : Math.max(12, Math.min(maxY, y - height - 16));
     return {
-      x: Math.max(12, Math.min(stageRect.width - 12, x)),
-      y: Math.max(12, Math.min(stageRect.height - 12, y))
+      x: nextX,
+      y: nextY
     };
   }, []);
 
@@ -404,7 +410,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   const openHighlightEditor = React.useCallback(
     (highlight: Highlight, x: number, y: number) => {
-      const position = clampPopoverPosition(x, y);
+      const position = clampPopoverPosition(x, y, 280, 260);
       setHighlightMenu(null);
       setHighlightEditor({
         highlightId: highlight.id,
@@ -420,7 +426,8 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   const openHighlightMenu = React.useCallback(
     (highlight: Highlight, x: number, y: number) => {
-      const position = clampPopoverPosition(x, y);
+      const menuHeight = highlight.note ? 210 : 140;
+      const position = clampPopoverPosition(x, y, 280, menuHeight);
       setHighlightEditor(null);
       setHighlightMenu({
         highlightId: highlight.id,
@@ -447,39 +454,65 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         }
         seen.add(cfiRange);
         nextCfis.add(cfiRange);
-        rendition.annotations.remove?.(cfiRange, 'highlight');
-        rendition.annotations.add?.(
-          'highlight',
-          cfiRange,
-          {},
-          (event: Event) => {
-            event.preventDefault();
-            event.stopPropagation?.();
-            registerActivity();
-            const stage = readerStageRef.current;
-            const target = event.target;
-            if (!(stage instanceof HTMLDivElement) || !(target instanceof SVGElement)) {
-              return;
-            }
-            const stageRect = stage.getBoundingClientRect();
-            const targetRect = target.getBoundingClientRect();
-            openHighlightMenu(
-              highlight,
-              targetRect.left - stageRect.left + targetRect.width / 2,
-              targetRect.bottom - stageRect.top + 8
-            );
-          },
-          highlight.note ? 'epub-highlight epub-highlight-with-note' : 'epub-highlight'
-        );
+        try {
+          rendition.annotations.remove?.(cfiRange, 'highlight');
+          rendition.annotations.add?.(
+            'highlight',
+            cfiRange,
+            {},
+            (event: Event) => {
+              event.preventDefault();
+              event.stopPropagation?.();
+              registerActivity();
+              const stage = readerStageRef.current;
+              const target = event.target;
+              if (!(stage instanceof HTMLDivElement) || !(target instanceof SVGElement)) {
+                return;
+              }
+              const stageRect = stage.getBoundingClientRect();
+              const targetRect = target.getBoundingClientRect();
+              openHighlightMenu(
+                highlight,
+                targetRect.left - stageRect.left + targetRect.width / 2,
+                targetRect.bottom - stageRect.top + 8
+              );
+            },
+            highlight.note ? 'epub-highlight-with-note' : 'epub-highlight'
+          );
+        } catch (error) {
+          console.error('Failed to render EPUB highlight annotation', {
+            highlightId: highlight.id,
+            cfiRange,
+            error
+          });
+        }
       }
       for (const cfiRange of renderedHighlightCfisRef.current) {
         if (!nextCfis.has(cfiRange)) {
-          rendition.annotations.remove?.(cfiRange, 'highlight');
+          try {
+            rendition.annotations.remove?.(cfiRange, 'highlight');
+          } catch (error) {
+            console.error('Failed to remove EPUB highlight annotation', { cfiRange, error });
+          }
         }
       }
       renderedHighlightCfisRef.current = nextCfis;
     },
     [openHighlightMenu, registerActivity]
+  );
+
+  const queueRenderHighlights = React.useCallback(
+    (highlights: Highlight[]) => {
+      if (renderHighlightsFrameRef.current !== null) {
+        cancelAnimationFrame(renderHighlightsFrameRef.current);
+      }
+
+      renderHighlightsFrameRef.current = requestAnimationFrame(() => {
+        renderHighlightsFrameRef.current = null;
+        renderHighlights(highlights);
+      });
+    },
+    [renderHighlights]
   );
 
   const loadHighlights = React.useCallback(async () => {
@@ -661,7 +694,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       }
       setEpubHighlights((prev) => {
         const next = prev.map((item) => (item.id === result.highlight.id ? result.highlight : item));
-        renderHighlights(next);
+        queueRenderHighlights(next);
         return next;
       });
       setHighlightMenu(null);
@@ -670,7 +703,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       const message = err instanceof Error ? err.message : String(err);
       setHighlightEditor((prev) => (prev ? { ...prev, saving: false, error: message } : prev));
     }
-  }, [epubHighlights, highlightEditor, renderHighlights]);
+  }, [epubHighlights, highlightEditor, queueRenderHighlights]);
 
   const finalizeHighlightDelete = React.useCallback(
     async (highlight: Highlight) => {
@@ -707,7 +740,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
       setEpubHighlights((prev) => {
         const next = prev.filter((item) => item.id !== safeId);
-        renderHighlights(next);
+        queueRenderHighlights(next);
         return next;
       });
       setPendingHighlightDeletions((prev) => {
@@ -725,7 +758,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
       pendingDeletionTimeoutsRef.current.set(safeId, timeoutId);
     },
-    [finalizeHighlightDelete, renderHighlights]
+    [finalizeHighlightDelete, queueRenderHighlights]
   );
 
   const undoHighlightDeletion = React.useCallback(
@@ -744,11 +777,11 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       setPendingHighlightDeletions((prev) => prev.filter((item) => item.id !== pendingId));
       setEpubHighlights((prev) => {
         const next = [pending.highlight, ...prev.filter((item) => item.id !== pending.highlight.id)];
-        renderHighlights(next);
+        queueRenderHighlights(next);
         return next;
       });
     },
-    [pendingHighlightDeletions, renderHighlights]
+    [pendingHighlightDeletions, queueRenderHighlights]
   );
 
   const createHighlightFromSelection = React.useCallback(
@@ -777,7 +810,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         }
         setEpubHighlights((prev) => {
           const next = [result.highlight, ...prev.filter((item) => item.id !== result.highlight.id)];
-          renderHighlights(next);
+          queueRenderHighlights(next);
           return next;
         });
         if (popoverPosition) {
@@ -792,7 +825,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         contents.window.getSelection()?.removeAllRanges();
       }
     },
-    [bookId, getPopoverPositionForRange, renderHighlights]
+    [bookId, getPopoverPositionForRange, queueRenderHighlights]
   );
 
   const goPrev = React.useCallback(() => {
@@ -828,10 +861,19 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         applyInlineEpubStyles(documentNode, settings);
       }
     }
-    renderHighlights(epubHighlights);
+    queueRenderHighlights(epubHighlights);
     bindIframeActivity();
     bindIframeBookmarkHotkeys();
-  }, [bindIframeActivity, bindIframeBookmarkHotkeys, epubHighlights, renderHighlights, settings]);
+  }, [bindIframeActivity, bindIframeBookmarkHotkeys, epubHighlights, queueRenderHighlights, settings]);
+
+  React.useEffect(() => {
+    return () => {
+      if (renderHighlightsFrameRef.current !== null) {
+        cancelAnimationFrame(renderHighlightsFrameRef.current);
+        renderHighlightsFrameRef.current = null;
+      }
+    };
+  }, []);
 
   React.useEffect(() => {
     const container = readerContainerRef.current;
