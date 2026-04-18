@@ -245,7 +245,7 @@ function getEpubSettingsCss(settings: ReturnType<typeof useReaderSettings>['sett
       margin: 0 !important;
     }
 
-    body, p, div, span, li, a, blockquote, section, article, td, th {
+    body, p, li, a, blockquote, td, th {
       font-size: inherit !important;
       line-height: ${settings.epubLineHeight} !important;
       color: ${bodyStyles.color} !important;
@@ -331,14 +331,6 @@ function applyRenditionSettings(rendition: any, settings: ReturnType<typeof useR
     p: {
       'font-size': 'inherit',
       'line-height': `${settings.epubLineHeight}`,
-      'font-family': fontStack
-    },
-    div: {
-      'font-size': 'inherit',
-      'font-family': fontStack
-    },
-    span: {
-      'font-size': 'inherit',
       'font-family': fontStack
     },
     li: {
