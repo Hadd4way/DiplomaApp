@@ -127,8 +127,6 @@ export function useEpubSearch(
                 });
               }
             } catch {
-            } finally {
-              section.unload?.();
             }
 
             if ((index + 1) % SECTION_BATCH_SIZE === 0 || nextResults.length >= MAX_RESULTS) {
