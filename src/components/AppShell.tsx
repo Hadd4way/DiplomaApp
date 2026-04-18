@@ -12,13 +12,13 @@ type Props = {
 
 export function AppShell({ currentView, onViewChange, children, contentClassName }: Props) {
   const { settings } = useReaderSettings();
-  const palette = getReaderThemePalette(settings.theme);
+  const palette = getReaderThemePalette(settings);
 
   return (
     <div
       className="flex h-full min-h-0 overflow-hidden"
       style={{
-        ...getReaderThemeStyles(settings.theme),
+        ...getReaderThemeStyles(settings),
         backgroundColor: palette.appBg,
         color: palette.appForeground
       }}

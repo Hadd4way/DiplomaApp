@@ -5,7 +5,8 @@ import type {
   EpubMarginSize,
   PdfZoomPreset,
   ReaderSettings,
-  ReaderTheme
+  ReaderTheme,
+  TextSizePreset
 } from '../../shared/ipc';
 import { cn } from '@/lib/utils';
 import type { ReaderThemePalette } from '@/lib/reader-theme';
@@ -34,6 +35,12 @@ const PDF_ZOOM_PRESETS: Array<{ value: PdfZoomPreset; label: string }> = [
   { value: 'fitWidth', label: 'Fit Width' },
   { value: 'fitPage', label: 'Fit Page' },
   { value: 'actualSize', label: '100%' }
+];
+
+const TEXT_SIZE_PRESETS: Array<{ value: TextSizePreset; label: string; detail: string }> = [
+  { value: 'normal', label: 'Normal', detail: 'Current default sizing' },
+  { value: 'large', label: 'Large', detail: '+15% content and UI text' },
+  { value: 'extraLarge', label: 'Extra Large', detail: '+30% content and UI text' }
 ];
 
 type Props = {
@@ -103,13 +110,43 @@ export function ReaderSettingsPanel({
           borderColor: palette.buttonBorder,
           color: palette.buttonText
         }),
-    transition: 'all 180ms ease'
+    transition: settings.reduceMotion ? 'none' : 'all 180ms ease'
   });
+
+  const renderToggle = (
+    label: string,
+    description: string,
+    value: boolean,
+    key: 'dyslexiaFriendlyMode' | 'highContrastMode' | 'reduceMotion'
+  ) => (
+    <button
+      type="button"
+      aria-pressed={value}
+      className="flex w-full items-start justify-between gap-3 rounded-2xl border px-3 py-3 text-left"
+      style={chipStyles(value)}
+      onClick={() => onChange({ [key]: !value } as Partial<ReaderSettings>)}
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-[11px] leading-5 opacity-80">{description}</p>
+      </div>
+      <span
+        className="inline-flex min-w-16 items-center justify-center rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-wide"
+        style={{
+          borderColor: value ? palette.accentBorder : palette.buttonBorder,
+          backgroundColor: value ? palette.accentBg : palette.buttonBg,
+          color: value ? palette.accentText : palette.buttonText
+        }}
+      >
+        {value ? 'On' : 'Off'}
+      </span>
+    </button>
+  );
 
   return (
     <ReaderSidePanel
       title="Reader Settings"
-      theme={settings.theme}
+      settings={settings}
       open={open}
       onClose={onClose}
       icon={<SlidersHorizontal className="h-4 w-4" />}
@@ -241,6 +278,54 @@ export function ReaderSettingsPanel({
                 })}
               </div>
             </div>
+          </div>
+        </Section>
+
+        <Section
+          title="Accessibility"
+          description="Inclusive reading support across EPUB content and the reader interface."
+        >
+          <div className="space-y-3">
+            {renderToggle(
+              'Dyslexia Friendly Mode',
+              'Uses a dyslexia-friendly font stack, adds spacing, and relaxes line height for easier tracking.',
+              settings.dyslexiaFriendlyMode,
+              'dyslexiaFriendlyMode'
+            )}
+            {renderToggle(
+              'High Contrast Mode',
+              'Overrides the standard theme with stronger contrast, borders, and clearer controls.',
+              settings.highContrastMode,
+              'highContrastMode'
+            )}
+            <div className="space-y-2">
+              <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
+                Text Size Preset
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {TEXT_SIZE_PRESETS.map((preset) => {
+                  const active = settings.textSizePreset === preset.value;
+                  return (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      className="rounded-2xl border px-3 py-3 text-left"
+                      style={chipStyles(active)}
+                      onClick={() => onChange({ textSizePreset: preset.value })}
+                    >
+                      <span className="block text-sm font-medium">{preset.label}</span>
+                      <span className="mt-1 block text-[11px] opacity-75">{preset.detail}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {renderToggle(
+              'Reduce Motion',
+              'Turns off transitions, animations, and smooth scrolling where possible.',
+              settings.reduceMotion,
+              'reduceMotion'
+            )}
           </div>
         </Section>
 

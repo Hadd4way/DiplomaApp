@@ -396,7 +396,8 @@ function getActiveMatchOrdinalOnPage(
 function scrollToActiveMatch(
   viewport: HTMLDivElement,
   overlayLayer: HTMLDivElement,
-  activeGroup: SearchMatchRectGroup
+  activeGroup: SearchMatchRectGroup,
+  reduceMotion: boolean
 ): void {
   const viewportRect = viewport.getBoundingClientRect();
   const overlayRect = overlayLayer.getBoundingClientRect();
@@ -410,7 +411,7 @@ function scrollToActiveMatch(
   const offset = viewport.clientHeight * 0.25;
   viewport.scrollTo({
     top: Math.max(0, targetTopInScrollSpace - offset),
-    behavior: 'smooth'
+    behavior: reduceMotion ? 'auto' : 'smooth'
   });
 }
 
@@ -448,7 +449,6 @@ export function PdfReaderScreen({
   onBack
 }: Props) {
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
-  const safeTheme = settings.theme ?? READER_SETTINGS_DEFAULTS.theme;
   const safePdfBackground = settings.pdfBackground ?? READER_SETTINGS_DEFAULTS.pdfBackground;
   const safePdfZoomPreset = settings.pdfZoomPreset ?? READER_SETTINGS_DEFAULTS.pdfZoomPreset;
   const readerRootRef = React.useRef<HTMLDivElement | null>(null);
@@ -520,8 +520,11 @@ export function PdfReaderScreen({
   const canSaveRef = React.useRef(false);
   const lastSearchQueryRef = React.useRef('');
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
-  const readerPalette = React.useMemo(() => getReaderThemePalette(safeTheme), [safeTheme]);
-  const pdfViewportBackground = React.useMemo(() => getPdfViewportBackground(safePdfBackground), [safePdfBackground]);
+  const readerPalette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
+  const pdfViewportBackground = React.useMemo(
+    () => getPdfViewportBackground(settings.highContrastMode ? settings : safePdfBackground),
+    [safePdfBackground, settings]
+  );
   const { registerActivity, flush: flushReadingStats } = useReadingSessionStats({
     bookId,
     format: 'pdf',
@@ -873,11 +876,11 @@ export function PdfReaderScreen({
         const viewport = readerViewportRef.current;
         const activeGroup = orderedGroups[activeGroupIndex];
         if (viewport && activeGroup) {
-          scrollToActiveMatch(viewport, overlayLayer, activeGroup);
+          scrollToActiveMatch(viewport, overlayLayer, activeGroup, settings.reduceMotion);
         }
       }
     },
-    [activeSearchIndex, page, searchQuery, searchResults]
+    [activeSearchIndex, page, searchQuery, searchResults, settings.reduceMotion]
   );
 
   const scheduleSearchOverlayRecompute = React.useCallback(
@@ -2383,7 +2386,7 @@ export function PdfReaderScreen({
         size="sm"
         onClick={goPrev}
         disabled={loading || page <= 1}
-        style={getReaderButtonStyles(settings.theme)}
+        style={getReaderButtonStyles(settings)}
       >
         <ChevronLeft className="mr-1 h-4 w-4" />
         Prev
@@ -2445,7 +2448,7 @@ export function PdfReaderScreen({
             disabled={loading}
             aria-label={isCurrentPageBookmarked ? 'Remove bookmark from current page' : 'Bookmark current page'}
             title={isCurrentPageBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-            style={getReaderButtonStyles(settings.theme, isCurrentPageBookmarked)}
+            style={getReaderButtonStyles(settings, isCurrentPageBookmarked)}
           >
             <Star className={`h-4 w-4 ${isCurrentPageBookmarked ? 'fill-amber-400 text-amber-500' : ''}`} />
           </Button>
@@ -2464,7 +2467,7 @@ export function PdfReaderScreen({
             }}
             disabled={loading || rendering}
             aria-label="Zoom out"
-            style={getReaderButtonStyles(settings.theme)}
+            style={getReaderButtonStyles(settings)}
           >
             <Minus className="h-4 w-4" />
           </Button>
@@ -2477,7 +2480,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={() => applyZoomPreset('fitWidth')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'fitWidth' && scaleMode !== 'manual')}
+            style={getReaderButtonStyles(settings, settings.pdfZoomPreset === 'fitWidth' && scaleMode !== 'manual')}
           >
             Fit
           </Button>
@@ -2487,7 +2490,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={() => applyZoomPreset('fitPage')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'fitPage' && scaleMode !== 'manual')}
+            style={getReaderButtonStyles(settings, settings.pdfZoomPreset === 'fitPage' && scaleMode !== 'manual')}
           >
             Page
           </Button>
@@ -2497,7 +2500,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={() => applyZoomPreset('actualSize')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'actualSize' && Math.round(scale * 100) === 100)}
+            style={getReaderButtonStyles(settings, settings.pdfZoomPreset === 'actualSize' && Math.round(scale * 100) === 100)}
           >
             100%
           </Button>
@@ -2510,7 +2513,7 @@ export function PdfReaderScreen({
             }}
             disabled={loading || rendering}
             aria-label="Zoom in"
-            style={getReaderButtonStyles(settings.theme)}
+            style={getReaderButtonStyles(settings)}
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -2522,7 +2525,7 @@ export function PdfReaderScreen({
           size="sm"
           onClick={openAddNote}
           disabled={loading || rendering}
-          style={getReaderButtonStyles(settings.theme)}
+          style={getReaderButtonStyles(settings)}
         >
           Add note
         </Button>
@@ -2538,7 +2541,7 @@ export function PdfReaderScreen({
         size="sm"
         onClick={goNext}
         disabled={loading || page >= pageCount}
-        style={getReaderButtonStyles(settings.theme)}
+        style={getReaderButtonStyles(settings)}
       >
         Next
         <ChevronRight className="ml-1 h-4 w-4" />
@@ -2550,7 +2553,7 @@ export function PdfReaderScreen({
     <ReaderSidePanel
       open={notesPanelOpen}
       title="Notes"
-      theme={settings.theme}
+      settings={settings}
       onClose={() => setNotesPanelOpen(false)}
       rightOffset={12}
       headerActions={
@@ -2560,7 +2563,7 @@ export function PdfReaderScreen({
           variant="outline"
           onClick={openAddNote}
           disabled={loading || rendering}
-          style={getReaderButtonStyles(settings.theme)}
+          style={getReaderButtonStyles(settings)}
         >
           Add
         </Button>
@@ -2597,7 +2600,7 @@ export function PdfReaderScreen({
     <ReaderSidePanel
       open={bookmarksPanelOpen}
       title="Bookmarks"
-      theme={settings.theme}
+      settings={settings}
       onClose={() => setBookmarksPanelOpen(false)}
       icon={<Bookmark className="h-4 w-4" />}
       rightOffset={notesPanelOpen ? 344 : 12}
@@ -2648,7 +2651,7 @@ export function PdfReaderScreen({
   const searchPanel = (
     <SearchPanel
       open={searchPanelOpen}
-      theme={settings.theme}
+      settings={settings}
       query={searchQuery}
       results={searchPanelResults}
       isSearching={isSearching}
@@ -2689,7 +2692,7 @@ export function PdfReaderScreen({
         queueHighlightDeletion(targetHighlight);
       }}
       onEditNote={openHighlightNoteEditorFromPanel}
-      theme={settings.theme}
+      settings={settings}
       rightOffset={notesPanelOpen ? 344 : 12}
     />
   );
@@ -2714,7 +2717,7 @@ export function PdfReaderScreen({
   return (
     <ReaderShell
       title={title}
-      theme={settings.theme}
+      settings={settings}
       rootRef={readerRootRef}
       rootTabIndex={-1}
       leftPanel={leftPanel}
@@ -2726,7 +2729,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={handleBack}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme)}
+            style={getReaderButtonStyles(settings)}
           >
             Back
           </Button>
@@ -2736,7 +2739,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={toggleContents}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
-            style={getReaderButtonStyles(settings.theme, sidebarOpen)}
+            style={getReaderButtonStyles(settings, sidebarOpen)}
           >
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </Button>
@@ -2750,7 +2753,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={openSearchPanel}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme, searchPanelOpen)}
+            style={getReaderButtonStyles(settings, searchPanelOpen)}
           >
             <Search className="h-4 w-4" />
             Search
@@ -2761,7 +2764,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={openBookmarksPanel}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
+            style={getReaderButtonStyles(settings, bookmarksPanelOpen)}
           >
             <Bookmark className="h-4 w-4" />
             Bookmarks
@@ -2772,7 +2775,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={toggleBookNotesPanel}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme, notesPanelOpen)}
+            style={getReaderButtonStyles(settings, notesPanelOpen)}
           >
             Notes
           </Button>
@@ -2782,7 +2785,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={openHighlightsPanel}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme, highlightsPanelOpen)}
+            style={getReaderButtonStyles(settings, highlightsPanelOpen)}
           >
             <Highlighter className="h-4 w-4" />
             Highlights
@@ -2795,7 +2798,7 @@ export function PdfReaderScreen({
               void openExportDialog();
             }}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme)}
+            style={getReaderButtonStyles(settings)}
           >
             <Download className="h-4 w-4" />
             Export
@@ -2806,7 +2809,7 @@ export function PdfReaderScreen({
             size="sm"
             onClick={openSettingsPanel}
             disabled={loading || settingsLoading}
-            style={getReaderButtonStyles(settings.theme, settingsPanelOpen)}
+            style={getReaderButtonStyles(settings, settingsPanelOpen)}
           >
             <SlidersHorizontal className="h-4 w-4" />
             Settings
@@ -2978,7 +2981,7 @@ export function PdfReaderScreen({
                                       type="button"
                                       size="sm"
                                       variant="outline"
-                                      style={getReaderButtonStyles(settings.theme)}
+                                      style={getReaderButtonStyles(settings)}
                                       onClick={() => {
                                         openHighlightNoteEditor(activeHighlight, highlightContextMenu.x, highlightContextMenu.y + 6);
                                       }}
@@ -3063,7 +3066,7 @@ export function PdfReaderScreen({
                                       type="button"
                                       size="sm"
                                       variant="outline"
-                                      style={getReaderButtonStyles(settings.theme)}
+                                      style={getReaderButtonStyles(settings)}
                                       disabled={highlightNoteEditor.saving}
                                       onClick={() => {
                                         void saveHighlightNote();

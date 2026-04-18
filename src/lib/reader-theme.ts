@@ -3,6 +3,7 @@ import type {
   EpubFontFamily,
   EpubMarginSize,
   ReaderSettings,
+  TextSizePreset,
   ReaderTheme
 } from '../../shared/ipc';
 
@@ -27,6 +28,7 @@ export type ReaderThemePalette = {
   accentBorder: string;
   epubBodyBackground: string;
   epubBodyColor: string;
+  focusRing: string;
   shadow: string;
 };
 
@@ -52,6 +54,7 @@ const READER_THEME_PALETTES: Record<ReaderTheme, ReaderThemePalette> = {
     accentBorder: '#cbd5e1',
     epubBodyBackground: '#fdfdfb',
     epubBodyColor: '#1f2937',
+    focusRing: '#2563eb',
     shadow: '0 18px 40px -18px rgba(15,23,42,0.5)'
   },
   sepia: {
@@ -75,6 +78,7 @@ const READER_THEME_PALETTES: Record<ReaderTheme, ReaderThemePalette> = {
     accentBorder: '#ccb79e',
     epubBodyBackground: '#f6efe3',
     epubBodyColor: '#433224',
+    focusRing: '#8b5e34',
     shadow: '0 18px 40px -18px rgba(91,67,48,0.35)'
   },
   dark: {
@@ -98,8 +102,34 @@ const READER_THEME_PALETTES: Record<ReaderTheme, ReaderThemePalette> = {
     accentBorder: '#475569',
     epubBodyBackground: '#111827',
     epubBodyColor: '#e5e7eb',
+    focusRing: '#f8fafc',
     shadow: '0 18px 40px -18px rgba(0,0,0,0.75)'
   }
+};
+
+const HIGH_CONTRAST_PALETTE: ReaderThemePalette = {
+  appBg: '#000000',
+  appForeground: '#ffffff',
+  chromeBg: '#000000',
+  chromeBorder: '#ffffff',
+  chromeText: '#ffffff',
+  mutedText: '#d1d5db',
+  panelBg: '#050505',
+  panelHoverBg: '#111111',
+  viewportBg: '#000000',
+  pageShellBg: '#000000',
+  buttonBg: '#0a0a0a',
+  buttonBorder: '#ffffff',
+  buttonText: '#ffffff',
+  inputBg: '#000000',
+  inputText: '#ffffff',
+  accentBg: '#fff59d',
+  accentText: '#000000',
+  accentBorder: '#ffffff',
+  epubBodyBackground: '#000000',
+  epubBodyColor: '#ffffff',
+  focusRing: '#fff59d',
+  shadow: '0 0 0 2px rgba(255,255,255,0.32)'
 };
 
 const EPUB_MARGIN_VALUES: Record<EpubMarginSize, string> = {
@@ -115,20 +145,63 @@ const EPUB_FONT_STACKS: Record<EpubFontFamily, string> = {
   openDyslexic: '"OpenDyslexic", "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif'
 };
 
-export function getReaderThemePalette(theme: ReaderTheme): ReaderThemePalette {
-  return READER_THEME_PALETTES[theme];
+function isReaderSettings(value: ReaderTheme | ReaderSettings): value is ReaderSettings {
+  return typeof value === 'object' && value !== null && 'theme' in value;
 }
 
-export function getReaderThemeStyles(theme: ReaderTheme): CSSProperties {
-  const palette = getReaderThemePalette(theme);
+function resolveTheme(input: ReaderTheme | ReaderSettings): ReaderTheme {
+  return isReaderSettings(input) ? input.theme : input;
+}
+
+function resolveSettings(input: ReaderTheme | ReaderSettings): Partial<ReaderSettings> {
+  return isReaderSettings(input) ? input : {};
+}
+
+export function getReaderTextScaleMultiplier(preset: TextSizePreset): number {
+  if (preset === 'large') {
+    return 1.15;
+  }
+  if (preset === 'extraLarge') {
+    return 1.3;
+  }
+  return 1;
+}
+
+export function getUiFontFamily(settings: Pick<ReaderSettings, 'dyslexiaFriendlyMode'>): string {
+  if (settings.dyslexiaFriendlyMode) {
+    return '"OpenDyslexic", "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif';
+  }
+  return '"Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif';
+}
+
+export function getEffectiveEpubFontFamily(settings: ReaderSettings): string {
+  if (settings.dyslexiaFriendlyMode) {
+    return getEpubFontFamilyStack('openDyslexic');
+  }
+  return getEpubFontFamilyStack(settings.epubFontFamily);
+}
+
+export function getReaderThemePalette(input: ReaderTheme | ReaderSettings): ReaderThemePalette {
+  const settings = resolveSettings(input);
+  if (settings.highContrastMode) {
+    return HIGH_CONTRAST_PALETTE;
+  }
+  return READER_THEME_PALETTES[resolveTheme(input)];
+}
+
+export function getReaderThemeStyles(input: ReaderTheme | ReaderSettings): CSSProperties {
+  const palette = getReaderThemePalette(input);
+  const settings = resolveSettings(input);
   return {
     backgroundColor: palette.appBg,
-    color: palette.appForeground
+    color: palette.appForeground,
+    fontFamily: settings.dyslexiaFriendlyMode ? getUiFontFamily(settings as Pick<ReaderSettings, 'dyslexiaFriendlyMode'>) : undefined,
+    fontSize: settings.textSizePreset ? `${getReaderTextScaleMultiplier(settings.textSizePreset)}rem` : undefined
   };
 }
 
-export function getReaderPanelStyles(theme: ReaderTheme): CSSProperties {
-  const palette = getReaderThemePalette(theme);
+export function getReaderPanelStyles(input: ReaderTheme | ReaderSettings): CSSProperties {
+  const palette = getReaderThemePalette(input);
   return {
     backgroundColor: palette.panelBg,
     borderColor: palette.chromeBorder,
@@ -136,8 +209,8 @@ export function getReaderPanelStyles(theme: ReaderTheme): CSSProperties {
   };
 }
 
-export function getReaderButtonStyles(theme: ReaderTheme, active = false): CSSProperties {
-  const palette = getReaderThemePalette(theme);
+export function getReaderButtonStyles(input: ReaderTheme | ReaderSettings, active = false): CSSProperties {
+  const palette = getReaderThemePalette(input);
   if (active) {
     return {
       backgroundColor: palette.accentBg,
@@ -160,22 +233,54 @@ export function getEpubFontFamilyStack(fontFamily: EpubFontFamily): string {
   return EPUB_FONT_STACKS[fontFamily];
 }
 
-export function getPdfViewportBackground(theme: ReaderTheme): string {
-  return getReaderThemePalette(theme).pageShellBg;
+export function getPdfViewportBackground(input: ReaderTheme | ReaderSettings): string {
+  return getReaderThemePalette(input).pageShellBg;
 }
 
 export function getEpubThemeBodyStyles(settings: ReaderSettings): Record<string, string> {
-  const palette = getReaderThemePalette(settings.theme);
+  const palette = getReaderThemePalette(settings);
+  const scaleMultiplier = getReaderTextScaleMultiplier(settings.textSizePreset);
+  const lineHeight = settings.dyslexiaFriendlyMode
+    ? Math.min(2.8, Math.round((settings.epubLineHeight + 0.15) * 10) / 10)
+    : settings.epubLineHeight;
   return {
-    'line-height': `${settings.epubLineHeight}`,
-    'font-family': getEpubFontFamilyStack(settings.epubFontFamily),
+    'line-height': `${lineHeight}`,
+    'font-family': getEffectiveEpubFontFamily(settings),
+    'letter-spacing': settings.dyslexiaFriendlyMode ? '0.035em' : 'normal',
+    'word-spacing': settings.dyslexiaFriendlyMode ? '0.08em' : 'normal',
+    'font-size': `${scaleMultiplier}rem`,
     background: palette.epubBodyBackground,
     color: palette.epubBodyColor
   };
 }
 
-export function getAppThemeCssVariables(theme: ReaderTheme): Record<string, string> {
-  const palette = getReaderThemePalette(theme);
+export function getAppThemeCssVariables(input: ReaderTheme | ReaderSettings): Record<string, string> {
+  const palette = getReaderThemePalette(input);
+  const theme = resolveTheme(input);
+  const settings = resolveSettings(input);
+
+  if (settings.highContrastMode) {
+    return {
+      '--background': '0 0% 0%',
+      '--foreground': '0 0% 100%',
+      '--card': '0 0% 3%',
+      '--card-foreground': '0 0% 100%',
+      '--primary': '56 100% 80%',
+      '--primary-foreground': '0 0% 0%',
+      '--muted': '0 0% 9%',
+      '--muted-foreground': '0 0% 85%',
+      '--accent': '56 100% 80%',
+      '--accent-foreground': '0 0% 0%',
+      '--destructive': '0 100% 68%',
+      '--destructive-foreground': '0 0% 0%',
+      '--border': '0 0% 100%',
+      '--input': '0 0% 100%',
+      '--ring': '56 100% 80%',
+      '--reader-app-bg': palette.appBg,
+      '--reader-app-foreground': palette.appForeground,
+      '--reader-focus-ring': palette.focusRing
+    };
+  }
 
   if (theme === 'dark') {
     return {
@@ -195,7 +300,8 @@ export function getAppThemeCssVariables(theme: ReaderTheme): Record<string, stri
       '--input': '215 28% 27%',
       '--ring': '210 90% 62%',
       '--reader-app-bg': palette.appBg,
-      '--reader-app-foreground': palette.appForeground
+      '--reader-app-foreground': palette.appForeground,
+      '--reader-focus-ring': palette.focusRing
     };
   }
 
@@ -217,7 +323,8 @@ export function getAppThemeCssVariables(theme: ReaderTheme): Record<string, stri
       '--input': '35 31% 75%',
       '--ring': '28 45% 40%',
       '--reader-app-bg': palette.appBg,
-      '--reader-app-foreground': palette.appForeground
+      '--reader-app-foreground': palette.appForeground,
+      '--reader-focus-ring': palette.focusRing
     };
   }
 
@@ -238,6 +345,7 @@ export function getAppThemeCssVariables(theme: ReaderTheme): Record<string, stri
     '--input': '214.3 31.8% 91.4%',
     '--ring': '221.2 83.2% 53.3%',
     '--reader-app-bg': palette.appBg,
-    '--reader-app-foreground': palette.appForeground
+    '--reader-app-foreground': palette.appForeground,
+    '--reader-focus-ring': palette.focusRing
   };
 }

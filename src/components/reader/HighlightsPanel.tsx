@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { ReaderTheme } from '../../../shared/ipc';
+import type { ReaderSettings } from '../../../shared/ipc';
 import { Highlighter, MessageSquare, Trash2 } from 'lucide-react';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ export type HighlightsPanelProps = {
   onDeleteItem: (item: ReaderHighlightItem) => void;
   onEditNote?: (item: ReaderHighlightItem) => void;
   title?: string;
-  theme: ReaderTheme;
+  settings: ReaderSettings;
   rightOffset?: number;
   emptyMessage?: string;
 };
@@ -52,17 +52,17 @@ export function HighlightsPanel({
   onDeleteItem,
   onEditNote,
   title = 'Highlights',
-  theme,
+  settings,
   rightOffset = 12,
   emptyMessage = 'No highlights for this book.'
 }: HighlightsPanelProps) {
-  const palette = React.useMemo(() => getReaderThemePalette(theme), [theme]);
+  const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   return (
     <ReaderSidePanel
       open={isOpen}
       title={title}
-      theme={theme}
+      settings={settings}
       onClose={onClose}
       icon={<Highlighter className="h-4 w-4" />}
       rightOffset={rightOffset}
@@ -111,7 +111,7 @@ export function HighlightsPanel({
                   size="sm"
                   variant="outline"
                   onClick={() => onJumpToItem(item)}
-                  style={getReaderButtonStyles(theme)}
+                  style={getReaderButtonStyles(settings)}
                 >
                   Jump
                 </Button>
@@ -121,7 +121,7 @@ export function HighlightsPanel({
                     size="sm"
                     variant="outline"
                     onClick={() => onEditNote(item)}
-                    style={getReaderButtonStyles(theme)}
+                    style={getReaderButtonStyles(settings)}
                   >
                     {item.note ? 'Edit note' : 'Add note'}
                   </Button>

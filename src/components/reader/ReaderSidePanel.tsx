@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { ReactNode } from 'react';
-import type { ReaderTheme } from '../../../shared/ipc';
+import type { ReaderSettings } from '../../../shared/ipc';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -8,7 +8,7 @@ import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme
 
 type Props = {
   title: string;
-  theme: ReaderTheme;
+  settings: ReaderSettings;
   children: ReactNode;
   open: boolean;
   onClose: () => void;
@@ -21,7 +21,7 @@ type Props = {
 
 export function ReaderSidePanel({
   title,
-  theme,
+  settings,
   children,
   open,
   onClose,
@@ -31,7 +31,7 @@ export function ReaderSidePanel({
   rightOffset = 12,
   headerActions
 }: Props) {
-  const palette = React.useMemo(() => getReaderThemePalette(theme), [theme]);
+  const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   if (!open) {
     return null;
@@ -59,7 +59,7 @@ export function ReaderSidePanel({
         </div>
         <div className="flex items-center gap-2">
           {headerActions}
-          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(theme)}>
+          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings)}>
             <X className="h-4 w-4" />
           </Button>
         </div>

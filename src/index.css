@@ -26,6 +26,9 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.6rem;
+    --reader-ui-scale: 1;
+    --reader-ui-font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    --reader-focus-ring: #2563eb;
   }
 
   * {
@@ -34,6 +37,19 @@
 
   body {
     @apply m-0 overflow-hidden bg-background font-sans text-foreground antialiased;
+  }
+
+  body,
+  button,
+  input,
+  textarea,
+  select {
+    font-family: var(--reader-ui-font-family);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--reader-focus-ring);
+    outline-offset: 2px;
   }
 }
 
@@ -83,4 +99,13 @@
   fill-opacity: 1;
   stroke: rgba(180, 83, 9, 0.85);
   stroke-width: 1.5px;
+}
+
+:root[data-reader-motion='reduced'] *,
+:root[data-reader-motion='reduced'] *::before,
+:root[data-reader-motion='reduced'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
 }

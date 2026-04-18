@@ -44,5 +44,9 @@ exports.READER_SETTINGS_DEFAULTS = {
     epubMargins: 'medium',
     epubFontFamily: 'serif',
     pdfBackground: 'light',
-    pdfZoomPreset: 'fitWidth'
+    pdfZoomPreset: 'fitWidth',
+    dyslexiaFriendlyMode: false,
+    highContrastMode: false,
+    textSizePreset: 'normal',
+    reduceMotion: false
 };

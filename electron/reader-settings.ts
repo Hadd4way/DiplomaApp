@@ -6,6 +6,7 @@ import type {
   ReaderSettings,
   ReaderSettingsPatch,
   ReaderSettingsUpdateResult,
+  TextSizePreset,
   ReaderTheme
 } from '../shared/ipc';
 import { READER_SETTINGS_DEFAULTS } from '../shared/ipc';
@@ -19,6 +20,10 @@ type ReaderSettingsRow = {
   epub_font_family: EpubFontFamily;
   pdf_background: ReaderTheme;
   pdf_zoom_preset: PdfZoomPreset;
+  dyslexia_friendly_mode: number;
+  high_contrast_mode: number;
+  text_size_preset: TextSizePreset;
+  reduce_motion: number;
   updated_at: number;
 };
 
@@ -26,6 +31,7 @@ const READER_THEMES: ReaderTheme[] = ['light', 'sepia', 'dark'];
 const EPUB_MARGIN_SIZES: EpubMarginSize[] = ['small', 'medium', 'large'];
 const EPUB_FONT_FAMILIES: EpubFontFamily[] = ['serif', 'sans', 'georgia', 'openDyslexic'];
 const PDF_ZOOM_PRESETS: PdfZoomPreset[] = ['fitWidth', 'fitPage', 'actualSize'];
+const TEXT_SIZE_PRESETS: TextSizePreset[] = ['normal', 'large', 'extraLarge'];
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -47,7 +53,11 @@ function toReaderSettings(row: ReaderSettingsRow): ReaderSettings {
     epubMargins: row.epub_margins,
     epubFontFamily: row.epub_font_family,
     pdfBackground: row.pdf_background,
-    pdfZoomPreset: row.pdf_zoom_preset
+    pdfZoomPreset: row.pdf_zoom_preset,
+    dyslexiaFriendlyMode: row.dyslexia_friendly_mode === 1,
+    highContrastMode: row.high_contrast_mode === 1,
+    textSizePreset: row.text_size_preset,
+    reduceMotion: row.reduce_motion === 1
   };
 }
 
@@ -103,6 +113,34 @@ function sanitizePatch(patch: ReaderSettingsPatch): ReaderSettingsPatch {
     nextPatch.pdfZoomPreset = patch.pdfZoomPreset;
   }
 
+  if (patch.dyslexiaFriendlyMode !== undefined) {
+    if (typeof patch.dyslexiaFriendlyMode !== 'boolean') {
+      throw new Error('Dyslexia friendly mode must be a boolean.');
+    }
+    nextPatch.dyslexiaFriendlyMode = patch.dyslexiaFriendlyMode;
+  }
+
+  if (patch.highContrastMode !== undefined) {
+    if (typeof patch.highContrastMode !== 'boolean') {
+      throw new Error('High contrast mode must be a boolean.');
+    }
+    nextPatch.highContrastMode = patch.highContrastMode;
+  }
+
+  if (patch.textSizePreset !== undefined) {
+    if (!isValidChoice(patch.textSizePreset, TEXT_SIZE_PRESETS)) {
+      throw new Error('Text size preset must be one of: normal, large, extraLarge.');
+    }
+    nextPatch.textSizePreset = patch.textSizePreset;
+  }
+
+  if (patch.reduceMotion !== undefined) {
+    if (typeof patch.reduceMotion !== 'boolean') {
+      throw new Error('Reduce motion must be a boolean.');
+    }
+    nextPatch.reduceMotion = patch.reduceMotion;
+  }
+
   return nextPatch;
 }
 
@@ -110,6 +148,7 @@ function readReaderSettingsRow(db: Database.Database, userId: string): ReaderSet
   return db
     .prepare(
       `SELECT user_id, theme, epub_font_size, epub_line_height, epub_margins, epub_font_family, pdf_background, pdf_zoom_preset, updated_at
+             , dyslexia_friendly_mode, high_contrast_mode, text_size_preset, reduce_motion
        FROM reader_settings
        WHERE user_id = ?
        LIMIT 1`
@@ -129,9 +168,13 @@ function insertDefaultReaderSettings(db: Database.Database, userId: string): Rea
       epub_font_family,
       pdf_background,
       pdf_zoom_preset,
+      dyslexia_friendly_mode,
+      high_contrast_mode,
+      text_size_preset,
+      reduce_motion,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_id) DO NOTHING`
   ).run(
     userId,
@@ -142,6 +185,10 @@ function insertDefaultReaderSettings(db: Database.Database, userId: string): Rea
     READER_SETTINGS_DEFAULTS.epubFontFamily,
     READER_SETTINGS_DEFAULTS.pdfBackground,
     READER_SETTINGS_DEFAULTS.pdfZoomPreset,
+    READER_SETTINGS_DEFAULTS.dyslexiaFriendlyMode ? 1 : 0,
+    READER_SETTINGS_DEFAULTS.highContrastMode ? 1 : 0,
+    READER_SETTINGS_DEFAULTS.textSizePreset,
+    READER_SETTINGS_DEFAULTS.reduceMotion ? 1 : 0,
     now
   );
 
@@ -155,6 +202,10 @@ function insertDefaultReaderSettings(db: Database.Database, userId: string): Rea
       epub_font_family: READER_SETTINGS_DEFAULTS.epubFontFamily,
       pdf_background: READER_SETTINGS_DEFAULTS.pdfBackground,
       pdf_zoom_preset: READER_SETTINGS_DEFAULTS.pdfZoomPreset,
+      dyslexia_friendly_mode: READER_SETTINGS_DEFAULTS.dyslexiaFriendlyMode ? 1 : 0,
+      high_contrast_mode: READER_SETTINGS_DEFAULTS.highContrastMode ? 1 : 0,
+      text_size_preset: READER_SETTINGS_DEFAULTS.textSizePreset,
+      reduce_motion: READER_SETTINGS_DEFAULTS.reduceMotion ? 1 : 0,
       updated_at: now
     }
   );
@@ -190,7 +241,11 @@ export function updateReaderSettings(
       epubMargins: sanitizedPatch.epubMargins ?? current.epubMargins,
       epubFontFamily: sanitizedPatch.epubFontFamily ?? current.epubFontFamily,
       pdfBackground: sanitizedPatch.pdfBackground ?? current.pdfBackground,
-      pdfZoomPreset: sanitizedPatch.pdfZoomPreset ?? current.pdfZoomPreset
+      pdfZoomPreset: sanitizedPatch.pdfZoomPreset ?? current.pdfZoomPreset,
+      dyslexiaFriendlyMode: sanitizedPatch.dyslexiaFriendlyMode ?? current.dyslexiaFriendlyMode,
+      highContrastMode: sanitizedPatch.highContrastMode ?? current.highContrastMode,
+      textSizePreset: sanitizedPatch.textSizePreset ?? current.textSizePreset,
+      reduceMotion: sanitizedPatch.reduceMotion ?? current.reduceMotion
     };
 
     db.prepare(
@@ -203,9 +258,13 @@ export function updateReaderSettings(
         epub_font_family,
         pdf_background,
         pdf_zoom_preset,
+        dyslexia_friendly_mode,
+        high_contrast_mode,
+        text_size_preset,
+        reduce_motion,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         theme = excluded.theme,
         epub_font_size = excluded.epub_font_size,
@@ -214,6 +273,10 @@ export function updateReaderSettings(
         epub_font_family = excluded.epub_font_family,
         pdf_background = excluded.pdf_background,
         pdf_zoom_preset = excluded.pdf_zoom_preset,
+        dyslexia_friendly_mode = excluded.dyslexia_friendly_mode,
+        high_contrast_mode = excluded.high_contrast_mode,
+        text_size_preset = excluded.text_size_preset,
+        reduce_motion = excluded.reduce_motion,
         updated_at = excluded.updated_at`
     ).run(
       safeUserId,
@@ -224,6 +287,10 @@ export function updateReaderSettings(
       next.epubFontFamily,
       next.pdfBackground,
       next.pdfZoomPreset,
+      next.dyslexiaFriendlyMode ? 1 : 0,
+      next.highContrastMode ? 1 : 0,
+      next.textSizePreset,
+      next.reduceMotion ? 1 : 0,
       Date.now()
     );
 

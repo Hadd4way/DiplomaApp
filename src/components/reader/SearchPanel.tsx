@@ -1,5 +1,5 @@
 import * as React from 'react';
-import type { ReaderTheme } from '../../../shared/ipc';
+import type { ReaderSettings } from '../../../shared/ipc';
 import { Search } from 'lucide-react';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ export type ReaderSearchResultItem = {
 
 type SearchPanelProps = {
   open: boolean;
-  theme: ReaderTheme;
+  settings: ReaderSettings;
   query: string;
   results: ReaderSearchResultItem[];
   isSearching: boolean;
@@ -37,7 +37,7 @@ type SearchPanelProps = {
 
 export function SearchPanel({
   open,
-  theme,
+  settings,
   query,
   results,
   isSearching,
@@ -54,13 +54,13 @@ export function SearchPanel({
   emptyQueryMessage = 'Type a query to search this book.',
   noResultsMessage = 'No matches found.'
 }: SearchPanelProps) {
-  const palette = React.useMemo(() => getReaderThemePalette(theme), [theme]);
+  const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   return (
     <ReaderSidePanel
       open={open}
       title="Search"
-      theme={theme}
+      settings={settings}
       onClose={onClose}
       icon={<Search className="h-4 w-4" />}
       rightOffset={rightOffset}
@@ -100,7 +100,7 @@ export function SearchPanel({
               variant="outline"
               onClick={onPrev}
               disabled={results.length === 0}
-              style={getReaderButtonStyles(theme)}
+              style={getReaderButtonStyles(settings)}
             >
               Prev
             </Button>
@@ -110,7 +110,7 @@ export function SearchPanel({
               variant="outline"
               onClick={onNext}
               disabled={results.length === 0}
-              style={getReaderButtonStyles(theme)}
+              style={getReaderButtonStyles(settings)}
             >
               Next
             </Button>
@@ -139,9 +139,12 @@ export function SearchPanel({
                 key={result.id}
                 type="button"
                 onClick={() => onSelectResult(index)}
-                className={`w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  index === activeIndex ? 'border-amber-400 bg-amber-50' : 'border-slate-200 hover:bg-slate-50'
-                }`}
+                className="w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                style={{
+                  borderColor: index === activeIndex ? palette.accentBorder : palette.chromeBorder,
+                  backgroundColor: index === activeIndex ? palette.accentBg : palette.panelBg,
+                  color: index === activeIndex ? palette.accentText : palette.chromeText
+                }}
               >
                 {result.locationLabel ? (
                   <span

@@ -83,7 +83,7 @@ function getRendererApi() {
 
 export default function App() {
   const { settings } = useReaderSettings();
-  const palette = getReaderThemePalette(settings.theme);
+  const palette = getReaderThemePalette(settings);
   const [loading, setLoading] = React.useState(false);
   const [booting, setBooting] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);

@@ -21,10 +21,11 @@ import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import {
+  getEffectiveEpubFontFamily,
   getEpubThemeBodyStyles,
-  getEpubFontFamilyStack,
   getEpubMarginCssValue,
   getReaderButtonStyles,
+  getReaderTextScaleMultiplier,
   getReaderThemePalette
 } from '@/lib/reader-theme';
 import { useEpubSearch } from '@/lib/useEpubSearch';
@@ -229,29 +230,35 @@ const EPUB_SETTINGS_STYLE_ID = 'reader-settings-style';
 
 function getEpubSettingsCss(settings: ReturnType<typeof useReaderSettings>['settings']): string {
   const bodyStyles = getEpubThemeBodyStyles(settings);
-  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
+  const fontStack = getEffectiveEpubFontFamily(settings);
+  const effectiveFontSize = Math.round(settings.epubFontSize * getReaderTextScaleMultiplier(settings.textSizePreset));
   return `
     html {
-      font-size: ${settings.epubFontSize}% !important;
+      font-size: ${effectiveFontSize}% !important;
       background: ${bodyStyles.background} !important;
       color: ${bodyStyles.color} !important;
       -webkit-text-size-adjust: 100% !important;
+      scroll-behavior: ${settings.reduceMotion ? 'auto' : 'smooth'} !important;
     }
 
     body {
-      font-size: 1rem !important;
-      line-height: ${settings.epubLineHeight} !important;
+      font-size: ${bodyStyles['font-size']} !important;
+      line-height: ${bodyStyles['line-height']} !important;
       font-family: ${fontStack} !important;
       background: ${bodyStyles.background} !important;
       color: ${bodyStyles.color} !important;
       margin: 0 !important;
+      letter-spacing: ${bodyStyles['letter-spacing']} !important;
+      word-spacing: ${bodyStyles['word-spacing']} !important;
     }
 
     body, p, li, a, blockquote, td, th {
       font-size: inherit !important;
-      line-height: ${settings.epubLineHeight} !important;
+      line-height: ${bodyStyles['line-height']} !important;
       color: ${bodyStyles.color} !important;
       font-family: ${fontStack} !important;
+      letter-spacing: ${bodyStyles['letter-spacing']} !important;
+      word-spacing: ${bodyStyles['word-spacing']} !important;
     }
 
     h1 { font-size: 2em !important; font-family: ${fontStack} !important; }
@@ -290,7 +297,7 @@ function upsertEpubSettingsStyle(
 
 function applyInlineEpubStyles(documentNode: Document, settings: ReturnType<typeof useReaderSettings>['settings']): void {
   const bodyStyles = getEpubThemeBodyStyles(settings);
-  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
+  const fontStack = getEffectiveEpubFontFamily(settings);
   const html = documentNode.documentElement;
   const body = documentNode.body;
   if (!html || !body) {
@@ -298,24 +305,31 @@ function applyInlineEpubStyles(documentNode: Document, settings: ReturnType<type
   }
 
   upsertEpubSettingsStyle(documentNode, settings);
-  html.style.setProperty('font-size', `${settings.epubFontSize}%`, 'important');
+  html.style.setProperty(
+    'font-size',
+    `${Math.round(settings.epubFontSize * getReaderTextScaleMultiplier(settings.textSizePreset))}%`,
+    'important'
+  );
   html.style.setProperty('background', bodyStyles.background, 'important');
   html.style.setProperty('color', bodyStyles.color, 'important');
   html.style.setProperty('-webkit-text-size-adjust', '100%', 'important');
+  html.style.setProperty('scroll-behavior', settings.reduceMotion ? 'auto' : 'smooth', 'important');
 
-  body.style.setProperty('font-size', '1rem', 'important');
-  body.style.setProperty('line-height', `${settings.epubLineHeight}`, 'important');
+  body.style.setProperty('font-size', bodyStyles['font-size'], 'important');
+  body.style.setProperty('line-height', bodyStyles['line-height'], 'important');
   body.style.setProperty('font-family', fontStack, 'important');
   body.style.setProperty('background', bodyStyles.background, 'important');
   body.style.setProperty('color', bodyStyles.color, 'important');
   body.style.setProperty('margin', '0', 'important');
+  body.style.setProperty('letter-spacing', bodyStyles['letter-spacing'], 'important');
+  body.style.setProperty('word-spacing', bodyStyles['word-spacing'], 'important');
 }
 
 function applyRenditionSettings(rendition: any, settings: ReturnType<typeof useReaderSettings>['settings']): void {
   const bodyStyles = getEpubThemeBodyStyles(settings);
-  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
+  const fontStack = getEffectiveEpubFontFamily(settings);
 
-  rendition.themes?.fontSize?.(`${settings.epubFontSize}%`);
+  rendition.themes?.fontSize?.(`${Math.round(settings.epubFontSize * getReaderTextScaleMultiplier(settings.textSizePreset))}%`);
 
   rendition.themes?.default?.({
     html: {
@@ -326,13 +340,13 @@ function applyRenditionSettings(rendition: any, settings: ReturnType<typeof useR
     },
     body: {
       ...bodyStyles,
-      'font-size': '1rem',
+      'font-size': bodyStyles['font-size'],
       'font-family': fontStack,
       margin: '0'
     },
     p: {
       'font-size': 'inherit',
-      'line-height': `${settings.epubLineHeight}`,
+      'line-height': bodyStyles['line-height'],
       'font-family': fontStack
     },
     li: {
@@ -460,7 +474,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
   const [highlightEditor, setHighlightEditor] = React.useState<EpubHighlightEditorState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingEpubHighlightDeletion[]>([]);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
-  const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
   const epubFramePadding = React.useMemo(() => getEpubMarginCssValue(settings.epubMargins), [settings.epubMargins]);
   const currentBookmarkLabel = React.useMemo(
     () => findTocLabelByHref(tocItems, currentHref) ?? 'Location',
@@ -1541,7 +1555,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
   return (
     <ReaderShell
       title={title}
-      theme={settings.theme}
+      settings={settings}
       leftPanel={
         sidebarOpen ? (
           <div className="flex h-full min-h-0 flex-col">
@@ -1584,7 +1598,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
               onBack();
             }}
             disabled={loading}
-            style={getReaderButtonStyles(settings.theme)}
+            style={getReaderButtonStyles(settings)}
           >
             Back
           </Button>
@@ -1593,7 +1607,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             variant="outline"
             size="sm"
             onClick={() => setSidebarOpen((prev) => !prev)}
-            style={getReaderButtonStyles(settings.theme, sidebarOpen)}
+            style={getReaderButtonStyles(settings, sidebarOpen)}
             aria-label={sidebarOpen ? 'Hide contents' : 'Show contents'}
           >
             {sidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
@@ -1607,7 +1621,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             variant="outline"
             size="sm"
             onClick={openSearchPanel}
-            style={getReaderButtonStyles(settings.theme, searchPanelOpen)}
+            style={getReaderButtonStyles(settings, searchPanelOpen)}
           >
             <Search className="h-4 w-4" />
             Search
@@ -1622,12 +1636,12 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
               setSettingsPanelOpen(false);
               setBookmarksPanelOpen(true);
             }}
-            style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
+            style={getReaderButtonStyles(settings, bookmarksPanelOpen)}
           >
             <Bookmark className="h-4 w-4" />
             Bookmarks
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings)}>
             Notes
           </Button>
           <Button
@@ -1635,12 +1649,12 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             variant="outline"
             size="sm"
             onClick={openHighlightsPanel}
-            style={getReaderButtonStyles(settings.theme, highlightsPanelOpen)}
+            style={getReaderButtonStyles(settings, highlightsPanelOpen)}
           >
             <Highlighter className="h-4 w-4" />
             Highlights
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings)}>
             <Download className="h-4 w-4" />
             Export
           </Button>
@@ -1655,7 +1669,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             disabled={!currentCfi}
             aria-label={isCurrentLocationBookmarked ? 'Remove bookmark from current location' : 'Bookmark current location'}
             title={isCurrentLocationBookmarked ? 'Remove bookmark' : 'Add bookmark'}
-            style={getReaderButtonStyles(settings.theme, isCurrentLocationBookmarked)}
+            style={getReaderButtonStyles(settings, isCurrentLocationBookmarked)}
           >
             <Star className={`h-4 w-4 ${isCurrentLocationBookmarked ? 'fill-amber-400 text-amber-500' : ''}`} />
           </Button>
@@ -1669,7 +1683,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
               setHighlightsPanelOpen(false);
               setSettingsPanelOpen((prev) => !prev);
             }}
-            style={getReaderButtonStyles(settings.theme, settingsPanelOpen)}
+            style={getReaderButtonStyles(settings, settingsPanelOpen)}
           >
             <SlidersHorizontal className="h-4 w-4" />
             Settings
@@ -1687,7 +1701,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
         <>
           <SearchPanel
             open={searchPanelOpen}
-            theme={settings.theme}
+            settings={settings}
             query={searchQuery}
             results={searchPanelResults}
             isSearching={isSearching}
@@ -1707,7 +1721,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
           <ReaderSidePanel
             open={bookmarksPanelOpen}
             title="Bookmarks"
-            theme={settings.theme}
+            settings={settings}
             onClose={() => setBookmarksPanelOpen(false)}
             icon={<Bookmark className="h-4 w-4" />}
             rightOffset={settingsPanelOpen ? 344 : 12}
@@ -1794,7 +1808,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
               queueHighlightDeletion(highlight);
             }}
             onEditNote={openHighlightEditorFromPanel}
-            theme={settings.theme}
+            settings={settings}
             rightOffset={settingsPanelOpen ? 344 : 12}
           />
           <ReaderSettingsPanel
@@ -1809,7 +1823,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
       }
       footer={
         <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={goPrev} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
+          <Button type="button" variant="outline" size="sm" onClick={goPrev} disabled={!ready} style={getReaderButtonStyles(settings)}>
             <ChevronLeft className="mr-1 h-4 w-4" />
             Prev
           </Button>
@@ -1817,7 +1831,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             <ListTree className="h-3.5 w-3.5" />
             {settingsLoading ? 'Loading settings...' : ready ? 'Ready' : 'Loading EPUB...'}
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={goNext} disabled={!ready} style={getReaderButtonStyles(settings.theme)}>
+          <Button type="button" variant="outline" size="sm" onClick={goNext} disabled={!ready} style={getReaderButtonStyles(settings)}>
             Next
             <ChevronRight className="ml-1 h-4 w-4" />
           </Button>
@@ -1834,7 +1848,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
               boxShadow: palette.shadow,
               paddingLeft: epubFramePadding,
               paddingRight: epubFramePadding,
-              transition: 'padding 180ms ease'
+              transition: settings.reduceMotion ? 'none' : 'padding 180ms ease'
             }}
           >
             <div ref={readerContainerRef} className="h-full w-full" />
@@ -1885,7 +1899,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
                         type="button"
                         size="sm"
                         variant="outline"
-                        style={getReaderButtonStyles(settings.theme)}
+                        style={getReaderButtonStyles(settings)}
                         onClick={() => {
                           openHighlightEditor(activeHighlight, highlightMenu.x, highlightMenu.y + 6);
                         }}
@@ -1965,7 +1979,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
                         type="button"
                         size="sm"
                         variant="outline"
-                        style={getReaderButtonStyles(settings.theme)}
+                        style={getReaderButtonStyles(settings)}
                         disabled={highlightEditor.saving}
                         onClick={() => {
                           void saveHighlightNote();

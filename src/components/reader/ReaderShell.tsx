@@ -1,12 +1,12 @@
 import * as React from 'react';
 import type { ReactNode } from 'react';
-import type { ReaderTheme } from '../../../shared/ipc';
+import type { ReaderSettings } from '../../../shared/ipc';
 import { cn } from '@/lib/utils';
 import { getReaderThemePalette, getReaderThemeStyles } from '@/lib/reader-theme';
 
 export type ReaderShellProps = {
   title: string;
-  theme: ReaderTheme;
+  settings: ReaderSettings;
   leftPanel?: ReactNode;
   rightPanel?: ReactNode;
   headerLeft?: ReactNode;
@@ -23,7 +23,7 @@ export type ReaderShellProps = {
 
 export function ReaderShell({
   title,
-  theme,
+  settings,
   leftPanel,
   rightPanel,
   headerLeft,
@@ -37,14 +37,14 @@ export function ReaderShell({
   mainClassName,
   viewportClassName
 }: ReaderShellProps) {
-  const palette = React.useMemo(() => getReaderThemePalette(theme), [theme]);
+  const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   return (
     <div
       ref={rootRef}
       tabIndex={rootTabIndex}
       className="flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden"
-      style={getReaderThemeStyles(theme)}
+      style={getReaderThemeStyles(settings)}
     >
       <header
         className="shrink-0 border-b backdrop-blur"

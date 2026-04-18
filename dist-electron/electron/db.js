@@ -52,6 +52,10 @@ function runMigrations(db) {
       epub_font_family TEXT NOT NULL DEFAULT 'serif',
       pdf_background TEXT NOT NULL DEFAULT 'light',
       pdf_zoom_preset TEXT NOT NULL DEFAULT 'fitWidth',
+      dyslexia_friendly_mode INTEGER NOT NULL DEFAULT 0,
+      high_contrast_mode INTEGER NOT NULL DEFAULT 0,
+      text_size_preset TEXT NOT NULL DEFAULT 'normal',
+      reduce_motion INTEGER NOT NULL DEFAULT 0,
       updated_at INTEGER NOT NULL
     );
 
@@ -81,6 +85,18 @@ function runMigrations(db) {
     }
     if (!hasColumn(db, 'reader_settings', 'pdf_zoom_preset')) {
         db.exec("ALTER TABLE reader_settings ADD COLUMN pdf_zoom_preset TEXT NOT NULL DEFAULT 'fitWidth';");
+    }
+    if (!hasColumn(db, 'reader_settings', 'dyslexia_friendly_mode')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN dyslexia_friendly_mode INTEGER NOT NULL DEFAULT 0;");
+    }
+    if (!hasColumn(db, 'reader_settings', 'high_contrast_mode')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN high_contrast_mode INTEGER NOT NULL DEFAULT 0;");
+    }
+    if (!hasColumn(db, 'reader_settings', 'text_size_preset')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN text_size_preset TEXT NOT NULL DEFAULT 'normal';");
+    }
+    if (!hasColumn(db, 'reader_settings', 'reduce_motion')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN reduce_motion INTEGER NOT NULL DEFAULT 0;");
     }
 }
 function ensureLocalLibraryIdentity(db) {

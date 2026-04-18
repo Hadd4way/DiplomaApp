@@ -7,6 +7,7 @@ const READER_THEMES = ['light', 'sepia', 'dark'];
 const EPUB_MARGIN_SIZES = ['small', 'medium', 'large'];
 const EPUB_FONT_FAMILIES = ['serif', 'sans', 'georgia', 'openDyslexic'];
 const PDF_ZOOM_PRESETS = ['fitWidth', 'fitPage', 'actualSize'];
+const TEXT_SIZE_PRESETS = ['normal', 'large', 'extraLarge'];
 function clampNumber(value, min, max) {
     return Math.min(max, Math.max(min, value));
 }
@@ -24,7 +25,11 @@ function toReaderSettings(row) {
         epubMargins: row.epub_margins,
         epubFontFamily: row.epub_font_family,
         pdfBackground: row.pdf_background,
-        pdfZoomPreset: row.pdf_zoom_preset
+        pdfZoomPreset: row.pdf_zoom_preset,
+        dyslexiaFriendlyMode: row.dyslexia_friendly_mode === 1,
+        highContrastMode: row.high_contrast_mode === 1,
+        textSizePreset: row.text_size_preset,
+        reduceMotion: row.reduce_motion === 1
     };
 }
 function sanitizePatch(patch) {
@@ -71,11 +76,36 @@ function sanitizePatch(patch) {
         }
         nextPatch.pdfZoomPreset = patch.pdfZoomPreset;
     }
+    if (patch.dyslexiaFriendlyMode !== undefined) {
+        if (typeof patch.dyslexiaFriendlyMode !== 'boolean') {
+            throw new Error('Dyslexia friendly mode must be a boolean.');
+        }
+        nextPatch.dyslexiaFriendlyMode = patch.dyslexiaFriendlyMode;
+    }
+    if (patch.highContrastMode !== undefined) {
+        if (typeof patch.highContrastMode !== 'boolean') {
+            throw new Error('High contrast mode must be a boolean.');
+        }
+        nextPatch.highContrastMode = patch.highContrastMode;
+    }
+    if (patch.textSizePreset !== undefined) {
+        if (!isValidChoice(patch.textSizePreset, TEXT_SIZE_PRESETS)) {
+            throw new Error('Text size preset must be one of: normal, large, extraLarge.');
+        }
+        nextPatch.textSizePreset = patch.textSizePreset;
+    }
+    if (patch.reduceMotion !== undefined) {
+        if (typeof patch.reduceMotion !== 'boolean') {
+            throw new Error('Reduce motion must be a boolean.');
+        }
+        nextPatch.reduceMotion = patch.reduceMotion;
+    }
     return nextPatch;
 }
 function readReaderSettingsRow(db, userId) {
     return db
         .prepare(`SELECT user_id, theme, epub_font_size, epub_line_height, epub_margins, epub_font_family, pdf_background, pdf_zoom_preset, updated_at
+             , dyslexia_friendly_mode, high_contrast_mode, text_size_preset, reduce_motion
        FROM reader_settings
        WHERE user_id = ?
        LIMIT 1`)
@@ -92,10 +122,14 @@ function insertDefaultReaderSettings(db, userId) {
       epub_font_family,
       pdf_background,
       pdf_zoom_preset,
+      dyslexia_friendly_mode,
+      high_contrast_mode,
+      text_size_preset,
+      reduce_motion,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(user_id) DO NOTHING`).run(userId, ipc_1.READER_SETTINGS_DEFAULTS.theme, ipc_1.READER_SETTINGS_DEFAULTS.epubFontSize, ipc_1.READER_SETTINGS_DEFAULTS.epubLineHeight, ipc_1.READER_SETTINGS_DEFAULTS.epubMargins, ipc_1.READER_SETTINGS_DEFAULTS.epubFontFamily, ipc_1.READER_SETTINGS_DEFAULTS.pdfBackground, ipc_1.READER_SETTINGS_DEFAULTS.pdfZoomPreset, now);
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id) DO NOTHING`).run(userId, ipc_1.READER_SETTINGS_DEFAULTS.theme, ipc_1.READER_SETTINGS_DEFAULTS.epubFontSize, ipc_1.READER_SETTINGS_DEFAULTS.epubLineHeight, ipc_1.READER_SETTINGS_DEFAULTS.epubMargins, ipc_1.READER_SETTINGS_DEFAULTS.epubFontFamily, ipc_1.READER_SETTINGS_DEFAULTS.pdfBackground, ipc_1.READER_SETTINGS_DEFAULTS.pdfZoomPreset, ipc_1.READER_SETTINGS_DEFAULTS.dyslexiaFriendlyMode ? 1 : 0, ipc_1.READER_SETTINGS_DEFAULTS.highContrastMode ? 1 : 0, ipc_1.READER_SETTINGS_DEFAULTS.textSizePreset, ipc_1.READER_SETTINGS_DEFAULTS.reduceMotion ? 1 : 0, now);
     return (readReaderSettingsRow(db, userId) ?? {
         user_id: userId,
         theme: ipc_1.READER_SETTINGS_DEFAULTS.theme,
@@ -105,6 +139,10 @@ function insertDefaultReaderSettings(db, userId) {
         epub_font_family: ipc_1.READER_SETTINGS_DEFAULTS.epubFontFamily,
         pdf_background: ipc_1.READER_SETTINGS_DEFAULTS.pdfBackground,
         pdf_zoom_preset: ipc_1.READER_SETTINGS_DEFAULTS.pdfZoomPreset,
+        dyslexia_friendly_mode: ipc_1.READER_SETTINGS_DEFAULTS.dyslexiaFriendlyMode ? 1 : 0,
+        high_contrast_mode: ipc_1.READER_SETTINGS_DEFAULTS.highContrastMode ? 1 : 0,
+        text_size_preset: ipc_1.READER_SETTINGS_DEFAULTS.textSizePreset,
+        reduce_motion: ipc_1.READER_SETTINGS_DEFAULTS.reduceMotion ? 1 : 0,
         updated_at: now
     });
 }
@@ -131,7 +169,11 @@ function updateReaderSettings(db, userId, patch) {
             epubMargins: sanitizedPatch.epubMargins ?? current.epubMargins,
             epubFontFamily: sanitizedPatch.epubFontFamily ?? current.epubFontFamily,
             pdfBackground: sanitizedPatch.pdfBackground ?? current.pdfBackground,
-            pdfZoomPreset: sanitizedPatch.pdfZoomPreset ?? current.pdfZoomPreset
+            pdfZoomPreset: sanitizedPatch.pdfZoomPreset ?? current.pdfZoomPreset,
+            dyslexiaFriendlyMode: sanitizedPatch.dyslexiaFriendlyMode ?? current.dyslexiaFriendlyMode,
+            highContrastMode: sanitizedPatch.highContrastMode ?? current.highContrastMode,
+            textSizePreset: sanitizedPatch.textSizePreset ?? current.textSizePreset,
+            reduceMotion: sanitizedPatch.reduceMotion ?? current.reduceMotion
         };
         db.prepare(`INSERT INTO reader_settings (
         user_id,
@@ -142,9 +184,13 @@ function updateReaderSettings(db, userId, patch) {
         epub_font_family,
         pdf_background,
         pdf_zoom_preset,
+        dyslexia_friendly_mode,
+        high_contrast_mode,
+        text_size_preset,
+        reduce_motion,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         theme = excluded.theme,
         epub_font_size = excluded.epub_font_size,
@@ -153,7 +199,11 @@ function updateReaderSettings(db, userId, patch) {
         epub_font_family = excluded.epub_font_family,
         pdf_background = excluded.pdf_background,
         pdf_zoom_preset = excluded.pdf_zoom_preset,
-        updated_at = excluded.updated_at`).run(safeUserId, next.theme, next.epubFontSize, next.epubLineHeight, next.epubMargins, next.epubFontFamily, next.pdfBackground, next.pdfZoomPreset, Date.now());
+        dyslexia_friendly_mode = excluded.dyslexia_friendly_mode,
+        high_contrast_mode = excluded.high_contrast_mode,
+        text_size_preset = excluded.text_size_preset,
+        reduce_motion = excluded.reduce_motion,
+        updated_at = excluded.updated_at`).run(safeUserId, next.theme, next.epubFontSize, next.epubLineHeight, next.epubMargins, next.epubFontFamily, next.pdfBackground, next.pdfZoomPreset, next.dyslexiaFriendlyMode ? 1 : 0, next.highContrastMode ? 1 : 0, next.textSizePreset, next.reduceMotion ? 1 : 0, Date.now());
         return { ok: true, settings: next };
     }
     catch (error) {

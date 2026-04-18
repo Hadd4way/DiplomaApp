@@ -20,7 +20,7 @@ const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ clas
 
 export function Sidebar({ currentView, onViewChange }: Props) {
   const { settings } = useReaderSettings();
-  const palette = getReaderThemePalette(settings.theme);
+  const palette = getReaderThemePalette(settings);
 
   return (
     <aside

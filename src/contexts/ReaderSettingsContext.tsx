@@ -1,7 +1,12 @@
 import * as React from 'react';
 import type { ReaderSettings, ReaderSettingsPatch } from '../../shared/ipc';
 import { READER_SETTINGS_DEFAULTS } from '../../shared/ipc';
-import { getAppThemeCssVariables } from '@/lib/reader-theme';
+import {
+  getAppThemeCssVariables,
+  getReaderTextScaleMultiplier,
+  getUiFontFamily,
+  getReaderThemePalette
+} from '@/lib/reader-theme';
 
 type ReaderSettingsContextValue = {
   settings: ReaderSettings;
@@ -32,13 +37,18 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
 
   React.useEffect(() => {
     const root = document.documentElement;
-    const variables = getAppThemeCssVariables(settings.theme);
+    const variables = getAppThemeCssVariables(settings);
     for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
     }
-    document.body.style.backgroundColor = settings.theme === 'dark' ? '#111827' : settings.theme === 'sepia' ? '#f2eadf' : '#f3f5f7';
-    document.body.style.color = settings.theme === 'dark' ? '#e5edf7' : settings.theme === 'sepia' ? '#4b3725' : '#1e293b';
-  }, [settings.theme]);
+    const palette = getReaderThemePalette(settings);
+    root.dataset.readerMotion = settings.reduceMotion ? 'reduced' : 'default';
+    root.dataset.readerContrast = settings.highContrastMode ? 'high' : 'normal';
+    root.style.setProperty('--reader-ui-scale', String(getReaderTextScaleMultiplier(settings.textSizePreset)));
+    root.style.setProperty('--reader-ui-font-family', getUiFontFamily(settings));
+    document.body.style.backgroundColor = palette.appBg;
+    document.body.style.color = palette.appForeground;
+  }, [settings]);
 
   React.useEffect(() => {
     let canceled = false;
@@ -130,7 +140,11 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
       epubMargins: patch.epubMargins ?? current.epubMargins,
       epubFontFamily: patch.epubFontFamily ?? current.epubFontFamily,
       pdfBackground: patch.pdfBackground ?? current.pdfBackground,
-      pdfZoomPreset: patch.pdfZoomPreset ?? current.pdfZoomPreset
+      pdfZoomPreset: patch.pdfZoomPreset ?? current.pdfZoomPreset,
+      dyslexiaFriendlyMode: patch.dyslexiaFriendlyMode ?? current.dyslexiaFriendlyMode,
+      highContrastMode: patch.highContrastMode ?? current.highContrastMode,
+      textSizePreset: patch.textSizePreset ?? current.textSizePreset,
+      reduceMotion: patch.reduceMotion ?? current.reduceMotion
     }));
     pendingPatchRef.current = { ...pendingPatchRef.current, ...patch };
     setError(null);

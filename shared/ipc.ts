@@ -103,6 +103,7 @@ export type ReaderTheme = 'light' | 'sepia' | 'dark';
 export type EpubMarginSize = 'small' | 'medium' | 'large';
 export type EpubFontFamily = 'serif' | 'sans' | 'georgia' | 'openDyslexic';
 export type PdfZoomPreset = 'fitWidth' | 'fitPage' | 'actualSize';
+export type TextSizePreset = 'normal' | 'large' | 'extraLarge';
 
 export type ReaderSettings = {
   theme: ReaderTheme;
@@ -112,6 +113,10 @@ export type ReaderSettings = {
   epubFontFamily: EpubFontFamily;
   pdfBackground: ReaderTheme;
   pdfZoomPreset: PdfZoomPreset;
+  dyslexiaFriendlyMode: boolean;
+  highContrastMode: boolean;
+  textSizePreset: TextSizePreset;
+  reduceMotion: boolean;
 };
 
 export const READER_SETTINGS_DEFAULTS: ReaderSettings = {
@@ -121,7 +126,11 @@ export const READER_SETTINGS_DEFAULTS: ReaderSettings = {
   epubMargins: 'medium',
   epubFontFamily: 'serif',
   pdfBackground: 'light',
-  pdfZoomPreset: 'fitWidth'
+  pdfZoomPreset: 'fitWidth',
+  dyslexiaFriendlyMode: false,
+  highContrastMode: false,
+  textSizePreset: 'normal',
+  reduceMotion: false
 };
 
 export type ReaderSettingsPatch = {
@@ -132,6 +141,10 @@ export type ReaderSettingsPatch = {
   epubFontFamily?: EpubFontFamily;
   pdfBackground?: ReaderTheme;
   pdfZoomPreset?: PdfZoomPreset;
+  dyslexiaFriendlyMode?: boolean;
+  highContrastMode?: boolean;
+  textSizePreset?: TextSizePreset;
+  reduceMotion?: boolean;
 };
 
 export type RecentBookEntry = {
