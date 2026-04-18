@@ -153,6 +153,30 @@ function findTocLabelByHref(items: TocItem[], href: string | null): string | nul
   return null;
 }
 
+function findActiveTocHref(items: TocItem[], href: string | null): string | null {
+  const safeHref = normalizeHrefForMatch(href);
+  if (!safeHref) {
+    return null;
+  }
+
+  let bestMatch: string | null = null;
+  for (const item of items) {
+    const itemHref = normalizeHrefForMatch(item.href);
+    if (itemHref && (itemHref === safeHref || safeHref.startsWith(itemHref) || itemHref.startsWith(safeHref))) {
+      if (!bestMatch || itemHref.length > bestMatch.length) {
+        bestMatch = itemHref;
+      }
+    }
+
+    const nestedMatch = findActiveTocHref(item.subitems ?? [], safeHref);
+    if (nestedMatch && (!bestMatch || nestedMatch.length > bestMatch.length)) {
+      bestMatch = nestedMatch;
+    }
+  }
+
+  return bestMatch;
+}
+
 function toComparableCfi(value: string | null | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -295,12 +319,14 @@ function TocTree({
   items,
   onSelect,
   palette,
+  activeHref,
   level = 0,
   path = 'root'
 }: {
   items: TocItem[];
   onSelect: (item: TocItem) => void;
   palette: ReturnType<typeof getReaderThemePalette>;
+  activeHref: string | null;
   level?: number;
   path?: string;
 }) {
@@ -309,24 +335,40 @@ function TocTree({
       {items.map((item, index) => {
         const key = `${path}.${item.id ?? index}`;
         const title = (item.label ?? '').trim() || `Chapter ${index + 1}`;
+        const itemHref = normalizeHrefForMatch(item.href);
+        const isActive = Boolean(activeHref && itemHref && activeHref === itemHref);
         return (
           <li key={key}>
             <button
               type="button"
               className="w-full overflow-hidden text-wrap break-words rounded px-2 py-1 text-left text-sm whitespace-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              style={{ paddingLeft: `${0.5 + level * 0.75}rem`, color: palette.chromeText }}
+              style={{
+                paddingLeft: `${0.5 + level * 0.75}rem`,
+                color: isActive ? palette.accentText : palette.chromeText,
+                backgroundColor: isActive ? palette.accentBg : 'transparent',
+                boxShadow: isActive ? `inset 0 0 0 1px ${palette.accentBorder}` : 'none'
+              }}
               onMouseEnter={(event) => {
-                event.currentTarget.style.backgroundColor = palette.panelHoverBg;
+                if (!isActive) {
+                  event.currentTarget.style.backgroundColor = palette.panelHoverBg;
+                }
               }}
               onMouseLeave={(event) => {
-                event.currentTarget.style.backgroundColor = 'transparent';
+                event.currentTarget.style.backgroundColor = isActive ? palette.accentBg : 'transparent';
               }}
               onClick={() => onSelect(item)}
             >
               {title}
             </button>
             {item.subitems && item.subitems.length > 0 ? (
-              <TocTree items={item.subitems} onSelect={onSelect} palette={palette} level={level + 1} path={key} />
+              <TocTree
+                items={item.subitems}
+                onSelect={onSelect}
+                palette={palette}
+                activeHref={activeHref}
+                level={level + 1}
+                path={key}
+              />
             ) : null}
           </li>
         );
@@ -373,6 +415,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     () => findTocLabelByHref(tocItems, currentHref) ?? 'Location',
     [currentHref, tocItems]
   );
+  const activeTocHref = React.useMemo(() => findActiveTocHref(tocItems, currentHref), [currentHref, tocItems]);
   const activeBookmark = React.useMemo(
     () => epubBookmarks.find((bookmark) => isMatchingBookmarkCfi(currentCfi, bookmark.cfi)) ?? null,
     [currentCfi, epubBookmarks]
@@ -1465,6 +1508,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                     void renditionRef.current?.display?.(item.href);
                   }}
                   palette={palette}
+                  activeHref={activeTocHref}
                 />
               ) : (
                 <p className="px-2 py-1 text-sm" style={{ color: palette.mutedText }}>
