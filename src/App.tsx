@@ -372,6 +372,8 @@ export default function App() {
           <Fb2ReaderScreen
             title={activeBook.title}
             bookId={activeBook.id}
+            initialCfi={readerInitialCfi}
+            onInitialCfiApplied={() => setReaderInitialCfi(null)}
             loading={loading}
             onBack={onBackToLibrary}
           />

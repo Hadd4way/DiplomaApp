@@ -39,7 +39,13 @@ function formatLocationHeading(key: string): string {
     return `Page ${key.slice(5)}`;
   }
   const cfi = key.slice(4);
-  return cfi === 'unknown' ? 'EPUB Location' : `EPUB Location (${cfi})`;
+  if (cfi === 'unknown') {
+    return 'Flow Location';
+  }
+  if (cfi.startsWith('fb2-')) {
+    return 'FB2 Location';
+  }
+  return `Flow Location (${cfi})`;
 }
 
 export function toMarkdown(bookTitle: string, notes: Note[], highlights: Highlight[]): string {

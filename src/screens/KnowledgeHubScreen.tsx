@@ -487,7 +487,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                         {typeof item.page === 'number' ? <span>Page {item.page}</span> : null}
-                        {item.cfiRange ? <span className="truncate">EPUB jump ready</span> : null}
+                        {item.cfiRange ? <span className="truncate">Location jump ready</span> : null}
                       </div>
                     </div>
 

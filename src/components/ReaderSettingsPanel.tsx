@@ -62,8 +62,6 @@ function Section({
   description: string;
   children: React.ReactNode;
 }) {
-  const isFlowFormat = format === 'epub' || format === 'fb2';
-
   return (
     <section className="space-y-3 rounded-2xl border p-4 backdrop-blur-sm" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
       <div className="space-y-1">
@@ -98,6 +96,8 @@ export function ReaderSettingsPanel({
   if (!open) {
     return null;
   }
+
+  const isFlowFormat = format === 'epub' || format === 'fb2';
 
   const chipStyles = (active: boolean): React.CSSProperties => ({
     ...(active
@@ -245,7 +245,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={option.value}
                       type="button"
-                  disabled={!isFlowFormat}
+                      disabled={!isFlowFormat}
                       className="rounded-xl border px-3 py-2 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed"
                       style={chipStyles(active)}
                       onClick={() => onChange({ epubMargins: option.value })}
@@ -268,7 +268,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={font.value}
                       type="button"
-                  disabled={!isFlowFormat}
+                      disabled={!isFlowFormat}
                       className="rounded-2xl border px-3 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed"
                       style={chipStyles(active)}
                       onClick={() => onChange({ epubFontFamily: font.value })}

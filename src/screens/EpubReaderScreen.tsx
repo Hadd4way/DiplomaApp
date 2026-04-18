@@ -19,6 +19,7 @@ import { ReaderShell } from '@/components/reader/ReaderShell';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
+import { ExportDialog } from '@/components/ExportDialog';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import {
   getEffectiveEpubFontFamily,
@@ -29,6 +30,7 @@ import {
   getReaderThemePalette
 } from '@/lib/reader-theme';
 import { useEpubSearch } from '@/lib/useEpubSearch';
+import { useFlowExport } from '@/lib/useFlowExport';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import ePub from 'epubjs';
 import type { EpubBookmark, Highlight } from '../../shared/ipc';
@@ -474,6 +476,19 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
   const [highlightEditor, setHighlightEditor] = React.useState<EpubHighlightEditorState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingEpubHighlightDeletion[]>([]);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
+  const {
+    exportDialogOpen,
+    exportFormat,
+    exportLoading,
+    exportError,
+    exportMessage,
+    exportPreview,
+    setExportFormat,
+    openExportDialog,
+    copyExportContent,
+    saveExportContent,
+    closeExportDialog
+  } = useFlowExport({ bookId, title });
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
   const epubFramePadding = React.useMemo(() => getEpubMarginCssValue(settings.epubMargins), [settings.epubMargins]);
   const currentBookmarkLabel = React.useMemo(
@@ -1553,6 +1568,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
   ]);
 
   return (
+    <>
     <ReaderShell
       title={title}
       settings={settings}
@@ -1654,7 +1670,15 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             <Highlighter className="h-4 w-4" />
             Highlights
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void openExportDialog();
+            }}
+            style={getReaderButtonStyles(settings)}
+          >
             <Download className="h-4 w-4" />
             Export
           </Button>
@@ -2042,5 +2066,22 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
         ) : null}
       </div>
     </ReaderShell>
+      <ExportDialog
+        open={exportDialogOpen}
+        loading={exportLoading}
+        format={exportFormat}
+        preview={exportPreview}
+        error={exportError}
+        message={exportMessage}
+        onFormatChange={setExportFormat}
+        onCopy={() => {
+          void copyExportContent();
+        }}
+        onSave={() => {
+          void saveExportContent();
+        }}
+        onClose={closeExportDialog}
+      />
+    </>
   );
 }
