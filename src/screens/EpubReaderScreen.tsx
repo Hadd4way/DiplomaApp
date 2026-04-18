@@ -42,6 +42,8 @@ type TocItem = {
 type Props = {
   title: string;
   bookId: string;
+  initialCfi?: string | null;
+  onInitialCfiApplied?: () => void;
   loading: boolean;
   onBack: () => void;
 };
@@ -425,7 +427,7 @@ function TocTree({
   );
 }
 
-export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
+export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCfiApplied, loading, onBack }: Props) {
   const readerStageRef = React.useRef<HTMLDivElement | null>(null);
   const readerContainerRef = React.useRef<HTMLDivElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -1165,7 +1167,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
         const epubBytes = Uint8Array.from(atob(epubDataResult.base64), (char) => char.charCodeAt(0));
         log('epub:bytes:decoded', { byteLength: epubBytes.byteLength, elapsed: elapsed() });
 
-        let startCfi: string | null = null;
+        let startCfi: string | null = initialCfi?.trim() || null;
         log('ipc:epubProgress:get:start');
         const progressResult = await withTimeout(
           window.api.epubProgress.get({ bookId }),
@@ -1176,7 +1178,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           log('init:aborted:after-getProgress', { elapsed: elapsed() });
           return;
         }
-        if (progressResult && progressResult.ok) {
+        if (!startCfi && progressResult && progressResult.ok) {
           startCfi = progressResult.cfi;
         }
         log('ipc:epubProgress:get:done', { hasStartCfi: Boolean(startCfi), elapsed: elapsed() });
@@ -1303,6 +1305,9 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
                   20000,
                   `EPUB start position timed out (${candidate.label}).`
                 );
+                if (startCfi === initialCfi?.trim()) {
+                  onInitialCfiApplied?.();
+                }
                 log('display:ok', { candidate: candidate.label, target: 'startCfi', elapsed: elapsed() });
               } catch {
                 warn('display:startCfi:failed:fallback', { candidate: candidate.label, elapsed: elapsed() });
@@ -1398,7 +1403,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       bookRef.current = null;
       renderedHighlightCfisRef.current = new Set();
     };
-  }, [bindIframeActivity, bindIframeBookmarkHotkeys, bookId, createHighlightFromSelection, flushReadingStats, loadBookmarks, loadHighlights, persistCfi, registerActivity, renderHighlights, settings]);
+  }, [bindIframeActivity, bindIframeBookmarkHotkeys, bookId, createHighlightFromSelection, flushReadingStats, initialCfi, loadBookmarks, loadHighlights, onInitialCfiApplied, persistCfi, registerActivity, renderHighlights, settings]);
 
   React.useEffect(() => {
     const closeOnPointerDown = (event: PointerEvent) => {

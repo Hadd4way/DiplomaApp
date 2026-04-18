@@ -1,9 +1,9 @@
-import { BookOpen, Download, FileText, Settings } from 'lucide-react';
+import { BookOpen, Brain, Download, FileText, Settings } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 
-export type AppView = 'library' | 'import' | 'notes' | 'settings';
+export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'settings';
 
 type Props = {
   currentView: AppView;
@@ -12,6 +12,7 @@ type Props = {
 
 const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
   { view: 'library', label: 'Library', icon: BookOpen },
+  { view: 'knowledge-hub', label: 'Knowledge Hub', icon: Brain },
   { view: 'import', label: 'Import', icon: Download },
   { view: 'notes', label: 'Notes', icon: FileText },
   { view: 'settings', label: 'Settings', icon: Settings }

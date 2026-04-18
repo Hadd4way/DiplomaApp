@@ -15,6 +15,7 @@ import { LibraryScreen } from '@/screens/LibraryScreen';
 import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
+import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
@@ -91,6 +92,7 @@ export default function App() {
   const [activeBook, setActiveBook] = React.useState<Book | null>(null);
   const [activePdfData, setActivePdfData] = React.useState<{ base64: string; title: string } | null>(null);
   const [readerInitialPage, setReaderInitialPage] = React.useState<number | null>(null);
+  const [readerInitialCfi, setReaderInitialCfi] = React.useState<string | null>(null);
 
   const handleResult = React.useCallback(
     <
@@ -116,6 +118,7 @@ export default function App() {
     setActiveBook(null);
     setActivePdfData(null);
     setReaderInitialPage(null);
+    setReaderInitialCfi(null);
   }, []);
 
   const loadBooks = React.useCallback(async () => {
@@ -197,8 +200,15 @@ export default function App() {
     }
   };
 
-  const onOpenBook = async (book: Book, initialPageOverride: number | null = null) => {
-    setReaderInitialPage(initialPageOverride);
+  const onOpenBook = async (
+    book: Book,
+    options: {
+      initialPage?: number | null;
+      initialCfi?: string | null;
+    } = {}
+  ) => {
+    setReaderInitialPage(options.initialPage ?? null);
+    setReaderInitialCfi(options.initialCfi ?? null);
 
     if (book.format === 'epub') {
       setActiveBook(book);
@@ -241,7 +251,23 @@ export default function App() {
     }
 
     setCurrentView('library');
-    await onOpenBook(book, note.page);
+    await onOpenBook(book, { initialPage: note.page });
+  };
+
+  const onOpenKnowledgeHubItem = async (item: KnowledgeHubItem) => {
+    const book = books.find((entry) => entry.id === item.bookId);
+    if (!book) {
+      setError('Book for this annotation was not found.');
+      return;
+    }
+
+    setCurrentView('library');
+    if (book.format === 'pdf') {
+      await onOpenBook(book, { initialPage: item.page ?? 1 });
+      return;
+    }
+
+    await onOpenBook(book, { initialCfi: item.cfiRange ?? null });
   };
 
   const onRevealBook = async (bookId: string) => {
@@ -329,7 +355,14 @@ export default function App() {
 
       if (activeBook && activeBook.format === 'epub') {
         return (
-          <EpubReaderScreen title={activeBook.title} bookId={activeBook.id} loading={loading} onBack={onBackToLibrary} />
+          <EpubReaderScreen
+            title={activeBook.title}
+            bookId={activeBook.id}
+            initialCfi={readerInitialCfi}
+            onInitialCfiApplied={() => setReaderInitialCfi(null)}
+            loading={loading}
+            onBack={onBackToLibrary}
+          />
         );
       }
 
@@ -361,6 +394,10 @@ export default function App() {
 
     if (currentView === 'notes') {
       return <NotesScreen books={books} onOpenNote={(note) => void onOpenNote(note)} />;
+    }
+
+    if (currentView === 'knowledge-hub') {
+      return <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />;
     }
 
     return <PlaceholderScreen title="Settings" />;
