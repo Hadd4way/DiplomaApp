@@ -3,15 +3,18 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
+import type { WebContents } from 'electron';
 import type {
   Book,
   BookFormat,
+  DiscoverDownloadProgressEvent,
   DiscoverBookResult,
   DiscoverDownloadRequest,
   DiscoverDownloadResult,
   DiscoverSearchRequest,
   DiscoverSearchResult
 } from '../shared/ipc';
+import { IPC_CHANNELS } from '../shared/ipc';
 import { importBookFromPath } from './books';
 import { gutendexProvider } from './discover/providers/gutendexProvider';
 
@@ -50,6 +53,14 @@ function normalizeForDuplicate(value: string | null | undefined) {
 
 function sanitizeTempFilename(value: string) {
   return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || randomUUID();
+}
+
+function emitDownloadProgress(target: WebContents | null, event: DiscoverDownloadProgressEvent) {
+  if (!target || target.isDestroyed()) {
+    return;
+  }
+
+  target.send(IPC_CHANNELS.discoverDownloadProgress, event);
 }
 
 function getPreferredFormat(result: DiscoverBookResult) {
@@ -136,10 +147,44 @@ function inferFormatFromUrlOrHeaders(url: string, contentType: string | null, co
 
 async function createImportableTempFile(
   response: Response,
-  result: DiscoverBookResult
+  result: DiscoverBookResult,
+  onProgress?: (event: DiscoverDownloadProgressEvent) => void
 ): Promise<{ tempPath: string; cleanupPath: string }> {
-  const arrayBuffer = await response.arrayBuffer();
-  const fileBuffer = Buffer.from(arrayBuffer);
+  const totalBytesHeader = response.headers.get('content-length');
+  const totalBytes = totalBytesHeader ? Number(totalBytesHeader) : null;
+  const reader = response.body?.getReader();
+
+  if (!reader) {
+    throw new Error('The network response body is unavailable for this download.');
+  }
+
+  const chunks: Buffer[] = [];
+  let bytesReceived = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    if (!value) {
+      continue;
+    }
+
+    const chunk = Buffer.from(value);
+    chunks.push(chunk);
+    bytesReceived += chunk.length;
+    onProgress?.({
+      resultId: result.id,
+      state: 'downloading',
+      bytesReceived,
+      totalBytes,
+      progressPercent: totalBytes && totalBytes > 0 ? Math.round((bytesReceived / totalBytes) * 100) : null,
+      message: totalBytes ? 'Downloading book file...' : 'Downloading book file...'
+    });
+  }
+
+  const fileBuffer = Buffer.concat(chunks);
   const format = inferFormatFromUrlOrHeaders(
     response.url,
     response.headers.get('content-type'),
@@ -193,7 +238,8 @@ export async function downloadDiscoverBook(
   db: Database.Database,
   userId: string,
   userDataPath: string,
-  payload: DiscoverDownloadRequest
+  payload: DiscoverDownloadRequest,
+  progressTarget?: WebContents | null
 ): Promise<DiscoverDownloadResult> {
   const result = payload.result;
   const title = result?.title?.trim();
@@ -208,6 +254,15 @@ export async function downloadDiscoverBook(
   let cleanupPath: string | null = null;
 
   try {
+    emitDownloadProgress(progressTarget ?? null, {
+      resultId: result.id,
+      state: 'downloading',
+      bytesReceived: 0,
+      totalBytes: null,
+      progressPercent: 0,
+      message: 'Starting download...'
+    });
+
     const response = await fetch(preferredFormat.url, {
       headers: {
         'user-agent': 'DiplomaApp/1.0 (Discover Books MVP)'
@@ -216,11 +271,30 @@ export async function downloadDiscoverBook(
     });
 
     if (!response.ok) {
+      emitDownloadProgress(progressTarget ?? null, {
+        resultId: result.id,
+        state: 'failed',
+        bytesReceived: null,
+        totalBytes: null,
+        progressPercent: null,
+        message: `Download failed with status ${response.status}.`
+      });
       return { ok: false, error: `Download failed with status ${response.status}.` };
     }
 
-    const tempFile = await createImportableTempFile(response, result);
+    const tempFile = await createImportableTempFile(response, result, (event) =>
+      emitDownloadProgress(progressTarget ?? null, event)
+    );
     cleanupPath = tempFile.cleanupPath;
+
+    emitDownloadProgress(progressTarget ?? null, {
+      resultId: result.id,
+      state: 'importing',
+      bytesReceived: null,
+      totalBytes: null,
+      progressPercent: 100,
+      message: 'Importing into your local library...'
+    });
 
     const importResult = await importBookFromPath(db, userId, userDataPath, tempFile.tempPath, {
       title,
@@ -228,8 +302,25 @@ export async function downloadDiscoverBook(
     });
 
     if (!importResult.ok) {
+      emitDownloadProgress(progressTarget ?? null, {
+        resultId: result.id,
+        state: 'failed',
+        bytesReceived: null,
+        totalBytes: null,
+        progressPercent: null,
+        message: importResult.error
+      });
       return importResult;
     }
+
+    emitDownloadProgress(progressTarget ?? null, {
+      resultId: result.id,
+      state: 'completed',
+      bytesReceived: null,
+      totalBytes: null,
+      progressPercent: 100,
+      message: 'Downloaded successfully.'
+    });
 
     return {
       ok: true,
@@ -237,6 +328,14 @@ export async function downloadDiscoverBook(
       duplicateWarning: duplicateDetected ? 'A similar local book already exists, so this may be a duplicate import.' : null
     };
   } catch (error) {
+    emitDownloadProgress(progressTarget ?? null, {
+      resultId: result.id,
+      state: 'failed',
+      bytesReceived: null,
+      totalBytes: null,
+      progressPercent: null,
+      message: error instanceof Error ? error.message : 'Failed to download and import this book.'
+    });
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Failed to download and import this book.'

@@ -6,7 +6,16 @@ const api = {
     ping: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.ping),
     discover: {
         search: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.discoverSearch, payload),
-        download: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.discoverDownload, payload)
+        download: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.discoverDownload, payload),
+        onDownloadProgress: (listener) => {
+            const wrappedListener = (_event, payload) => {
+                listener(payload);
+            };
+            electron_1.ipcRenderer.on(ipc_1.IPC_CHANNELS.discoverDownloadProgress, wrappedListener);
+            return () => {
+                electron_1.ipcRenderer.removeListener(ipc_1.IPC_CHANNELS.discoverDownloadProgress, wrappedListener);
+            };
+        }
     },
     books: {
         list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList),

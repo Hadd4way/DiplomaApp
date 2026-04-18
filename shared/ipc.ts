@@ -2,6 +2,7 @@ export const IPC_CHANNELS = {
   ping: 'app:ping',
   discoverSearch: 'discover:search',
   discoverDownload: 'discover:download',
+  discoverDownloadProgress: 'discover:download-progress',
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
@@ -108,6 +109,17 @@ export type DiscoverBookResult = {
 };
 
 export type DiscoverBookFormatDescriptor = DiscoverBookResult['formats'][number];
+
+export type DiscoverDownloadState = 'idle' | 'downloading' | 'importing' | 'completed' | 'failed';
+
+export type DiscoverDownloadProgressEvent = {
+  resultId: string;
+  state: DiscoverDownloadState;
+  bytesReceived: number | null;
+  totalBytes: number | null;
+  progressPercent: number | null;
+  message: string | null;
+};
 
 export type Bookmark = {
   id: string;
@@ -428,6 +440,7 @@ export interface RendererBooksApi {
 export interface RendererDiscoverApi {
   search: (payload: DiscoverSearchRequest) => Promise<DiscoverSearchResult>;
   download: (payload: DiscoverDownloadRequest) => Promise<DiscoverDownloadResult>;
+  onDownloadProgress: (listener: (event: DiscoverDownloadProgressEvent) => void) => () => void;
 }
 
 export interface RendererNotesApi {

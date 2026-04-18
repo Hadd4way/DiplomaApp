@@ -5,7 +5,17 @@ const api: RendererApi = {
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.ping),
   discover: {
     search: (payload) => ipcRenderer.invoke(IPC_CHANNELS.discoverSearch, payload),
-    download: (payload) => ipcRenderer.invoke(IPC_CHANNELS.discoverDownload, payload)
+    download: (payload) => ipcRenderer.invoke(IPC_CHANNELS.discoverDownload, payload),
+    onDownloadProgress: (listener) => {
+      const wrappedListener = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof listener>[0]) => {
+        listener(payload);
+      };
+
+      ipcRenderer.on(IPC_CHANNELS.discoverDownloadProgress, wrappedListener);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.discoverDownloadProgress, wrappedListener);
+      };
+    }
   },
   books: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.booksList),

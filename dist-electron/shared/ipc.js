@@ -5,6 +5,7 @@ exports.IPC_CHANNELS = {
     ping: 'app:ping',
     discoverSearch: 'discover:search',
     discoverDownload: 'discover:download',
+    discoverDownloadProgress: 'discover:download-progress',
     booksList: 'books:list',
     booksAddSample: 'books:add-sample',
     booksImport: 'books:import',

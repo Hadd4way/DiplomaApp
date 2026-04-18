@@ -1,16 +1,41 @@
 import * as React from 'react';
-import { BookOpenText, Compass, Download, Globe, LoaderCircle, Search } from 'lucide-react';
+import { BookOpen, BookOpenText, Compass, Download, Globe, LoaderCircle, Search, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import type { Book, DiscoverBookResult } from '../../shared/ipc';
+import { cn } from '@/lib/utils';
+import type { Book, DiscoverBookResult, DiscoverDownloadProgressEvent } from '../../shared/ipc';
 
 type Props = {
   books: Book[];
   onBack: () => void;
   onLibraryChanged: () => Promise<void> | void;
+  onOpenBook: (book: Book) => Promise<void> | void;
 };
+
+type DownloadCardState = {
+  state: 'idle' | 'downloading' | 'importing' | 'completed' | 'failed';
+  progressPercent: number | null;
+  message: string | null;
+  importedBook: Book | null;
+  error: string | null;
+};
+
+type DuplicatePromptState = {
+  result: DiscoverBookResult;
+  existingBook: Book;
+} | null;
 
 function getRendererApi() {
   if (!window.api) {
@@ -28,49 +53,146 @@ function normalizeDuplicateValue(value: string | null | undefined) {
     .trim();
 }
 
-function getDuplicateKey(title: string, author: string | null, format: Book['format'] | null) {
-  return `${normalizeDuplicateValue(title)}::${normalizeDuplicateValue(author)}::${format ?? 'unknown'}`;
-}
-
-function getPreferredImportFormat(result: DiscoverBookResult): Book['format'] | null {
-  if (result.formats.some((format) => format.kind === 'epub')) {
-    return 'epub';
-  }
-  if (result.formats.some((format) => format.kind === 'txt' || format.kind === 'html')) {
-    return 'txt';
-  }
-  return null;
+function getDuplicateKey(title: string, author: string | null) {
+  return `${normalizeDuplicateValue(title)}::${normalizeDuplicateValue(author)}`;
 }
 
 function getFormatBadgeLabel(kind: DiscoverBookResult['formats'][number]['kind']) {
   return kind === 'txt' ? 'TXT' : kind === 'html' ? 'HTML' : kind.toUpperCase();
 }
 
-export function DiscoverScreen({ books, onBack, onLibraryChanged }: Props) {
+function getFriendlyDiscoverError(error: string) {
+  const normalized = error.toLocaleLowerCase();
+  if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('failed to fetch')) {
+    return 'Network issue. Check your connection and try again.';
+  }
+  if (normalized.includes('supported downloadable format') || normalized.includes('not supported')) {
+    return 'This edition does not have a format we can import yet.';
+  }
+  if (normalized.includes('failed to save imported book metadata') || normalized.includes('failed to copy') || normalized.includes('import')) {
+    return 'Import failed while adding the book to your local library. Please retry.';
+  }
+  return error;
+}
+
+function getInitials(title: string) {
+  return title
+    .split(/\s+/)
+    .map((part) => part.trim().charAt(0))
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function getPlaceholderPalette(seed: string) {
+  const value = [...seed].reduce((total, char) => total + char.charCodeAt(0), 0);
+  const palettes = [
+    ['from-amber-200 via-orange-100 to-rose-100', 'bg-amber-950/80', 'text-amber-950'],
+    ['from-sky-200 via-cyan-100 to-blue-100', 'bg-sky-950/80', 'text-sky-950'],
+    ['from-emerald-200 via-lime-100 to-teal-100', 'bg-emerald-950/80', 'text-emerald-950'],
+    ['from-fuchsia-200 via-pink-100 to-rose-100', 'bg-fuchsia-950/80', 'text-fuchsia-950']
+  ] as const;
+
+  return palettes[value % palettes.length];
+}
+
+function PlaceholderCover({ title, author }: { title: string; author: string | null }) {
+  const [gradient, badgeBackground, textColor] = getPlaceholderPalette(`${title}:${author ?? ''}`);
+  const initials = getInitials(title);
+
+  return (
+    <div className={cn('relative h-full w-full overflow-hidden bg-gradient-to-br', gradient)}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_45%)]" />
+      <div className="relative flex h-full flex-col justify-between p-3">
+        <div className={cn('inline-flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold text-white shadow-sm', badgeBackground)}>
+          {initials || 'BK'}
+        </div>
+        <div className="space-y-1">
+          <p className={cn('line-clamp-3 text-xs font-semibold leading-4', textColor)}>{title}</p>
+          <p className="line-clamp-2 text-[11px] text-black/60">{author || 'Unknown author'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function getProgressLabel(downloadState: DownloadCardState) {
+  if (downloadState.state === 'downloading') {
+    return downloadState.progressPercent !== null
+      ? `Downloading... ${downloadState.progressPercent}%`
+      : 'Downloading...';
+  }
+
+  if (downloadState.state === 'importing') {
+    return 'Importing into your local library...';
+  }
+
+  if (downloadState.state === 'completed') {
+    return 'Downloaded successfully';
+  }
+
+  if (downloadState.state === 'failed') {
+    return downloadState.error ?? 'Download failed';
+  }
+
+  return 'Ready to download';
+}
+
+function createIdleState(): DownloadCardState {
+  return {
+    state: 'idle',
+    progressPercent: null,
+    message: null,
+    importedBook: null,
+    error: null
+  };
+}
+
+export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: Props) {
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
   const [results, setResults] = React.useState<DiscoverBookResult[]>([]);
   const [loading, setLoading] = React.useState(false);
-  const [downloadId, setDownloadId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  const [warning, setWarning] = React.useState<string | null>(null);
-  const [success, setSuccess] = React.useState<string | null>(null);
   const [hasSearched, setHasSearched] = React.useState(false);
+  const [downloadStates, setDownloadStates] = React.useState<Record<string, DownloadCardState>>({});
+  const [duplicatePrompt, setDuplicatePrompt] = React.useState<DuplicatePromptState>(null);
 
-  const duplicateKeys = React.useMemo(
-    () =>
-      new Set(
-        books.map((book) => getDuplicateKey(book.title, book.author ?? null, book.format))
-      ),
-    [books]
-  );
+  const duplicateMap = React.useMemo(() => {
+    const map = new Map<string, Book>();
+    for (const book of books) {
+      const key = getDuplicateKey(book.title, book.author ?? null);
+      if (!map.has(key)) {
+        map.set(key, book);
+      }
+    }
+    return map;
+  }, [books]);
+
+  React.useEffect(() => {
+    const api = getRendererApi();
+    return api.discover.onDownloadProgress((event: DiscoverDownloadProgressEvent) => {
+      setDownloadStates((current) => {
+        const previous = current[event.resultId] ?? createIdleState();
+        return {
+          ...current,
+          [event.resultId]: {
+            ...previous,
+            state: event.state,
+            progressPercent: event.progressPercent,
+            message: event.message,
+            error: event.state === 'failed' ? getFriendlyDiscoverError(event.message ?? 'Download failed.') : null
+          }
+        };
+      });
+    });
+  }, []);
 
   const runSearch = React.useCallback(async () => {
     const trimmedQuery = query.trim();
     setHasSearched(true);
     setError(null);
-    setWarning(null);
-    setSuccess(null);
 
     if (!trimmedQuery) {
       setResults([]);
@@ -85,64 +207,108 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged }: Props) {
         language: language.trim() || undefined
       });
       if (!response.ok) {
-        setError(response.error);
+        setError(getFriendlyDiscoverError(response.error));
         setResults([]);
         return;
       }
 
       setResults(response.results);
+      setDownloadStates({});
     } catch (err) {
       setResults([]);
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getFriendlyDiscoverError(err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }
   }, [language, query]);
+
+  const performDownload = React.useCallback(
+    async (result: DiscoverBookResult) => {
+      setDownloadStates((current) => ({
+        ...current,
+        [result.id]: {
+          ...createIdleState(),
+          state: 'downloading',
+          progressPercent: 0,
+          message: 'Starting download...'
+        }
+      }));
+
+      try {
+        const api = getRendererApi();
+        const response = await api.discover.download({ result });
+        if (!response.ok) {
+          setDownloadStates((current) => ({
+            ...current,
+            [result.id]: {
+              ...(current[result.id] ?? createIdleState()),
+              state: 'failed',
+              error: getFriendlyDiscoverError(response.error),
+              message: getFriendlyDiscoverError(response.error)
+            }
+          }));
+          return;
+        }
+
+        await Promise.resolve(onLibraryChanged());
+        setDownloadStates((current) => ({
+          ...current,
+          [result.id]: {
+            ...(current[result.id] ?? createIdleState()),
+            state: 'completed',
+            progressPercent: 100,
+            importedBook: response.book,
+            message: 'Downloaded successfully',
+            error: null
+          }
+        }));
+      } catch (err) {
+        const friendlyError = getFriendlyDiscoverError(err instanceof Error ? err.message : String(err));
+        setDownloadStates((current) => ({
+          ...current,
+          [result.id]: {
+            ...(current[result.id] ?? createIdleState()),
+            state: 'failed',
+            error: friendlyError,
+            message: friendlyError
+          }
+        }));
+      }
+    },
+    [onLibraryChanged]
+  );
+
+  const requestDownload = React.useCallback(
+    async (result: DiscoverBookResult) => {
+      const duplicate = duplicateMap.get(getDuplicateKey(result.title, result.author));
+      if (duplicate) {
+        setDuplicatePrompt({ result, existingBook: duplicate });
+        return;
+      }
+
+      await performDownload(result);
+    },
+    [duplicateMap, performDownload]
+  );
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await runSearch();
   };
 
-  const onDownload = async (result: DiscoverBookResult) => {
-    setDownloadId(result.id);
-    setError(null);
-    setWarning(null);
-    setSuccess(null);
-
-    try {
-      const api = getRendererApi();
-      const response = await api.discover.download({ result });
-      if (!response.ok) {
-        setError(response.error);
-        return;
-      }
-
-      await Promise.resolve(onLibraryChanged());
-      if (response.duplicateWarning) {
-        setWarning(response.duplicateWarning);
-      }
-      setSuccess(`Added "${response.book.title}" to your library.`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setDownloadId(null);
-    }
-  };
-
   return (
-    <div className="flex h-full flex-col gap-6 overflow-y-auto pr-1">
-      <Card className="overflow-hidden border-white/50 bg-[linear-gradient(135deg,rgba(255,247,237,0.95)_0%,rgba(255,255,255,0.98)_45%,rgba(240,249,255,0.95)_100%)] shadow-sm">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden pr-1">
+      <Card className="shrink-0 overflow-hidden border-white/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98)_0%,rgba(255,255,255,0.99)_45%,rgba(240,249,255,0.98)_100%)] shadow-sm">
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">
               <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-background/80 shadow-sm">
-                <Compass className="h-5 w-5" />
+                <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
                 <h1 className="text-3xl font-semibold tracking-tight">Discover Books</h1>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Search free books from Project Gutenberg and import them into your local library.
+                  Search Project Gutenberg, preview polished metadata, and bring great books into your local library.
                 </p>
               </div>
             </div>
@@ -185,137 +351,225 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged }: Props) {
         </CardContent>
       </Card>
 
-      {success ? (
-        <Alert>
-          <AlertTitle>Book imported</AlertTitle>
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      ) : null}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+        <div className="space-y-6">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertTitle>Discover error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-      {warning ? (
-        <Alert>
-          <AlertTitle>Possible duplicate</AlertTitle>
-          <AlertDescription>{warning}</AlertDescription>
-        </Alert>
-      ) : null}
+          {!hasSearched ? (
+            <Card className="border-dashed bg-card/80">
+              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
+                  <BookOpenText className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl font-semibold tracking-tight">Search free books from Project Gutenberg</h2>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    Discover public-domain books and download them into your local collection with progress, retry, and instant open actions.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : loading ? (
+            <Card className="border-dashed bg-card/80">
+              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
+                <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Searching Project Gutenberg...</p>
+              </CardContent>
+            </Card>
+          ) : results.length === 0 ? (
+            <Card className="border-dashed bg-card/80">
+              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
+                <p className="text-sm font-medium">No Project Gutenberg books matched that search.</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Try a broader title, another author spelling, or a different language code.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+              {results.map((result) => {
+                const downloadState = downloadStates[result.id] ?? createIdleState();
+                const likelyDuplicate = duplicateMap.get(getDuplicateKey(result.title, result.author));
+                const isBusy = downloadState.state === 'downloading' || downloadState.state === 'importing';
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>Discover error</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {!hasSearched ? (
-        <Card className="border-dashed bg-card/80">
-          <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
-              <BookOpenText className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold tracking-tight">Search free books from Project Gutenberg</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                Find public-domain EPUB, TXT, and HTML downloads, then add them to your local library.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : loading ? (
-        <Card className="border-dashed bg-card/80">
-          <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-            <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Searching Project Gutenberg...</p>
-          </CardContent>
-        </Card>
-      ) : results.length === 0 ? (
-        <Card className="border-dashed bg-card/80">
-          <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-            <p className="text-sm font-medium">No Project Gutenberg books matched that search.</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Try a broader title, another author spelling, or a different language code.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-          {results.map((result) => {
-            const preferredImportFormat = getPreferredImportFormat(result);
-            const isDuplicate = duplicateKeys.has(
-              getDuplicateKey(result.title, result.author, preferredImportFormat)
-            );
-            const isDownloading = downloadId === result.id;
-
-            return (
-              <li key={result.id} className="h-full">
-                <Card className="flex h-full flex-col overflow-hidden border-white/50 bg-card/95 shadow-sm">
-                  <CardContent className="flex h-full flex-col gap-4 p-5">
-                    <div className="flex gap-4">
-                      <div className="flex h-32 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-muted/30">
-                        {result.coverUrl ? (
-                          <img
-                            src={result.coverUrl}
-                            alt={`${result.title} cover`}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <Compass className="h-6 w-6 text-muted-foreground" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1 space-y-3">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                              Project Gutenberg
-                            </span>
-                            {result.formats.map((format) => (
-                              <span
-                                key={`${result.id}:${format.mimeType}:${format.url}`}
-                                className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
-                              >
-                                {getFormatBadgeLabel(format.kind)}
-                              </span>
-                            ))}
+                return (
+                  <li key={result.id} className="h-full">
+                    <Card className="flex h-full flex-col overflow-hidden border-white/50 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+                      <CardContent className="flex h-full flex-col gap-4 p-5">
+                        <div className="flex gap-4">
+                          <div className="flex h-36 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-muted/30 shadow-sm">
+                            {result.coverUrl ? (
+                              <img
+                                src={result.coverUrl}
+                                alt={`${result.title} cover`}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <PlaceholderCover title={result.title} author={result.author} />
+                            )}
                           </div>
-                          <h2 className="line-clamp-2 text-lg font-semibold tracking-tight">{result.title}</h2>
-                          <p className="line-clamp-2 text-sm text-muted-foreground">
-                            {result.author || 'Unknown author'}
-                          </p>
+
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                  Project Gutenberg
+                                </span>
+                                {result.formats.map((format) => (
+                                  <span
+                                    key={`${result.id}:${format.mimeType}:${format.url}`}
+                                    className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+                                  >
+                                    {getFormatBadgeLabel(format.kind)}
+                                  </span>
+                                ))}
+                              </div>
+                              <h2 className="line-clamp-2 text-lg font-semibold tracking-tight">{result.title}</h2>
+                              <p className="line-clamp-2 text-sm text-muted-foreground">{result.author || 'Unknown author'}</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
+                              <p>Language: {result.languages.length > 0 ? result.languages.join(', ') : 'Unknown'}</p>
+                              <p>Source: Project Gutenberg</p>
+                              <p>Format: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
+                              <p>
+                                Downloads: {typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : 'Unknown'}
+                              </p>
+                            </div>
+                          </div>
                         </div>
 
-                        <div className="space-y-1 text-sm text-muted-foreground">
-                          <p>Languages: {result.languages.length > 0 ? result.languages.join(', ') : 'Unknown'}</p>
-                          <p>
-                            Downloads: {typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : 'Unknown'}
-                          </p>
+                        {likelyDuplicate ? (
+                          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                            A local book with the same title and author already exists.
+                          </div>
+                        ) : null}
+
+                        {(downloadState.state === 'downloading' || downloadState.state === 'importing') ? (
+                          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-3">
+                            <div className="flex items-center justify-between gap-3 text-sm">
+                              <span className="font-medium">{getProgressLabel(downloadState)}</span>
+                              {downloadState.progressPercent !== null ? (
+                                <span className="text-muted-foreground">{downloadState.progressPercent}%</span>
+                              ) : null}
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-background/80">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full transition-[width]',
+                                  downloadState.state === 'importing' ? 'bg-emerald-500' : 'bg-primary'
+                                )}
+                                style={{ width: `${Math.max(8, Math.min(100, downloadState.progressPercent ?? (downloadState.state === 'importing' ? 100 : 12)))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {downloadState.state === 'completed' && downloadState.importedBook ? (
+                          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+                            <div>
+                              <p className="font-medium text-emerald-950">Downloaded successfully</p>
+                              <p className="text-sm text-emerald-900/80">Your book is now part of the local library.</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" size="sm" onClick={() => void onOpenBook(downloadState.importedBook!)}>
+                                <BookOpen className="h-4 w-4" />
+                                Open Now
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" onClick={onBack}>
+                                Show in Library
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {downloadState.state === 'failed' ? (
+                          <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3">
+                            <div>
+                              <p className="font-medium text-rose-950">Download failed</p>
+                              <p className="text-sm text-rose-900/80">{downloadState.error ?? 'Please try again.'}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="button" size="sm" onClick={() => void requestDownload(result)}>
+                                Retry
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+
+                        <div className="mt-auto flex flex-wrap items-center gap-2">
+                          <Button
+                            type="button"
+                            onClick={() => void requestDownload(result)}
+                            disabled={isBusy || downloadState.state === 'completed'}
+                          >
+                            {isBusy ? (
+                              <LoaderCircle className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Download className="h-4 w-4" />
+                            )}
+                            {downloadState.state === 'completed'
+                              ? 'Downloaded'
+                              : downloadState.state === 'importing'
+                                ? 'Importing...'
+                                : downloadState.state === 'downloading'
+                                  ? 'Downloading...'
+                                  : 'Download'}
+                          </Button>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
 
-                    {isDuplicate ? (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                        A book with the same title, author, and preferred format is already in your library. You can still import it.
-                      </div>
-                    ) : null}
-
-                    <div className="mt-auto flex flex-wrap items-center gap-2">
-                      <Button type="button" onClick={() => void onDownload(result)} disabled={isDownloading}>
-                        {isDownloading ? (
-                          <LoaderCircle className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4" />
-                        )}
-                        {isDownloading ? 'Downloading...' : 'Download'}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <AlertDialog open={Boolean(duplicatePrompt)} onOpenChange={(open) => !open && setDuplicatePrompt(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>This book already exists.</AlertDialogTitle>
+            <AlertDialogDescription>
+              A local copy with the same title and author is already in your library. You can open the existing book, import this one anyway, or cancel.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-background text-foreground hover:bg-muted"
+              onClick={() => {
+                if (!duplicatePrompt) {
+                  return;
+                }
+                void onOpenBook(duplicatePrompt.existingBook);
+                setDuplicatePrompt(null);
+              }}
+            >
+              Open Existing
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                if (!duplicatePrompt) {
+                  return;
+                }
+                const result = duplicatePrompt.result;
+                setDuplicatePrompt(null);
+                void performDownload(result);
+              }}
+            >
+              Import Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -35,6 +35,7 @@ export function LibraryScreen({
         <DiscoverScreen
           books={books}
           onBack={() => setMode('library')}
+          onOpenBook={onOpen}
           onLibraryChanged={async () => {
             await Promise.resolve(onReload());
             setNotice('Your library now includes the downloaded Project Gutenberg book.');
