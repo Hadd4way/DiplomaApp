@@ -5,6 +5,7 @@ import {
   type BooksGetEpubDataRequest,
   type BooksGetFb2DataRequest,
   type BooksGetPdfDataRequest,
+  type BooksGetTxtDataRequest,
   type BooksRevealRequest,
   type FlowProgressGetRequest,
   type FlowProgressSetRequest,
@@ -37,7 +38,7 @@ import {
   type StatsMarkOpenedRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
-import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, importBook, listBooks, revealBook } from './books';
+import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, getTxtData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import {
   createEpubHighlight,
@@ -136,6 +137,9 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.booksGetFb2Data, (_event, payload: BooksGetFb2DataRequest) =>
     getFb2Data(db, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.booksGetTxtData, (_event, payload: BooksGetTxtDataRequest) =>
+    getTxtData(db, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.notesCreate, (_event, payload: NotesCreateRequest) =>
     createNote(db, progressDb, libraryId, payload)

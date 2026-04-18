@@ -39,7 +39,7 @@ function getLocationLabel(item: ReaderHighlightItem): string {
     return `Page ${item.page}`;
   }
   if (item.cfiRange) {
-    return 'EPUB highlight';
+    return 'Flow highlight';
   }
   return 'Highlight';
 }

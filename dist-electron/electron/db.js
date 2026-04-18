@@ -19,7 +19,7 @@ function ensureBooksFormatSchema(db) {
         .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'books' LIMIT 1`)
         .get();
     const sql = row?.sql ?? '';
-    if (sql.includes("'fb2'")) {
+    if (sql.includes("'txt'")) {
         return;
     }
     db.exec(`
@@ -28,7 +28,7 @@ function ensureBooksFormatSchema(db) {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       author TEXT NULL,
-      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2')),
+      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2', 'txt')),
       file_path TEXT NULL,
       created_at INTEGER NOT NULL
     );
@@ -67,7 +67,7 @@ function runMigrations(db) {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       author TEXT NULL,
-      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2')),
+      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2', 'txt')),
       file_path TEXT NULL,
       created_at INTEGER NOT NULL
     );

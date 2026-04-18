@@ -45,7 +45,7 @@ const TEXT_SIZE_PRESETS: Array<{ value: TextSizePreset; label: string; detail: s
 
 type Props = {
   open: boolean;
-  format: 'pdf' | 'epub' | 'fb2';
+  format: 'pdf' | 'epub' | 'fb2' | 'txt';
   settings: ReaderSettings;
   onClose: () => void;
   onChange: (patch: Partial<ReaderSettings>) => void;
@@ -97,7 +97,7 @@ export function ReaderSettingsPanel({
     return null;
   }
 
-  const isFlowFormat = format === 'epub' || format === 'fb2';
+  const isFlowFormat = format === 'epub' || format === 'fb2' || format === 'txt';
 
   const chipStyles = (active: boolean): React.CSSProperties => ({
     ...(active
@@ -156,7 +156,7 @@ export function ReaderSettingsPanel({
       className={cn('backdrop-blur-xl', className)}
     >
       <div className="space-y-4 p-1">
-        <Section title="Theme" description="Shared reader chrome for PDF, EPUB, and FB2.">
+        <Section title="Theme" description="Shared reader chrome for PDF and all flow formats.">
           <div
             className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"
             style={{ borderColor: palette.chromeBorder, backgroundColor: palette.accentBg }}
@@ -183,7 +183,7 @@ export function ReaderSettingsPanel({
           description={
             isFlowFormat
               ? 'Live flow-reader typography adjustments for comfort and focus.'
-              : 'Typography controls become active when you open an EPUB or FB2 book.'
+              : 'Typography controls become active when you open an EPUB, FB2, or TXT book.'
           }
         >
           <div className={cn('space-y-4 transition-opacity duration-200', isFlowFormat ? 'opacity-100' : 'opacity-50')}>
@@ -285,7 +285,7 @@ export function ReaderSettingsPanel({
 
         <Section
           title="Accessibility"
-          description="Inclusive reading support across EPUB content and the reader interface."
+          description="Inclusive reading support across flow content and the reader interface."
         >
           <div className="space-y-3">
             {renderToggle(

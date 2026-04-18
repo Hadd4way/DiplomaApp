@@ -11,6 +11,7 @@ exports.deleteBook = deleteBook;
 exports.getPdfData = getPdfData;
 exports.getEpubData = getEpubData;
 exports.getFb2Data = getFb2Data;
+exports.getTxtData = getTxtData;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
@@ -36,6 +37,9 @@ function extensionToFormat(fileExtension) {
     if (ext === '.fb2') {
         return 'fb2';
     }
+    if (ext === '.txt') {
+        return 'txt';
+    }
     return null;
 }
 function detectXmlEncoding(buffer) {
@@ -53,6 +57,32 @@ function decodeXmlBuffer(buffer) {
         }
     }
     return buffer.toString('utf8');
+}
+function stripUtf8Bom(value) {
+    return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+function tryDecode(buffer, encoding, fatal = true) {
+    try {
+        return stripUtf8Bom(new TextDecoder(encoding, { fatal }).decode(buffer));
+    }
+    catch {
+        return null;
+    }
+}
+function decodeTxtBuffer(buffer) {
+    const hasUtf16LeBom = buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe;
+    const hasUtf16BeBom = buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff;
+    if (hasUtf16LeBom) {
+        return tryDecode(buffer, 'utf-16le', false) ?? tryDecode(buffer, 'utf-8', true) ?? buffer.toString('utf8');
+    }
+    if (hasUtf16BeBom) {
+        return tryDecode(buffer, 'utf-16be', false) ?? tryDecode(buffer, 'utf-8', true) ?? buffer.toString('utf8');
+    }
+    return (tryDecode(buffer, 'utf-8', true) ??
+        tryDecode(buffer, 'windows-1251', false) ??
+        tryDecode(buffer, 'koi8-r', false) ??
+        tryDecode(buffer, 'utf-16le', false) ??
+        stripUtf8Bom(buffer.toString('utf8')));
 }
 function decodeXmlEntities(value) {
     return value
@@ -133,10 +163,11 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
         title: 'Import book',
         properties: ['openFile'],
         filters: [
-            { name: 'Books', extensions: ['pdf', 'epub', 'fb2'] },
+            { name: 'Books', extensions: ['pdf', 'epub', 'fb2', 'txt'] },
             { name: 'PDF', extensions: ['pdf'] },
             { name: 'EPUB', extensions: ['epub'] },
-            { name: 'FB2', extensions: ['fb2'] }
+            { name: 'FB2', extensions: ['fb2'] },
+            { name: 'TXT', extensions: ['txt'] }
         ]
     };
     const pickerResult = ownerWindow
@@ -149,7 +180,7 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
     const sourceExtension = node_path_1.default.extname(sourcePath);
     const format = extensionToFormat(sourceExtension);
     if (!format) {
-        return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, or FB2 file.' };
+        return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, FB2, or TXT file.' };
     }
     const bookId = (0, node_crypto_1.randomUUID)();
     const now = Date.now();
@@ -344,5 +375,35 @@ async function getFb2Data(db, userId, payload) {
     }
     catch {
         return { ok: false, error: 'Failed to read FB2 file from disk.' };
+    }
+}
+async function getTxtData(db, userId, payload) {
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const bookRow = db
+        .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, userId);
+    if (!bookRow) {
+        return { ok: false, error: 'Book not found' };
+    }
+    if (bookRow.format !== 'txt') {
+        return { ok: false, error: 'Selected book is not a TXT file.' };
+    }
+    const txtPath = bookRow.file_path?.trim();
+    if (!txtPath) {
+        return { ok: false, error: 'TXT file path is missing.' };
+    }
+    try {
+        const fileBuffer = await promises_1.default.readFile(txtPath);
+        return {
+            ok: true,
+            content: decodeTxtBuffer(fileBuffer),
+            title: bookRow.title
+        };
+    }
+    catch {
+        return { ok: false, error: 'Failed to read TXT file from disk.' };
     }
 }

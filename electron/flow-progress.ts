@@ -15,7 +15,14 @@ function resolveOwnedFlowBookId(authDb: Database.Database, userId: string, rawBo
   const row = authDb
     .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? AND format = ? LIMIT 1')
     .get(bookId, userId, 'fb2') as { id: string } | undefined;
-  return row ? bookId : null;
+  if (row) {
+    return bookId;
+  }
+
+  const txtRow = authDb
+    .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? AND format = ? LIMIT 1')
+    .get(bookId, userId, 'txt') as { id: string } | undefined;
+  return txtRow ? bookId : null;
 }
 
 export function getFlowProgress(

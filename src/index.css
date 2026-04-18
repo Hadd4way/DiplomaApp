@@ -142,6 +142,11 @@
   text-indent: 1.5em;
 }
 
+.txt-paragraph {
+  text-indent: 0;
+  white-space: pre-line;
+}
+
 .fb2-subtitle {
   text-indent: 0;
   font-size: 1.05em;
@@ -178,7 +183,7 @@
   opacity: 0.82;
 }
 
-[data-fb2-block-id][data-search-active='true'] {
+[data-flow-block-id][data-search-active='true'] {
   background: rgba(250, 204, 21, 0.28);
   border-radius: 0.5rem;
   box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.35);

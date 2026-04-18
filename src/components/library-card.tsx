@@ -22,7 +22,7 @@ type Props = {
 };
 
 type SortKey = 'recent-opened' | 'recent-added' | 'title' | 'format';
-type FormatFilter = 'all' | 'pdf' | 'epub' | 'fb2';
+type FormatFilter = 'all' | 'pdf' | 'epub' | 'fb2' | 'txt';
 
 const headerDateFormatter = new Intl.DateTimeFormat('ru-RU', {
   weekday: 'long',
@@ -136,7 +136,7 @@ export function LibraryCard({
             <div className="space-y-2">
               <h2 className="text-2xl font-semibold tracking-tight">Build your reading hub</h2>
               <p className="max-w-md text-sm text-muted-foreground">
-                Import your first PDF, EPUB, or FB2 to unlock continue reading, progress tracking, and your full desktop library.
+                Import your first PDF, EPUB, FB2, or TXT to unlock continue reading, progress tracking, and your full desktop library.
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -296,6 +296,15 @@ export function LibraryCard({
                     onClick={() => setFormatFilter('fb2')}
                   >
                     FB2
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={getFilterButtonClassName(formatFilter === 'txt')}
+                    onClick={() => setFormatFilter('txt')}
+                  >
+                    TXT
                   </Button>
                 </div>
               </div>

@@ -3,6 +3,7 @@ import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import ePub from 'epubjs';
 import { parseFb2Document } from '@/lib/fb2';
+import { parseTxtDocument } from '@/lib/txt';
 import type { Book, RecentBookEntry } from '../../shared/ipc';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -149,12 +150,47 @@ async function loadFb2Metric(book: Book): Promise<BookMetric> {
   };
 }
 
+async function loadTxtMetric(book: Book): Promise<BookMetric> {
+  const api = getRendererApi();
+  const [txtResult, progressResult] = await Promise.all([
+    api.books.getTxtData({ bookId: book.id }),
+    api.flowProgress.get({ bookId: book.id })
+  ]);
+
+  if (!txtResult.ok) {
+    throw new Error(txtResult.error);
+  }
+  if (!progressResult.ok) {
+    throw new Error(progressResult.error);
+  }
+
+  const parsed = parseTxtDocument(txtResult.content, txtResult.title);
+  const sectionCount = parsed.chapters.length || null;
+  const chapterIndex = progressResult.progress.chapterIndex;
+  const progressPercent =
+    sectionCount && chapterIndex !== null
+      ? ((chapterIndex + (progressResult.progress.scrollRatio ?? 0)) / sectionCount) * 100
+      : 0;
+
+  return {
+    pageCount: sectionCount,
+    currentLocation: chapterIndex,
+    progressPercent,
+    progressLabel: formatPercent(progressPercent),
+    pageCountLabel: sectionCount ? `${sectionCount} sections` : 'TXT',
+    currentLocationLabel: chapterIndex !== null ? `Section ${chapterIndex + 1}` : 'Start Reading'
+  };
+}
+
 async function loadBookMetric(book: Book): Promise<BookMetric> {
   if (book.format === 'pdf') {
     return loadPdfMetric(book);
   }
   if (book.format === 'fb2') {
     return loadFb2Metric(book);
+  }
+  if (book.format === 'txt') {
+    return loadTxtMetric(book);
   }
 
   return loadEpubMetric(book);
@@ -180,9 +216,10 @@ export function useLibraryBookMetrics(books: Book[]) {
                 currentLocation: null,
                 progressPercent: null,
                 progressLabel: 'Progress unavailable',
-                pageCountLabel: book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : 'EPUB',
+                pageCountLabel:
+                  book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : book.format === 'txt' ? 'TXT' : 'EPUB',
                 currentLocationLabel:
-                  book.format === 'pdf' ? 'Page unavailable' : book.format === 'fb2' ? 'Continue Reading' : 'Continue Reading'
+                  book.format === 'pdf' ? 'Page unavailable' : 'Continue Reading'
               }
             ] as const;
           }
@@ -234,16 +271,6 @@ export function useLibraryBookActivity(books: Book[]) {
                 {
                   highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
                   bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
-                }
-              ] as const;
-            }
-
-            if (book.format === 'fb2') {
-              return [
-                book.id,
-                {
-                  highlightCount: 0,
-                  bookmarkCount: 0
                 }
               ] as const;
             }

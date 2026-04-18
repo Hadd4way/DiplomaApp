@@ -45,6 +45,9 @@ function formatLocationHeading(key: string): string {
   if (cfi.startsWith('fb2-')) {
     return 'FB2 Location';
   }
+  if (cfi.startsWith('txt-')) {
+    return 'TXT Location';
+  }
   return `Flow Location (${cfi})`;
 }
 

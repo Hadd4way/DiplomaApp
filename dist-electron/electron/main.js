@@ -77,6 +77,7 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetPdfData, (_event, payload) => (0, books_1.getPdfData)(db, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetEpubData, (_event, payload) => (0, books_1.getEpubData)(db, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetFb2Data, (_event, payload) => (0, books_1.getFb2Data)(db, libraryId, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksGetTxtData, (_event, payload) => (0, books_1.getTxtData)(db, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesCreate, (_event, payload) => (0, notes_1.createNote)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesList, (_event, payload) => (0, notes_1.listNotes)(db, progressDb, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.notesDelete, (_event, payload) => (0, notes_1.deleteNote)(db, progressDb, libraryId, payload));

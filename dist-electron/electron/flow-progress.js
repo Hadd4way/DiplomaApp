@@ -10,7 +10,13 @@ function resolveOwnedFlowBookId(authDb, userId, rawBookId) {
     const row = authDb
         .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? AND format = ? LIMIT 1')
         .get(bookId, userId, 'fb2');
-    return row ? bookId : null;
+    if (row) {
+        return bookId;
+    }
+    const txtRow = authDb
+        .prepare('SELECT id FROM books WHERE id = ? AND user_id = ? AND format = ? LIMIT 1')
+        .get(bookId, userId, 'txt');
+    return txtRow ? bookId : null;
 }
 function getFlowProgress(authDb, readerDb, userId, payload) {
     const bookId = resolveOwnedFlowBookId(authDb, userId, payload.bookId);

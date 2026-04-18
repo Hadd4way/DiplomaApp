@@ -8,6 +8,7 @@ export const IPC_CHANNELS = {
   booksGetPdfData: 'books:get-pdf-data',
   booksGetEpubData: 'books:get-epub-data',
   booksGetFb2Data: 'books:get-fb2-data',
+  booksGetTxtData: 'books:get-txt-data',
   notesCreate: 'notes:create',
   notesList: 'notes:list',
   notesDelete: 'notes:delete',
@@ -48,7 +49,7 @@ export type PingResponse = {
   };
 };
 
-export type BookFormat = 'pdf' | 'epub' | 'fb2';
+export type BookFormat = 'pdf' | 'epub' | 'fb2' | 'txt';
 
 export type Book = {
   id: string;
@@ -166,6 +167,7 @@ export type BooksDeleteResult = { ok: true } | ErrorResult;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | ErrorResult;
 export type BooksGetEpubDataResult = { ok: true; base64: string; title: string } | ErrorResult;
 export type BooksGetFb2DataResult = { ok: true; content: string; title: string } | ErrorResult;
+export type BooksGetTxtDataResult = { ok: true; content: string; title: string } | ErrorResult;
 export type NotesCreateResult = { ok: true; note: Note } | ErrorResult;
 export type NotesListResult = { ok: true; notes: Note[] } | ErrorResult;
 export type NotesDeleteResult = { ok: true } | ErrorResult;
@@ -232,6 +234,10 @@ export type BooksGetEpubDataRequest = {
 };
 
 export type BooksGetFb2DataRequest = {
+  bookId: string;
+};
+
+export type BooksGetTxtDataRequest = {
   bookId: string;
 };
 
@@ -380,6 +386,7 @@ export interface RendererBooksApi {
   getPdfData: (payload: BooksGetPdfDataRequest) => Promise<BooksGetPdfDataResult>;
   getEpubData: (payload: BooksGetEpubDataRequest) => Promise<BooksGetEpubDataResult>;
   getFb2Data: (payload: BooksGetFb2DataRequest) => Promise<BooksGetFb2DataResult>;
+  getTxtData: (payload: BooksGetTxtDataRequest) => Promise<BooksGetTxtDataResult>;
 }
 
 export interface RendererNotesApi {

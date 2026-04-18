@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { FlowDocumentReader } from '@/components/reader/FlowDocumentReader';
-import { parseFb2Document } from '@/lib/fb2';
+import { parseTxtDocument } from '@/lib/txt';
 
 type Props = {
   title: string;
@@ -11,37 +11,37 @@ type Props = {
   onBack: () => void;
 };
 
-export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfiApplied, loading, onBack }: Props) {
+export function TxtReaderScreen({ title, bookId, initialCfi = null, onInitialCfiApplied, loading, onBack }: Props) {
   const loadDocument = React.useCallback(async (currentBookId: string) => {
     if (!window.api?.books) {
       throw new Error('Renderer API is unavailable. Open this app via Electron.');
     }
 
-    const fb2Result = await window.api.books.getFb2Data({ bookId: currentBookId });
-    if (!fb2Result.ok) {
-      throw new Error(fb2Result.error);
+    const txtResult = await window.api.books.getTxtData({ bookId: currentBookId });
+    if (!txtResult.ok) {
+      throw new Error(txtResult.error);
     }
 
-    return parseFb2Document(fb2Result.content);
-  }, []);
+    return parseTxtDocument(txtResult.content, txtResult.title || title);
+  }, [title]);
 
   return (
     <FlowDocumentReader
       title={title}
       bookId={bookId}
-      format="fb2"
-      namespace="fb2"
+      format="txt"
+      namespace="txt"
       initialCfi={initialCfi}
       onInitialCfiApplied={onInitialCfiApplied}
       loading={loading}
       onBack={onBack}
       loadDocument={loadDocument}
-      searchPlaceholder="Search in this FB2..."
-      loadingLabel="Loading FB2..."
-      preparingLabel="Preparing FB2 document..."
-      openErrorLabel="Unable to open FB2"
-      navLabelSingular="Chapter"
-      navLabelPlural="chapters"
+      searchPlaceholder="Search in this TXT..."
+      loadingLabel="Loading TXT..."
+      preparingLabel="Preparing TXT document..."
+      openErrorLabel="Unable to open TXT"
+      navLabelSingular="Section"
+      navLabelPlural="sections"
     />
   );
 }

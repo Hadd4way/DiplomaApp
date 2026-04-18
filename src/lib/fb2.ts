@@ -129,7 +129,7 @@ function renderParagraphLike(node: Element, tagName: string, className: string, 
     });
   }
 
-  return `<${tagName} class="${className}" data-fb2-block-id="${blockId}">${html || '&nbsp;'}</${tagName}>`;
+  return `<${tagName} class="${className}" data-flow-block-id="${blockId}">${html || '&nbsp;'}</${tagName}>`;
 }
 
 function renderSection(section: Element, context: RenderContext, chapterTitle: string, sectionDepth = 0): string {

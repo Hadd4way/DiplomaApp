@@ -11,7 +11,8 @@ const api: RendererApi = {
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
     getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload),
     getEpubData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetEpubData, payload),
-    getFb2Data: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetFb2Data, payload)
+    getFb2Data: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetFb2Data, payload),
+    getTxtData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetTxtData, payload)
   },
   notes: {
     create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesCreate, payload),

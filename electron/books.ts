@@ -15,6 +15,8 @@ import type {
   BooksGetFb2DataResult,
   BooksGetPdfDataRequest,
   BooksGetPdfDataResult,
+  BooksGetTxtDataRequest,
+  BooksGetTxtDataResult,
   BooksImportResult,
   BooksRevealRequest,
   BooksRevealResult,
@@ -26,7 +28,7 @@ type BookRow = {
   user_id: string;
   title: string;
   author: string | null;
-  format: 'pdf' | 'epub' | 'fb2';
+  format: 'pdf' | 'epub' | 'fb2' | 'txt';
   file_path: string | null;
   created_at: number;
 };
@@ -53,6 +55,9 @@ function extensionToFormat(fileExtension: string): BookFormat | null {
   if (ext === '.fb2') {
     return 'fb2';
   }
+  if (ext === '.txt') {
+    return 'txt';
+  }
   return null;
 }
 
@@ -71,6 +76,39 @@ function decodeXmlBuffer(buffer: Buffer): string {
     }
   }
   return buffer.toString('utf8');
+}
+
+function stripUtf8Bom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
+function tryDecode(buffer: Buffer, encoding: string, fatal = true): string | null {
+  try {
+    return stripUtf8Bom(new TextDecoder(encoding, { fatal }).decode(buffer));
+  } catch {
+    return null;
+  }
+}
+
+function decodeTxtBuffer(buffer: Buffer): string {
+  const hasUtf16LeBom = buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe;
+  const hasUtf16BeBom = buffer.length >= 2 && buffer[0] === 0xfe && buffer[1] === 0xff;
+
+  if (hasUtf16LeBom) {
+    return tryDecode(buffer, 'utf-16le', false) ?? tryDecode(buffer, 'utf-8', true) ?? buffer.toString('utf8');
+  }
+
+  if (hasUtf16BeBom) {
+    return tryDecode(buffer, 'utf-16be', false) ?? tryDecode(buffer, 'utf-8', true) ?? buffer.toString('utf8');
+  }
+
+  return (
+    tryDecode(buffer, 'utf-8', true) ??
+    tryDecode(buffer, 'windows-1251', false) ??
+    tryDecode(buffer, 'koi8-r', false) ??
+    tryDecode(buffer, 'utf-16le', false) ??
+    stripUtf8Bom(buffer.toString('utf8'))
+  );
 }
 
 function decodeXmlEntities(value: string): string {
@@ -176,10 +214,11 @@ export async function importBook(
     title: 'Import book',
     properties: ['openFile'],
     filters: [
-      { name: 'Books', extensions: ['pdf', 'epub', 'fb2'] },
+      { name: 'Books', extensions: ['pdf', 'epub', 'fb2', 'txt'] },
       { name: 'PDF', extensions: ['pdf'] },
       { name: 'EPUB', extensions: ['epub'] },
-      { name: 'FB2', extensions: ['fb2'] }
+      { name: 'FB2', extensions: ['fb2'] },
+      { name: 'TXT', extensions: ['txt'] }
     ]
   };
 
@@ -195,7 +234,7 @@ export async function importBook(
   const sourceExtension = path.extname(sourcePath);
   const format = extensionToFormat(sourceExtension);
   if (!format) {
-    return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, or FB2 file.' };
+    return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, FB2, or TXT file.' };
   }
 
   const bookId = randomUUID();
@@ -348,7 +387,7 @@ export async function getPdfData(
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
     .get(bookId, userId) as
-    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2' | 'txt'; file_path: string | null }
     | undefined;
 
   if (!bookRow) {
@@ -389,7 +428,7 @@ export async function getEpubData(
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
     .get(bookId, userId) as
-    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2' | 'txt'; file_path: string | null }
     | undefined;
 
   if (!bookRow) {
@@ -430,7 +469,7 @@ export async function getFb2Data(
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
     .get(bookId, userId) as
-    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2' | 'txt'; file_path: string | null }
     | undefined;
 
   if (!bookRow) {
@@ -455,5 +494,46 @@ export async function getFb2Data(
     };
   } catch {
     return { ok: false, error: 'Failed to read FB2 file from disk.' };
+  }
+}
+
+export async function getTxtData(
+  db: Database.Database,
+  userId: string,
+  payload: BooksGetTxtDataRequest
+): Promise<BooksGetTxtDataResult> {
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const bookRow = db
+    .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+    .get(bookId, userId) as
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2' | 'txt'; file_path: string | null }
+    | undefined;
+
+  if (!bookRow) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  if (bookRow.format !== 'txt') {
+    return { ok: false, error: 'Selected book is not a TXT file.' };
+  }
+
+  const txtPath = bookRow.file_path?.trim();
+  if (!txtPath) {
+    return { ok: false, error: 'TXT file path is missing.' };
+  }
+
+  try {
+    const fileBuffer = await fs.readFile(txtPath);
+    return {
+      ok: true,
+      content: decodeTxtBuffer(fileBuffer),
+      title: bookRow.title
+    };
+  } catch {
+    return { ok: false, error: 'Failed to read TXT file from disk.' };
   }
 }

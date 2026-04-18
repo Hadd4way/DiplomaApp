@@ -16,7 +16,7 @@ type BookRow = {
   user_id: string;
   title: string;
   author: string | null;
-  format: 'pdf' | 'epub' | 'fb2';
+  format: 'pdf' | 'epub' | 'fb2' | 'txt';
   file_path: string | null;
   created_at: number;
 };

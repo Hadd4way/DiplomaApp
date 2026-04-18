@@ -11,6 +11,7 @@ exports.IPC_CHANNELS = {
     booksGetPdfData: 'books:get-pdf-data',
     booksGetEpubData: 'books:get-epub-data',
     booksGetFb2Data: 'books:get-fb2-data',
+    booksGetTxtData: 'books:get-txt-data',
     notesCreate: 'notes:create',
     notesList: 'notes:list',
     notesDelete: 'notes:delete',

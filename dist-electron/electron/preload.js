@@ -12,7 +12,8 @@ const api = {
         delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksDelete, payload),
         getPdfData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetPdfData, payload),
         getEpubData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetEpubData, payload),
-        getFb2Data: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetFb2Data, payload)
+        getFb2Data: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetFb2Data, payload),
+        getTxtData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetTxtData, payload)
     },
     notes: {
         create: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.notesCreate, payload),

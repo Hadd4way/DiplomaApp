@@ -15,6 +15,7 @@ import { LibraryScreen } from '@/screens/LibraryScreen';
 import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
 import { Fb2ReaderScreen } from '@/screens/Fb2ReaderScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
+import { TxtReaderScreen } from '@/screens/TxtReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
 import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
@@ -211,7 +212,7 @@ export default function App() {
     setReaderInitialPage(options.initialPage ?? null);
     setReaderInitialCfi(options.initialCfi ?? null);
 
-    if (book.format === 'epub' || book.format === 'fb2') {
+    if (book.format === 'epub' || book.format === 'fb2' || book.format === 'txt') {
       setActiveBook(book);
       setActivePdfData(null);
       setError(null);
@@ -380,6 +381,19 @@ export default function App() {
         );
       }
 
+      if (activeBook && activeBook.format === 'txt') {
+        return (
+          <TxtReaderScreen
+            title={activeBook.title}
+            bookId={activeBook.id}
+            initialCfi={readerInitialCfi}
+            onInitialCfiApplied={() => setReaderInitialCfi(null)}
+            loading={loading}
+            onBack={onBackToLibrary}
+          />
+        );
+      }
+
       return (
         <LibraryScreen
           books={books}
@@ -399,7 +413,7 @@ export default function App() {
       return (
         <PlaceholderScreen
           title="Import"
-          actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB/FB2'}
+          actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB/FB2/TXT'}
           actionDisabled={loading}
           onAction={onImportBook}
         />
