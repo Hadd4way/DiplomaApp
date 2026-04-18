@@ -25,16 +25,18 @@ export function LibraryScreen({
   onReload
 }: Props) {
   return (
-    <LibraryCard
-      books={books}
-      loading={loading}
-      error={error}
-      onOpen={onOpen}
-      onReveal={onReveal}
-      onDelete={onDelete}
-      onImport={onImport}
-      onAddSample={onAddSample}
-      onReload={onReload}
-    />
+    <div className="h-full overflow-y-auto pr-1">
+      <LibraryCard
+        books={books}
+        loading={loading}
+        error={error}
+        onOpen={onOpen}
+        onReveal={onReveal}
+        onDelete={onDelete}
+        onImport={onImport}
+        onAddSample={onAddSample}
+        onReload={onReload}
+      />
+    </div>
   );
 }

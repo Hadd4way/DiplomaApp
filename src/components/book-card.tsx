@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BookOpenText, FolderOpen, MoreHorizontal, Trash2 } from 'lucide-react';
+import { BookOpenText, Bookmark, FolderOpen, Highlighter, MoreHorizontal, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,7 +19,8 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import type { Book } from '../../shared/ipc';
-import type { BookMetric } from '@/lib/library-metrics';
+import type { BookActivitySummary, BookMetric } from '@/lib/library-metrics';
+import { cn } from '@/lib/utils';
 
 type Props = {
   book: Book;
@@ -28,6 +29,9 @@ type Props = {
   onDelete: (bookId: string) => void;
   loading: boolean;
   metric?: BookMetric;
+  activity?: BookActivitySummary;
+  lastOpenedAt?: number | null;
+  variant?: 'library' | 'continue';
 };
 
 const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
@@ -36,12 +40,36 @@ const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
   year: 'numeric'
 });
 
-export function BookCard({ book, onOpen, onReveal, onDelete, loading, metric }: Props) {
+export function BookCard({
+  book,
+  onOpen,
+  onReveal,
+  onDelete,
+  loading,
+  metric,
+  activity,
+  lastOpenedAt,
+  variant = 'library'
+}: Props) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const metadataLabel = lastOpenedAt ? `Opened ${createdAtFormatter.format(lastOpenedAt)}` : `Added ${createdAtFormatter.format(book.createdAt)}`;
+  const isContinueCard = variant === 'continue';
 
   return (
-    <Card className="h-full overflow-hidden">
-      <div className="relative flex h-48 items-center justify-center bg-gradient-to-b from-muted to-muted/40">
+    <Card
+      className={cn(
+        'h-full overflow-hidden border-white/40 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+        isContinueCard ? 'ring-1 ring-primary/10' : ''
+      )}
+    >
+      <div
+        className={cn(
+          'relative flex items-center justify-center overflow-hidden',
+          isContinueCard
+            ? 'h-52 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
+            : 'h-44 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
+        )}
+      >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -87,39 +115,92 @@ export function BookCard({ book, onOpen, onReveal, onDelete, loading, metric }: 
           disabled={loading}
           aria-label={`Open ${book.title}`}
         >
-          <BookOpenText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
-        </button>
-      </div>
-      <button
-        type="button"
-        className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => onOpen(book)}
-        disabled={loading}
-      >
-        <CardContent className="space-y-2 p-4">
-          <p className="line-clamp-2 min-h-10 text-sm font-medium leading-5">{book.title}</p>
-          <div className="flex items-center justify-between gap-2">
-            <span className="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {book.format}
-            </span>
-            <span className="truncate text-[11px] text-muted-foreground">
-              {createdAtFormatter.format(book.createdAt)}
-            </span>
-          </div>
-          <div className="space-y-1 rounded-md bg-muted/40 px-3 py-2">
-            <p className="text-[11px] text-muted-foreground">{metric?.pageCountLabel ?? 'Loading pages...'}</p>
-            <div className="space-y-1">
-              <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width]"
-                  style={{ width: `${Math.max(0, Math.min(100, metric?.progressPercent ?? 0))}%` }}
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">{metric?.progressLabel ?? 'Loading progress...'}</p>
+          <div className="flex h-full w-full items-center justify-center px-6">
+            <div className="flex h-36 w-28 items-center justify-center rounded-2xl border border-white/50 bg-background/85 shadow-lg shadow-black/5 backdrop-blur">
+              <BookOpenText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
             </div>
           </div>
+        </button>
+      </div>
+      <div
+        role="button"
+        tabIndex={loading ? -1 : 0}
+        className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => {
+          if (!loading) {
+            onOpen(book);
+          }
+        }}
+        onKeyDown={(event) => {
+          if (loading) {
+            return;
+          }
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onOpen(book);
+          }
+        }}
+        aria-label={`Open ${book.title}`}
+      >
+        <CardContent className={cn('space-y-3 p-4', isContinueCard ? 'pb-5' : '')}>
+          <div className="space-y-2">
+            <p className={cn('line-clamp-2 font-medium leading-5', isContinueCard ? 'min-h-12 text-base' : 'min-h-10 text-sm')}>
+              {book.title}
+            </p>
+            <div className="flex items-center justify-between gap-2">
+              <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {book.format}
+              </span>
+              <span className="truncate text-[11px] text-muted-foreground">{metadataLabel}</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-3">
+            <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+              <span>{metric?.currentLocationLabel ?? (book.format === 'pdf' ? 'Opening position unavailable' : 'Continue Reading')}</span>
+              <span>{metric?.pageCountLabel ?? 'Loading progress...'}</span>
+            </div>
+            {!isContinueCard ? (
+              <div className="space-y-1">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width]"
+                    style={{ width: `${Math.max(0, Math.min(100, metric?.progressPercent ?? 0))}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">{metric?.progressLabel ?? 'Loading progress...'}</p>
+              </div>
+            ) : (
+              <p className="text-sm font-medium text-foreground/90">{metric?.progressLabel ?? 'Loading progress...'}</p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Highlighter className="h-3.5 w-3.5" />
+                {activity?.highlightCount ?? 0}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Bookmark className="h-3.5 w-3.5" />
+                {activity?.bookmarkCount ?? 0}
+              </span>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 px-3"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen(book);
+              }}
+              disabled={loading}
+            >
+              Open
+            </Button>
+          </div>
         </CardContent>
-      </button>
+      </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
