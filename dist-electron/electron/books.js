@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.listBooks = listBooks;
 exports.addSampleBook = addSampleBook;
 exports.importBook = importBook;
+exports.importBookFromPath = importBookFromPath;
 exports.revealBook = revealBook;
 exports.deleteBook = deleteBook;
 exports.getPdfData = getPdfData;
@@ -41,6 +42,14 @@ function extensionToFormat(fileExtension) {
         return 'txt';
     }
     return null;
+}
+function getImportedBookTargetPaths(userDataPath, bookId, format) {
+    const targetDir = node_path_1.default.join(userDataPath, 'books', bookId);
+    const filename = `original.${format}`;
+    return {
+        targetDir,
+        targetPath: node_path_1.default.join(targetDir, filename)
+    };
 }
 function detectXmlEncoding(buffer) {
     const asciiHead = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1');
@@ -177,6 +186,9 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
         return { ok: false, error: 'Import canceled.' };
     }
     const sourcePath = pickerResult.filePaths[0];
+    return importBookFromPath(db, userId, userDataPath, sourcePath);
+}
+async function importBookFromPath(db, userId, userDataPath, sourcePath, metadata = {}) {
     const sourceExtension = node_path_1.default.extname(sourcePath);
     const format = extensionToFormat(sourceExtension);
     if (!format) {
@@ -184,12 +196,9 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
     }
     const bookId = (0, node_crypto_1.randomUUID)();
     const now = Date.now();
-    const extension = format;
-    const filename = `original.${extension}`;
-    const targetDir = node_path_1.default.join(userDataPath, 'books', bookId);
-    const targetPath = node_path_1.default.join(targetDir, filename);
-    let titleFromFile = node_path_1.default.basename(sourcePath, sourceExtension).trim();
-    let authorFromFile = null;
+    const { targetDir, targetPath } = getImportedBookTargetPaths(userDataPath, bookId, format);
+    let titleFromFile = metadata.title?.trim() || node_path_1.default.basename(sourcePath, sourceExtension).trim();
+    let authorFromFile = metadata.author?.trim() || null;
     try {
         await promises_1.default.mkdir(targetDir, { recursive: true });
         await promises_1.default.copyFile(sourcePath, targetPath);
@@ -200,7 +209,7 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
             if (metadata.title) {
                 titleFromFile = metadata.title;
             }
-            authorFromFile = metadata.author;
+            authorFromFile = metadata.author ?? authorFromFile;
         }
     }
     catch {

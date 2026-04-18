@@ -61,6 +61,15 @@ function extensionToFormat(fileExtension: string): BookFormat | null {
   return null;
 }
 
+function getImportedBookTargetPaths(userDataPath: string, bookId: string, format: BookFormat) {
+  const targetDir = path.join(userDataPath, 'books', bookId);
+  const filename = `original.${format}`;
+  return {
+    targetDir,
+    targetPath: path.join(targetDir, filename)
+  };
+}
+
 function detectXmlEncoding(buffer: Buffer): string {
   const asciiHead = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1');
   const match = asciiHead.match(/encoding\s*=\s*["']([^"']+)["']/i);
@@ -231,6 +240,19 @@ export async function importBook(
   }
 
   const sourcePath = pickerResult.filePaths[0];
+  return importBookFromPath(db, userId, userDataPath, sourcePath);
+}
+
+export async function importBookFromPath(
+  db: Database.Database,
+  userId: string,
+  userDataPath: string,
+  sourcePath: string,
+  metadata: {
+    title?: string | null;
+    author?: string | null;
+  } = {}
+): Promise<BooksImportResult> {
   const sourceExtension = path.extname(sourcePath);
   const format = extensionToFormat(sourceExtension);
   if (!format) {
@@ -239,12 +261,9 @@ export async function importBook(
 
   const bookId = randomUUID();
   const now = Date.now();
-  const extension = format;
-  const filename = `original.${extension}`;
-  const targetDir = path.join(userDataPath, 'books', bookId);
-  const targetPath = path.join(targetDir, filename);
-  let titleFromFile = path.basename(sourcePath, sourceExtension).trim();
-  let authorFromFile: string | null = null;
+  const { targetDir, targetPath } = getImportedBookTargetPaths(userDataPath, bookId, format);
+  let titleFromFile = metadata.title?.trim() || path.basename(sourcePath, sourceExtension).trim();
+  let authorFromFile: string | null = metadata.author?.trim() || null;
 
   try {
     await fs.mkdir(targetDir, { recursive: true });
@@ -256,7 +275,7 @@ export async function importBook(
       if (metadata.title) {
         titleFromFile = metadata.title;
       }
-      authorFromFile = metadata.author;
+      authorFromFile = metadata.author ?? authorFromFile;
     }
   } catch {
     return { ok: false, error: 'Failed to copy the selected file.' };

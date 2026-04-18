@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import {
+  type DiscoverDownloadRequest,
+  type DiscoverSearchRequest,
   type BooksDeleteRequest,
   type BooksGetEpubDataRequest,
   type BooksGetFb2DataRequest,
@@ -39,6 +41,7 @@ import {
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, getTxtData, importBook, listBooks, revealBook } from './books';
+import { downloadDiscoverBook, searchDiscoverBooks } from './discover';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import {
   createEpubHighlight,
@@ -120,6 +123,10 @@ app.whenReady().then(() => {
     }
   }));
 
+  ipcMain.handle(IPC_CHANNELS.discoverSearch, (_event, payload: DiscoverSearchRequest) => searchDiscoverBooks(payload));
+  ipcMain.handle(IPC_CHANNELS.discoverDownload, (_event, payload: DiscoverDownloadRequest) =>
+    downloadDiscoverBook(db, libraryId, userDataPath, payload)
+  );
   ipcMain.handle(IPC_CHANNELS.booksList, () => listBooks(db, libraryId));
   ipcMain.handle(IPC_CHANNELS.booksAddSample, () => addSampleBook(db, libraryId));
   ipcMain.handle(IPC_CHANNELS.booksImport, () => importBook(db, libraryId, userDataPath, mainWindow));

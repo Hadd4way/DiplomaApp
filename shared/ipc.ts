@@ -1,5 +1,7 @@
 export const IPC_CHANNELS = {
   ping: 'app:ping',
+  discoverSearch: 'discover:search',
+  discoverDownload: 'discover:download',
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
@@ -50,6 +52,9 @@ export type PingResponse = {
 };
 
 export type BookFormat = 'pdf' | 'epub' | 'fb2' | 'txt';
+export type DiscoverBookSource = 'gutenberg' | 'standardebooks';
+export type DiscoverBookFormat = 'epub' | 'txt' | 'html' | 'other';
+export type DiscoverSourceFilter = 'all' | DiscoverBookSource;
 
 export type Book = {
   id: string;
@@ -86,6 +91,17 @@ export type Highlight = {
   note: string | null;
   createdAt: number;
   updatedAt: number;
+};
+
+export type DiscoverBookResult = {
+  id: string;
+  source: DiscoverBookSource;
+  title: string;
+  author: string | null;
+  language: string | null;
+  coverUrl: string | null;
+  downloadUrl: string | null;
+  format: DiscoverBookFormat;
 };
 
 export type Bookmark = {
@@ -162,6 +178,8 @@ export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
 export type BooksImportResult = { ok: true; book: Book } | ErrorResult;
+export type DiscoverSearchResult = { ok: true; results: DiscoverBookResult[] } | ErrorResult;
+export type DiscoverDownloadResult = { ok: true; book: Book } | ErrorResult;
 export type BooksRevealResult = { ok: true } | ErrorResult;
 export type BooksDeleteResult = { ok: true } | ErrorResult;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | ErrorResult;
@@ -219,6 +237,15 @@ export type StatsGetRecentBooksResult = { ok: true; books: RecentBookEntry[] } |
 
 export type BooksRevealRequest = {
   bookId: string;
+};
+
+export type DiscoverSearchRequest = {
+  query: string;
+  source?: DiscoverSourceFilter | null;
+};
+
+export type DiscoverDownloadRequest = {
+  result: DiscoverBookResult;
 };
 
 export type BooksDeleteRequest = {
@@ -389,6 +416,11 @@ export interface RendererBooksApi {
   getTxtData: (payload: BooksGetTxtDataRequest) => Promise<BooksGetTxtDataResult>;
 }
 
+export interface RendererDiscoverApi {
+  search: (payload: DiscoverSearchRequest) => Promise<DiscoverSearchResult>;
+  download: (payload: DiscoverDownloadRequest) => Promise<DiscoverDownloadResult>;
+}
+
 export interface RendererNotesApi {
   create: (payload: NotesCreateRequest) => Promise<NotesCreateResult>;
   list: (payload: NotesListRequest) => Promise<NotesListResult>;
@@ -447,6 +479,7 @@ export interface RendererStatsApi {
 
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
+  discover: RendererDiscoverApi;
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;

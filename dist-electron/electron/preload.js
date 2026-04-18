@@ -4,6 +4,10 @@ const electron_1 = require("electron");
 const ipc_1 = require("../shared/ipc");
 const api = {
     ping: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.ping),
+    discover: {
+        search: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.discoverSearch, payload),
+        download: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.discoverDownload, payload)
+    },
     books: {
         list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList),
         addSample: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample),

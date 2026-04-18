@@ -3,6 +3,10 @@ import { IPC_CHANNELS, type RendererApi } from '../shared/ipc';
 
 const api: RendererApi = {
   ping: () => ipcRenderer.invoke(IPC_CHANNELS.ping),
+  discover: {
+    search: (payload) => ipcRenderer.invoke(IPC_CHANNELS.discoverSearch, payload),
+    download: (payload) => ipcRenderer.invoke(IPC_CHANNELS.discoverDownload, payload)
+  },
   books: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.booksList),
     addSample: () => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample),

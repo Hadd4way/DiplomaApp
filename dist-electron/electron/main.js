@@ -8,6 +8,7 @@ const node_path_1 = __importDefault(require("node:path"));
 const ipc_1 = require("../shared/ipc");
 const db_1 = require("./db");
 const books_1 = require("./books");
+const discover_1 = require("./discover");
 const notes_1 = require("./notes");
 const highlights_1 = require("./highlights");
 const bookmarks_1 = require("./bookmarks");
@@ -69,6 +70,8 @@ electron_1.app.whenReady().then(() => {
             chrome: process.versions.chrome
         }
     }));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverSearch, (_event, payload) => (0, discover_1.searchDiscoverBooks)(payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverDownload, (_event, payload) => (0, discover_1.downloadDiscoverBook)(db, libraryId, userDataPath, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksList, () => (0, books_1.listBooks)(db, libraryId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksAddSample, () => (0, books_1.addSampleBook)(db, libraryId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksImport, () => (0, books_1.importBook)(db, libraryId, userDataPath, mainWindow));

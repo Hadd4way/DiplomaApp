@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ArrowUpDown, BookMarked, Clock3, Plus, Search } from 'lucide-react';
+import { ArrowUpDown, BookMarked, Clock3, Compass, Plus, Search } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,10 +13,12 @@ type Props = {
   books: Book[];
   loading: boolean;
   error: string | null;
+  notice?: string | null;
   onOpen: (book: Book) => void;
   onReveal: (bookId: string) => void;
   onDelete: (bookId: string) => void;
   onImport: () => void;
+  onDiscover: () => void;
   onAddSample: () => void;
   onReload: () => void;
 };
@@ -41,10 +43,12 @@ export function LibraryCard({
   books,
   loading,
   error,
+  notice,
   onOpen,
   onReveal,
   onDelete,
   onImport,
+  onDiscover,
   onAddSample,
   onReload
 }: Props) {
@@ -117,6 +121,10 @@ export function LibraryCard({
               <Plus className="h-4 w-4" />
               Import book
             </Button>
+            <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
+              <Compass className="h-4 w-4" />
+              Discover Books
+            </Button>
             <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
               {loading ? 'Please wait...' : 'Add sample book'}
             </Button>
@@ -142,6 +150,9 @@ export function LibraryCard({
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button type="button" onClick={onImport} disabled={loading}>
                 Import your first book
+              </Button>
+              <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
+                Discover Books
               </Button>
               <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
                 {loading ? 'Please wait...' : 'Add sample book'}
@@ -338,6 +349,13 @@ export function LibraryCard({
           </section>
         </>
       )}
+
+      {notice ? (
+        <Alert>
+          <AlertTitle>Library updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">

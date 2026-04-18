@@ -3,6 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.READER_SETTINGS_DEFAULTS = exports.IPC_CHANNELS = void 0;
 exports.IPC_CHANNELS = {
     ping: 'app:ping',
+    discoverSearch: 'discover:search',
+    discoverDownload: 'discover:download',
     booksList: 'books:list',
     booksAddSample: 'books:add-sample',
     booksImport: 'books:import',
