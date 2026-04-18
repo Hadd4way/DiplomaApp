@@ -10,7 +10,8 @@ const api: RendererApi = {
     reveal: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksReveal, payload),
     delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksDelete, payload),
     getPdfData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetPdfData, payload),
-    getEpubData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetEpubData, payload)
+    getEpubData: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetEpubData, payload),
+    getFb2Data: (payload) => ipcRenderer.invoke(IPC_CHANNELS.booksGetFb2Data, payload)
   },
   notes: {
     create: (payload) => ipcRenderer.invoke(IPC_CHANNELS.notesCreate, payload),
@@ -45,6 +46,10 @@ const api: RendererApi = {
   epubProgress: {
     get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressGet, payload),
     set: (payload) => ipcRenderer.invoke(IPC_CHANNELS.epubProgressSet, payload)
+  },
+  flowProgress: {
+    get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.flowProgressGet, payload),
+    set: (payload) => ipcRenderer.invoke(IPC_CHANNELS.flowProgressSet, payload)
   },
   readerSettings: {
     get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.readerSettingsGet, payload),

@@ -11,7 +11,8 @@ const api = {
         reveal: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksReveal, payload),
         delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksDelete, payload),
         getPdfData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetPdfData, payload),
-        getEpubData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetEpubData, payload)
+        getEpubData: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetEpubData, payload),
+        getFb2Data: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksGetFb2Data, payload)
     },
     notes: {
         create: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.notesCreate, payload),
@@ -46,6 +47,10 @@ const api = {
     epubProgress: {
         get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubProgressGet, payload),
         set: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.epubProgressSet, payload)
+    },
+    flowProgress: {
+        get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.flowProgressGet, payload),
+        set: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.flowProgressSet, payload)
     },
     readerSettings: {
         get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.readerSettingsGet, payload),

@@ -11,6 +11,8 @@ import type {
   BooksDeleteResult,
   BooksGetEpubDataRequest,
   BooksGetEpubDataResult,
+  BooksGetFb2DataRequest,
+  BooksGetFb2DataResult,
   BooksGetPdfDataRequest,
   BooksGetPdfDataResult,
   BooksImportResult,
@@ -24,7 +26,7 @@ type BookRow = {
   user_id: string;
   title: string;
   author: string | null;
-  format: 'pdf' | 'epub';
+  format: 'pdf' | 'epub' | 'fb2';
   file_path: string | null;
   created_at: number;
 };
@@ -48,7 +50,67 @@ function extensionToFormat(fileExtension: string): BookFormat | null {
   if (ext === '.epub') {
     return 'epub';
   }
+  if (ext === '.fb2') {
+    return 'fb2';
+  }
   return null;
+}
+
+function detectXmlEncoding(buffer: Buffer): string {
+  const asciiHead = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1');
+  const match = asciiHead.match(/encoding\s*=\s*["']([^"']+)["']/i);
+  return match?.[1]?.trim() || 'utf-8';
+}
+
+function decodeXmlBuffer(buffer: Buffer): string {
+  const candidates = [detectXmlEncoding(buffer), 'utf-8', 'windows-1251'];
+  for (const candidate of candidates) {
+    try {
+      return new TextDecoder(candidate, { fatal: false }).decode(buffer);
+    } catch {
+    }
+  }
+  return buffer.toString('utf8');
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+function stripXml(value: string): string {
+  return decodeXmlEntities(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+
+function extractTagContent(source: string, tagName: string): string | null {
+  const match = source.match(new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`, 'i'));
+  if (!match?.[1]) {
+    return null;
+  }
+  const normalized = stripXml(match[1]);
+  return normalized || null;
+}
+
+function extractFb2Metadata(xml: string): { title: string | null; author: string | null } {
+  const titleInfoMatch = xml.match(/<title-info\b[^>]*>([\s\S]*?)<\/title-info>/i);
+  const titleInfo = titleInfoMatch?.[1] ?? xml;
+  const title = extractTagContent(titleInfo, 'book-title');
+
+  const authorMatch = titleInfo.match(/<author\b[^>]*>([\s\S]*?)<\/author>/i);
+  const authorMarkup = authorMatch?.[1] ?? '';
+  const authorParts = [
+    extractTagContent(authorMarkup, 'first-name'),
+    extractTagContent(authorMarkup, 'middle-name'),
+    extractTagContent(authorMarkup, 'last-name')
+  ].filter((part): part is string => Boolean(part));
+  const nickname = extractTagContent(authorMarkup, 'nickname');
+  const author = authorParts.join(' ').trim() || nickname || null;
+
+  return { title, author };
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -114,9 +176,10 @@ export async function importBook(
     title: 'Import book',
     properties: ['openFile'],
     filters: [
-      { name: 'Books', extensions: ['pdf', 'epub'] },
+      { name: 'Books', extensions: ['pdf', 'epub', 'fb2'] },
       { name: 'PDF', extensions: ['pdf'] },
-      { name: 'EPUB', extensions: ['epub'] }
+      { name: 'EPUB', extensions: ['epub'] },
+      { name: 'FB2', extensions: ['fb2'] }
     ]
   };
 
@@ -132,20 +195,30 @@ export async function importBook(
   const sourceExtension = path.extname(sourcePath);
   const format = extensionToFormat(sourceExtension);
   if (!format) {
-    return { ok: false, error: 'Unsupported file type. Please choose a PDF or EPUB file.' };
+    return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, or FB2 file.' };
   }
 
   const bookId = randomUUID();
   const now = Date.now();
-  const extension = format === 'pdf' ? 'pdf' : 'epub';
+  const extension = format;
   const filename = `original.${extension}`;
   const targetDir = path.join(userDataPath, 'books', bookId);
   const targetPath = path.join(targetDir, filename);
-  const titleFromFile = path.basename(sourcePath, sourceExtension).trim();
+  let titleFromFile = path.basename(sourcePath, sourceExtension).trim();
+  let authorFromFile: string | null = null;
 
   try {
     await fs.mkdir(targetDir, { recursive: true });
     await fs.copyFile(sourcePath, targetPath);
+    if (format === 'fb2') {
+      const fileBuffer = await fs.readFile(sourcePath);
+      const xml = decodeXmlBuffer(fileBuffer);
+      const metadata = extractFb2Metadata(xml);
+      if (metadata.title) {
+        titleFromFile = metadata.title;
+      }
+      authorFromFile = metadata.author;
+    }
   } catch {
     return { ok: false, error: 'Failed to copy the selected file.' };
   }
@@ -153,7 +226,7 @@ export async function importBook(
   const book: Book = {
     id: bookId,
     title: titleFromFile || `Imported ${format.toUpperCase()}`,
-    author: null,
+    author: authorFromFile,
     format,
     filePath: targetPath,
     createdAt: now
@@ -275,7 +348,7 @@ export async function getPdfData(
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
     .get(bookId, userId) as
-    | { id: string; title: string; format: 'pdf' | 'epub'; file_path: string | null }
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
     | undefined;
 
   if (!bookRow) {
@@ -316,7 +389,7 @@ export async function getEpubData(
   const bookRow = db
     .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
     .get(bookId, userId) as
-    | { id: string; title: string; format: 'pdf' | 'epub'; file_path: string | null }
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
     | undefined;
 
   if (!bookRow) {
@@ -341,5 +414,46 @@ export async function getEpubData(
     };
   } catch {
     return { ok: false, error: 'Failed to read EPUB file from disk.' };
+  }
+}
+
+export async function getFb2Data(
+  db: Database.Database,
+  userId: string,
+  payload: BooksGetFb2DataRequest
+): Promise<BooksGetFb2DataResult> {
+  const bookId = payload.bookId?.trim();
+  if (!bookId) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  const bookRow = db
+    .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+    .get(bookId, userId) as
+    | { id: string; title: string; format: 'pdf' | 'epub' | 'fb2'; file_path: string | null }
+    | undefined;
+
+  if (!bookRow) {
+    return { ok: false, error: 'Book not found' };
+  }
+
+  if (bookRow.format !== 'fb2') {
+    return { ok: false, error: 'Selected book is not an FB2 file.' };
+  }
+
+  const fb2Path = bookRow.file_path?.trim();
+  if (!fb2Path) {
+    return { ok: false, error: 'FB2 file path is missing.' };
+  }
+
+  try {
+    const fileBuffer = await fs.readFile(fb2Path);
+    return {
+      ok: true,
+      content: decodeXmlBuffer(fileBuffer),
+      title: bookRow.title
+    };
+  } catch {
+    return { ok: false, error: 'Failed to read FB2 file from disk.' };
   }
 }

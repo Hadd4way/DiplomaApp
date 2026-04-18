@@ -45,7 +45,7 @@ const TEXT_SIZE_PRESETS: Array<{ value: TextSizePreset; label: string; detail: s
 
 type Props = {
   open: boolean;
-  format: 'pdf' | 'epub';
+  format: 'pdf' | 'epub' | 'fb2';
   settings: ReaderSettings;
   onClose: () => void;
   onChange: (patch: Partial<ReaderSettings>) => void;
@@ -62,6 +62,8 @@ function Section({
   description: string;
   children: React.ReactNode;
 }) {
+  const isFlowFormat = format === 'epub' || format === 'fb2';
+
   return (
     <section className="space-y-3 rounded-2xl border p-4 backdrop-blur-sm" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
       <div className="space-y-1">
@@ -154,7 +156,7 @@ export function ReaderSettingsPanel({
       className={cn('backdrop-blur-xl', className)}
     >
       <div className="space-y-4 p-1">
-        <Section title="Theme" description="Shared reader chrome for both PDF and EPUB.">
+        <Section title="Theme" description="Shared reader chrome for PDF, EPUB, and FB2.">
           <div
             className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"
             style={{ borderColor: palette.chromeBorder, backgroundColor: palette.accentBg }}
@@ -179,12 +181,12 @@ export function ReaderSettingsPanel({
         <Section
           title="Typography"
           description={
-            format === 'epub'
-              ? 'Live EPUB typography adjustments for comfort and focus.'
-              : 'Typography controls become active when you open an EPUB.'
+            isFlowFormat
+              ? 'Live flow-reader typography adjustments for comfort and focus.'
+              : 'Typography controls become active when you open an EPUB or FB2 book.'
           }
         >
-          <div className={cn('space-y-4 transition-opacity duration-200', format === 'epub' ? 'opacity-100' : 'opacity-50')}>
+          <div className={cn('space-y-4 transition-opacity duration-200', isFlowFormat ? 'opacity-100' : 'opacity-50')}>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs" style={{ color: palette.mutedText }}>
                 <span>Font Size</span>
@@ -196,7 +198,7 @@ export function ReaderSettingsPanel({
                 max={180}
                 step={10}
                 value={draftFontSize}
-                disabled={format !== 'epub'}
+                disabled={!isFlowFormat}
                 onInput={(event) => {
                   const value = Number((event.target as HTMLInputElement).value);
                   setDraftFontSize(value);
@@ -218,7 +220,7 @@ export function ReaderSettingsPanel({
                 max={2.4}
                 step={0.1}
                 value={draftLineHeight}
-                disabled={format !== 'epub'}
+                disabled={!isFlowFormat}
                 onInput={(event) => {
                   const value = Number((event.target as HTMLInputElement).value);
                   setDraftLineHeight(value);
@@ -243,7 +245,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={option.value}
                       type="button"
-                      disabled={format !== 'epub'}
+                  disabled={!isFlowFormat}
                       className="rounded-xl border px-3 py-2 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed"
                       style={chipStyles(active)}
                       onClick={() => onChange({ epubMargins: option.value })}
@@ -266,7 +268,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={font.value}
                       type="button"
-                      disabled={format !== 'epub'}
+                  disabled={!isFlowFormat}
                       className="rounded-2xl border px-3 py-3 text-left transition-all duration-200 disabled:cursor-not-allowed"
                       style={chipStyles(active)}
                       onClick={() => onChange({ epubFontFamily: font.value })}

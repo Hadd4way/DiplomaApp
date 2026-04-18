@@ -226,6 +226,15 @@ class ReaderProgressDb {
         PRIMARY KEY (user_id, book_id)
       );
 
+      CREATE TABLE IF NOT EXISTS reading_progress_flow (
+        user_id TEXT NOT NULL,
+        book_id TEXT NOT NULL,
+        chapter_index INTEGER NOT NULL,
+        scroll_ratio REAL NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (user_id, book_id)
+      );
+
       CREATE TABLE IF NOT EXISTS notes (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL,
@@ -279,6 +288,7 @@ class ReaderProgressDb {
         this.ensureHighlightsSchema();
         this.getStmt = this.db.prepare('SELECT last_page FROM reading_progress WHERE user_id = ? AND book_id = ? LIMIT 1');
         this.getEpubStmt = this.db.prepare('SELECT last_cfi FROM reading_progress_epub WHERE user_id = ? AND book_id = ? LIMIT 1');
+        this.getFlowStmt = this.db.prepare('SELECT chapter_index, scroll_ratio FROM reading_progress_flow WHERE user_id = ? AND book_id = ? LIMIT 1');
         this.upsertStmt = this.db.prepare(`
       INSERT INTO reading_progress (user_id, book_id, last_page, updated_at)
       VALUES (?, ?, ?, ?)
@@ -291,6 +301,14 @@ class ReaderProgressDb {
       VALUES (?, ?, ?, ?)
       ON CONFLICT(user_id, book_id) DO UPDATE SET
         last_cfi = excluded.last_cfi,
+        updated_at = excluded.updated_at
+    `);
+        this.upsertFlowStmt = this.db.prepare(`
+      INSERT INTO reading_progress_flow (user_id, book_id, chapter_index, scroll_ratio, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, book_id) DO UPDATE SET
+        chapter_index = excluded.chapter_index,
+        scroll_ratio = excluded.scroll_ratio,
         updated_at = excluded.updated_at
     `);
         this.insertNoteStmt = this.db.prepare(`INSERT INTO notes (id, user_id, book_id, page, content, created_at, updated_at)
@@ -395,6 +413,30 @@ class ReaderProgressDb {
             return;
         }
         this.upsertEpubStmt.run(safeUserId, safeBookId, safeCfi, Date.now());
+    }
+    getFlowProgress(userId, bookId) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        if (!safeUserId || !safeBookId) {
+            return { chapterIndex: null, scrollRatio: null };
+        }
+        const row = this.getFlowStmt.get(safeUserId, safeBookId);
+        if (!row) {
+            return { chapterIndex: null, scrollRatio: null };
+        }
+        const chapterIndex = Number.isFinite(row.chapter_index) ? Math.max(0, Math.floor(row.chapter_index)) : null;
+        const scrollRatio = Number.isFinite(row.scroll_ratio) ? Math.max(0, Math.min(1, row.scroll_ratio)) : null;
+        return { chapterIndex, scrollRatio };
+    }
+    setFlowProgress(userId, bookId, chapterIndex, scrollRatio) {
+        const safeUserId = asNonEmptyString(userId);
+        const safeBookId = asNonEmptyString(bookId);
+        const safeChapterIndex = Number.isFinite(chapterIndex) ? Math.max(0, Math.floor(chapterIndex)) : null;
+        const safeScrollRatio = Number.isFinite(scrollRatio) ? Math.max(0, Math.min(1, scrollRatio)) : null;
+        if (!safeUserId || !safeBookId || safeChapterIndex === null || safeScrollRatio === null) {
+            return;
+        }
+        this.upsertFlowStmt.run(safeUserId, safeBookId, safeChapterIndex, safeScrollRatio, Date.now());
     }
     createNote(userId, note) {
         const safeUserId = asNonEmptyString(userId);
@@ -705,11 +747,12 @@ class ReaderProgressDb {
             .prepare(`SELECT
            (SELECT COUNT(*) FROM reading_progress WHERE user_id = ?) +
            (SELECT COUNT(*) FROM reading_progress_epub WHERE user_id = ?) +
+           (SELECT COUNT(*) FROM reading_progress_flow WHERE user_id = ?) +
            (SELECT COUNT(*) FROM notes WHERE user_id = ?) +
            (SELECT COUNT(*) FROM highlights WHERE user_id = ?) +
            (SELECT COUNT(*) FROM bookmarks WHERE user_id = ?) +
            (SELECT COUNT(*) FROM epub_bookmarks WHERE user_id = ?) AS count`)
-            .get(safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId);
+            .get(safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId, safeLocalUserId);
         if (localCountRow.count > 0) {
             return;
         }
@@ -719,6 +762,8 @@ class ReaderProgressDb {
            SELECT user_id FROM reading_progress
            UNION
            SELECT user_id FROM reading_progress_epub
+           UNION
+           SELECT user_id FROM reading_progress_flow
            UNION
            SELECT user_id FROM notes
            UNION
@@ -739,6 +784,9 @@ class ReaderProgressDb {
             this.db.prepare('UPDATE reading_progress SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
             this.db
                 .prepare('UPDATE reading_progress_epub SET user_id = ? WHERE user_id = ?')
+                .run(safeLocalUserId, legacyUserId);
+            this.db
+                .prepare('UPDATE reading_progress_flow SET user_id = ? WHERE user_id = ?')
                 .run(safeLocalUserId, legacyUserId);
             this.db.prepare('UPDATE notes SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);
             this.db.prepare('UPDATE highlights SET user_id = ? WHERE user_id = ?').run(safeLocalUserId, legacyUserId);

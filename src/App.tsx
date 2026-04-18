@@ -13,6 +13,7 @@ import { AppShell } from '@/components/AppShell';
 import type { AppView } from '@/components/Sidebar';
 import { LibraryScreen } from '@/screens/LibraryScreen';
 import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
+import { Fb2ReaderScreen } from '@/screens/Fb2ReaderScreen';
 import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
 import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
@@ -210,7 +211,7 @@ export default function App() {
     setReaderInitialPage(options.initialPage ?? null);
     setReaderInitialCfi(options.initialCfi ?? null);
 
-    if (book.format === 'epub') {
+    if (book.format === 'epub' || book.format === 'fb2') {
       setActiveBook(book);
       setActivePdfData(null);
       setError(null);
@@ -366,6 +367,17 @@ export default function App() {
         );
       }
 
+      if (activeBook && activeBook.format === 'fb2') {
+        return (
+          <Fb2ReaderScreen
+            title={activeBook.title}
+            bookId={activeBook.id}
+            loading={loading}
+            onBack={onBackToLibrary}
+          />
+        );
+      }
+
       return (
         <LibraryScreen
           books={books}
@@ -385,7 +397,7 @@ export default function App() {
       return (
         <PlaceholderScreen
           title="Import"
-          actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB'}
+          actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB/FB2'}
           actionDisabled={loading}
           onAction={onImportBook}
         />

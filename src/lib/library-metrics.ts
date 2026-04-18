@@ -2,6 +2,7 @@ import * as React from 'react';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import ePub from 'epubjs';
+import { parseFb2Document } from '@/lib/fb2';
 import type { Book, RecentBookEntry } from '../../shared/ipc';
 
 GlobalWorkerOptions.workerSrc = workerSrc;
@@ -116,9 +117,44 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
   }
 }
 
+async function loadFb2Metric(book: Book): Promise<BookMetric> {
+  const api = getRendererApi();
+  const [fb2Result, progressResult] = await Promise.all([
+    api.books.getFb2Data({ bookId: book.id }),
+    api.flowProgress.get({ bookId: book.id })
+  ]);
+
+  if (!fb2Result.ok) {
+    throw new Error(fb2Result.error);
+  }
+  if (!progressResult.ok) {
+    throw new Error(progressResult.error);
+  }
+
+  const parsed = parseFb2Document(fb2Result.content);
+  const chapterCount = parsed.chapters.length || null;
+  const chapterIndex = progressResult.progress.chapterIndex;
+  const progressPercent =
+    chapterCount && chapterIndex !== null
+      ? ((chapterIndex + (progressResult.progress.scrollRatio ?? 0)) / chapterCount) * 100
+      : 0;
+
+  return {
+    pageCount: chapterCount,
+    currentLocation: chapterIndex,
+    progressPercent,
+    progressLabel: formatPercent(progressPercent),
+    pageCountLabel: chapterCount ? `${chapterCount} chapters` : 'FB2',
+    currentLocationLabel: chapterIndex !== null ? `Chapter ${chapterIndex + 1}` : 'Start Reading'
+  };
+}
+
 async function loadBookMetric(book: Book): Promise<BookMetric> {
   if (book.format === 'pdf') {
     return loadPdfMetric(book);
+  }
+  if (book.format === 'fb2') {
+    return loadFb2Metric(book);
   }
 
   return loadEpubMetric(book);
@@ -144,8 +180,9 @@ export function useLibraryBookMetrics(books: Book[]) {
                 currentLocation: null,
                 progressPercent: null,
                 progressLabel: 'Progress unavailable',
-                pageCountLabel: book.format === 'pdf' ? 'Pages unavailable' : 'EPUB',
-                currentLocationLabel: book.format === 'pdf' ? 'Page unavailable' : 'Continue Reading'
+                pageCountLabel: book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : 'EPUB',
+                currentLocationLabel:
+                  book.format === 'pdf' ? 'Page unavailable' : book.format === 'fb2' ? 'Continue Reading' : 'Continue Reading'
               }
             ] as const;
           }
@@ -197,6 +234,16 @@ export function useLibraryBookActivity(books: Book[]) {
                 {
                   highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
                   bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
+                }
+              ] as const;
+            }
+
+            if (book.format === 'fb2') {
+              return [
+                book.id,
+                {
+                  highlightCount: 0,
+                  bookmarkCount: 0
                 }
               ] as const;
             }

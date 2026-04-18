@@ -3,8 +3,11 @@ import path from 'node:path';
 import {
   type BooksDeleteRequest,
   type BooksGetEpubDataRequest,
+  type BooksGetFb2DataRequest,
   type BooksGetPdfDataRequest,
   type BooksRevealRequest,
+  type FlowProgressGetRequest,
+  type FlowProgressSetRequest,
   IPC_CHANNELS,
   type NotesCreateRequest,
   type NotesDeleteRequest,
@@ -34,7 +37,7 @@ import {
   type StatsMarkOpenedRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
-import { addSampleBook, deleteBook, getEpubData, getPdfData, importBook, listBooks, revealBook } from './books';
+import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, importBook, listBooks, revealBook } from './books';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
 import {
   createEpubHighlight,
@@ -49,6 +52,7 @@ import { listBookmarks, removeBookmark, toggleBookmark } from './bookmarks';
 import { listEpubBookmarks, toggleEpubBookmark } from './epub-bookmarks';
 import { getBookExportData, saveExportFile } from './export';
 import { getEpubProgress, setEpubProgress } from './epub-progress';
+import { getFlowProgress, setFlowProgress } from './flow-progress';
 import { getReaderProgressDb } from './reader-progress-db';
 import { getReaderSettings, updateReaderSettings } from './reader-settings';
 import { getRecentBooks, markBookOpened } from './reading-stats';
@@ -130,6 +134,9 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.booksGetEpubData, (_event, payload: BooksGetEpubDataRequest) =>
     getEpubData(db, libraryId, payload)
   );
+  ipcMain.handle(IPC_CHANNELS.booksGetFb2Data, (_event, payload: BooksGetFb2DataRequest) =>
+    getFb2Data(db, libraryId, payload)
+  );
   ipcMain.handle(IPC_CHANNELS.notesCreate, (_event, payload: NotesCreateRequest) =>
     createNote(db, progressDb, libraryId, payload)
   );
@@ -189,6 +196,12 @@ app.whenReady().then(() => {
   );
   ipcMain.handle(IPC_CHANNELS.epubProgressSet, (_event, payload: EpubProgressSetRequest) =>
     setEpubProgress(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.flowProgressGet, (_event, payload: FlowProgressGetRequest) =>
+    getFlowProgress(db, progressDb, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.flowProgressSet, (_event, payload: FlowProgressSetRequest) =>
+    setFlowProgress(db, progressDb, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.readerSettingsGet, (_event, payload: ReaderSettingsGetRequest) => {
     try {

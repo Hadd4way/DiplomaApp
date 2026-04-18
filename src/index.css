@@ -101,6 +101,89 @@
   stroke-width: 1.5px;
 }
 
+.fb2-reader-article {
+  overflow-wrap: anywhere;
+}
+
+.fb2-chapter + .fb2-chapter {
+  margin-top: 3rem;
+  padding-top: 3rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.fb2-chapter-title,
+.fb2-section-title {
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.fb2-chapter-title {
+  margin: 0 0 1.5rem;
+  font-size: 1.9em;
+}
+
+.fb2-section-title {
+  margin: 2rem 0 1rem;
+  font-size: 1.3em;
+}
+
+.fb2-paragraph,
+.fb2-epigraph-paragraph,
+.fb2-cite-paragraph,
+.fb2-poem-line,
+.fb2-text-author,
+.fb2-epigraph-author,
+.fb2-poem-author,
+.fb2-subtitle {
+  margin: 0 0 0.95rem;
+}
+
+.fb2-paragraph {
+  text-indent: 1.5em;
+}
+
+.fb2-subtitle {
+  text-indent: 0;
+  font-size: 1.05em;
+  font-weight: 600;
+}
+
+.fb2-empty-line {
+  height: 0.75rem;
+}
+
+.fb2-epigraph,
+.fb2-cite,
+.fb2-poem {
+  margin: 1.5rem 0;
+  padding-left: 1.25rem;
+  border-left: 3px solid rgba(148, 163, 184, 0.28);
+}
+
+.fb2-poem-line,
+.fb2-poem-author,
+.fb2-epigraph-author,
+.fb2-text-author {
+  text-indent: 0;
+}
+
+.fb2-poem-line {
+  margin-bottom: 0.3rem;
+}
+
+.fb2-poem-author,
+.fb2-epigraph-author,
+.fb2-text-author {
+  font-style: italic;
+  opacity: 0.82;
+}
+
+[data-fb2-block-id][data-search-active='true'] {
+  background: rgba(250, 204, 21, 0.28);
+  border-radius: 0.5rem;
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.35);
+}
+
 :root[data-reader-motion='reduced'] *,
 :root[data-reader-motion='reduced'] *::before,
 :root[data-reader-motion='reduced'] *::after {

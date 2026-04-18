@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   booksDelete: 'books:delete',
   booksGetPdfData: 'books:get-pdf-data',
   booksGetEpubData: 'books:get-epub-data',
+  booksGetFb2Data: 'books:get-fb2-data',
   notesCreate: 'notes:create',
   notesList: 'notes:list',
   notesDelete: 'notes:delete',
@@ -27,6 +28,8 @@ export const IPC_CHANNELS = {
   exportSaveFile: 'export:save-file',
   epubProgressGet: 'epub-progress:get',
   epubProgressSet: 'epub-progress:set',
+  flowProgressGet: 'flow-progress:get',
+  flowProgressSet: 'flow-progress:set',
   readerSettingsGet: 'reader-settings:get',
   readerSettingsUpdate: 'reader-settings:update',
   progressGetLastPage: 'progress:get-last-page',
@@ -45,7 +48,7 @@ export type PingResponse = {
   };
 };
 
-export type BookFormat = 'pdf' | 'epub';
+export type BookFormat = 'pdf' | 'epub' | 'fb2';
 
 export type Book = {
   id: string;
@@ -162,6 +165,7 @@ export type BooksRevealResult = { ok: true } | ErrorResult;
 export type BooksDeleteResult = { ok: true } | ErrorResult;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | ErrorResult;
 export type BooksGetEpubDataResult = { ok: true; base64: string; title: string } | ErrorResult;
+export type BooksGetFb2DataResult = { ok: true; content: string; title: string } | ErrorResult;
 export type NotesCreateResult = { ok: true; note: Note } | ErrorResult;
 export type NotesListResult = { ok: true; notes: Note[] } | ErrorResult;
 export type NotesDeleteResult = { ok: true } | ErrorResult;
@@ -196,6 +200,16 @@ export type ExportSaveFileResult =
   | ErrorResult;
 export type EpubProgressGetResult = { ok: true; cfi: string | null } | ErrorResult;
 export type EpubProgressSetResult = { ok: true } | ErrorResult;
+export type FlowProgressGetResult =
+  | {
+      ok: true;
+      progress: {
+        chapterIndex: number | null;
+        scrollRatio: number | null;
+      };
+    }
+  | ErrorResult;
+export type FlowProgressSetResult = { ok: true } | ErrorResult;
 export type ReaderSettingsGetResult = { ok: true; settings: ReaderSettings } | ErrorResult;
 export type ReaderSettingsUpdateResult = { ok: true; settings: ReaderSettings } | ErrorResult;
 export type StatsMarkOpenedResult = { ok: true } | ErrorResult;
@@ -214,6 +228,10 @@ export type BooksGetPdfDataRequest = {
 };
 
 export type BooksGetEpubDataRequest = {
+  bookId: string;
+};
+
+export type BooksGetFb2DataRequest = {
   bookId: string;
 };
 
@@ -320,6 +338,16 @@ export type EpubProgressSetRequest = {
   cfi: string;
 };
 
+export type FlowProgressGetRequest = {
+  bookId: string;
+};
+
+export type FlowProgressSetRequest = {
+  bookId: string;
+  chapterIndex: number;
+  scrollRatio: number;
+};
+
 export type ReaderSettingsGetRequest = {
   token: string;
 };
@@ -351,6 +379,7 @@ export interface RendererBooksApi {
   delete: (payload: BooksDeleteRequest) => Promise<BooksDeleteResult>;
   getPdfData: (payload: BooksGetPdfDataRequest) => Promise<BooksGetPdfDataResult>;
   getEpubData: (payload: BooksGetEpubDataRequest) => Promise<BooksGetEpubDataResult>;
+  getFb2Data: (payload: BooksGetFb2DataRequest) => Promise<BooksGetFb2DataResult>;
 }
 
 export interface RendererNotesApi {
@@ -394,6 +423,11 @@ export interface RendererEpubProgressApi {
   set: (payload: EpubProgressSetRequest) => Promise<EpubProgressSetResult>;
 }
 
+export interface RendererFlowProgressApi {
+  get: (payload: FlowProgressGetRequest) => Promise<FlowProgressGetResult>;
+  set: (payload: FlowProgressSetRequest) => Promise<FlowProgressSetResult>;
+}
+
 export interface RendererReaderSettingsApi {
   get: (payload: ReaderSettingsGetRequest) => Promise<ReaderSettingsGetResult>;
   update: (payload: ReaderSettingsUpdateRequest) => Promise<ReaderSettingsUpdateResult>;
@@ -414,6 +448,7 @@ export interface RendererApi {
   epubBookmarks: RendererEpubBookmarksApi;
   export: RendererExportApi;
   epubProgress: RendererEpubProgressApi;
+  flowProgress: RendererFlowProgressApi;
   readerSettings: RendererReaderSettingsApi;
   stats: RendererStatsApi;
   getLastPage: (payload: ProgressGetLastPageRequest) => Promise<number | null>;

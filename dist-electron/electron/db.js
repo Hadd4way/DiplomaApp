@@ -14,6 +14,35 @@ function hasColumn(db, tableName, columnName) {
     const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
     return columns.some((column) => column.name === columnName);
 }
+function ensureBooksFormatSchema(db) {
+    const row = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'books' LIMIT 1`)
+        .get();
+    const sql = row?.sql ?? '';
+    if (sql.includes("'fb2'")) {
+        return;
+    }
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS books_v2 (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      author TEXT NULL,
+      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2')),
+      file_path TEXT NULL,
+      created_at INTEGER NOT NULL
+    );
+
+    INSERT INTO books_v2 (id, user_id, title, author, format, file_path, created_at)
+    SELECT id, user_id, title, author, format, file_path, created_at
+    FROM books;
+
+    DROP TABLE books;
+    ALTER TABLE books_v2 RENAME TO books;
+
+    CREATE INDEX IF NOT EXISTS idx_books_user_created_at ON books(user_id, created_at DESC);
+  `);
+}
 function runMigrations(db) {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -38,7 +67,7 @@ function runMigrations(db) {
       user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       author TEXT NULL,
-      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub')),
+      format TEXT NOT NULL CHECK(format IN ('pdf', 'epub', 'fb2')),
       file_path TEXT NULL,
       created_at INTEGER NOT NULL
     );
@@ -98,6 +127,7 @@ function runMigrations(db) {
     if (!hasColumn(db, 'reader_settings', 'reduce_motion')) {
         db.exec("ALTER TABLE reader_settings ADD COLUMN reduce_motion INTEGER NOT NULL DEFAULT 0;");
     }
+    ensureBooksFormatSchema(db);
 }
 function ensureLocalLibraryIdentity(db) {
     const existing = db.prepare('SELECT id FROM users WHERE id = ? LIMIT 1').get(exports.LOCAL_DB_ID);

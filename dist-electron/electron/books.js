@@ -10,6 +10,7 @@ exports.revealBook = revealBook;
 exports.deleteBook = deleteBook;
 exports.getPdfData = getPdfData;
 exports.getEpubData = getEpubData;
+exports.getFb2Data = getFb2Data;
 const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
@@ -32,7 +33,60 @@ function extensionToFormat(fileExtension) {
     if (ext === '.epub') {
         return 'epub';
     }
+    if (ext === '.fb2') {
+        return 'fb2';
+    }
     return null;
+}
+function detectXmlEncoding(buffer) {
+    const asciiHead = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1');
+    const match = asciiHead.match(/encoding\s*=\s*["']([^"']+)["']/i);
+    return match?.[1]?.trim() || 'utf-8';
+}
+function decodeXmlBuffer(buffer) {
+    const candidates = [detectXmlEncoding(buffer), 'utf-8', 'windows-1251'];
+    for (const candidate of candidates) {
+        try {
+            return new TextDecoder(candidate, { fatal: false }).decode(buffer);
+        }
+        catch {
+        }
+    }
+    return buffer.toString('utf8');
+}
+function decodeXmlEntities(value) {
+    return value
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&');
+}
+function stripXml(value) {
+    return decodeXmlEntities(value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+}
+function extractTagContent(source, tagName) {
+    const match = source.match(new RegExp(`<${tagName}\\b[^>]*>([\\s\\S]*?)</${tagName}>`, 'i'));
+    if (!match?.[1]) {
+        return null;
+    }
+    const normalized = stripXml(match[1]);
+    return normalized || null;
+}
+function extractFb2Metadata(xml) {
+    const titleInfoMatch = xml.match(/<title-info\b[^>]*>([\s\S]*?)<\/title-info>/i);
+    const titleInfo = titleInfoMatch?.[1] ?? xml;
+    const title = extractTagContent(titleInfo, 'book-title');
+    const authorMatch = titleInfo.match(/<author\b[^>]*>([\s\S]*?)<\/author>/i);
+    const authorMarkup = authorMatch?.[1] ?? '';
+    const authorParts = [
+        extractTagContent(authorMarkup, 'first-name'),
+        extractTagContent(authorMarkup, 'middle-name'),
+        extractTagContent(authorMarkup, 'last-name')
+    ].filter((part) => Boolean(part));
+    const nickname = extractTagContent(authorMarkup, 'nickname');
+    const author = authorParts.join(' ').trim() || nickname || null;
+    return { title, author };
 }
 async function pathExists(targetPath) {
     try {
@@ -79,9 +133,10 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
         title: 'Import book',
         properties: ['openFile'],
         filters: [
-            { name: 'Books', extensions: ['pdf', 'epub'] },
+            { name: 'Books', extensions: ['pdf', 'epub', 'fb2'] },
             { name: 'PDF', extensions: ['pdf'] },
-            { name: 'EPUB', extensions: ['epub'] }
+            { name: 'EPUB', extensions: ['epub'] },
+            { name: 'FB2', extensions: ['fb2'] }
         ]
     };
     const pickerResult = ownerWindow
@@ -94,18 +149,28 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
     const sourceExtension = node_path_1.default.extname(sourcePath);
     const format = extensionToFormat(sourceExtension);
     if (!format) {
-        return { ok: false, error: 'Unsupported file type. Please choose a PDF or EPUB file.' };
+        return { ok: false, error: 'Unsupported file type. Please choose a PDF, EPUB, or FB2 file.' };
     }
     const bookId = (0, node_crypto_1.randomUUID)();
     const now = Date.now();
-    const extension = format === 'pdf' ? 'pdf' : 'epub';
+    const extension = format;
     const filename = `original.${extension}`;
     const targetDir = node_path_1.default.join(userDataPath, 'books', bookId);
     const targetPath = node_path_1.default.join(targetDir, filename);
-    const titleFromFile = node_path_1.default.basename(sourcePath, sourceExtension).trim();
+    let titleFromFile = node_path_1.default.basename(sourcePath, sourceExtension).trim();
+    let authorFromFile = null;
     try {
         await promises_1.default.mkdir(targetDir, { recursive: true });
         await promises_1.default.copyFile(sourcePath, targetPath);
+        if (format === 'fb2') {
+            const fileBuffer = await promises_1.default.readFile(sourcePath);
+            const xml = decodeXmlBuffer(fileBuffer);
+            const metadata = extractFb2Metadata(xml);
+            if (metadata.title) {
+                titleFromFile = metadata.title;
+            }
+            authorFromFile = metadata.author;
+        }
     }
     catch {
         return { ok: false, error: 'Failed to copy the selected file.' };
@@ -113,7 +178,7 @@ async function importBook(db, userId, userDataPath, ownerWindow) {
     const book = {
         id: bookId,
         title: titleFromFile || `Imported ${format.toUpperCase()}`,
-        author: null,
+        author: authorFromFile,
         format,
         filePath: targetPath,
         createdAt: now
@@ -249,5 +314,35 @@ async function getEpubData(db, userId, payload) {
     }
     catch {
         return { ok: false, error: 'Failed to read EPUB file from disk.' };
+    }
+}
+async function getFb2Data(db, userId, payload) {
+    const bookId = payload.bookId?.trim();
+    if (!bookId) {
+        return { ok: false, error: 'Book not found' };
+    }
+    const bookRow = db
+        .prepare('SELECT id, title, format, file_path FROM books WHERE id = ? AND user_id = ? LIMIT 1')
+        .get(bookId, userId);
+    if (!bookRow) {
+        return { ok: false, error: 'Book not found' };
+    }
+    if (bookRow.format !== 'fb2') {
+        return { ok: false, error: 'Selected book is not an FB2 file.' };
+    }
+    const fb2Path = bookRow.file_path?.trim();
+    if (!fb2Path) {
+        return { ok: false, error: 'FB2 file path is missing.' };
+    }
+    try {
+        const fileBuffer = await promises_1.default.readFile(fb2Path);
+        return {
+            ok: true,
+            content: decodeXmlBuffer(fileBuffer),
+            title: bookRow.title
+        };
+    }
+    catch {
+        return { ok: false, error: 'Failed to read FB2 file from disk.' };
     }
 }
