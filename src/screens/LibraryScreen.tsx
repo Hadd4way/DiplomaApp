@@ -37,7 +37,7 @@ export function LibraryScreen({
           onBack={() => setMode('library')}
           onLibraryChanged={async () => {
             await Promise.resolve(onReload());
-            setNotice('Your library now includes the downloaded book.');
+            setNotice('Your library now includes the downloaded Project Gutenberg book.');
           }}
         />
       </div>

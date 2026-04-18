@@ -52,9 +52,8 @@ export type PingResponse = {
 };
 
 export type BookFormat = 'pdf' | 'epub' | 'fb2' | 'txt';
-export type DiscoverBookSource = 'gutenberg' | 'standardebooks';
+export type DiscoverBookSource = 'gutenberg';
 export type DiscoverBookFormat = 'epub' | 'txt' | 'html' | 'other';
-export type DiscoverSourceFilter = 'all' | DiscoverBookSource;
 
 export type Book = {
   id: string;
@@ -98,11 +97,17 @@ export type DiscoverBookResult = {
   source: DiscoverBookSource;
   title: string;
   author: string | null;
-  language: string | null;
+  languages: string[];
   coverUrl: string | null;
-  downloadUrl: string | null;
-  format: DiscoverBookFormat;
+  downloadCount: number | null;
+  formats: Array<{
+    kind: DiscoverBookFormat;
+    mimeType: string;
+    url: string;
+  }>;
 };
+
+export type DiscoverBookFormatDescriptor = DiscoverBookResult['formats'][number];
 
 export type Bookmark = {
   id: string;
@@ -179,7 +184,9 @@ export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
 export type BooksImportResult = { ok: true; book: Book } | ErrorResult;
 export type DiscoverSearchResult = { ok: true; results: DiscoverBookResult[] } | ErrorResult;
-export type DiscoverDownloadResult = { ok: true; book: Book } | ErrorResult;
+export type DiscoverDownloadResult =
+  | { ok: true; book: Book; duplicateWarning: string | null }
+  | ErrorResult;
 export type BooksRevealResult = { ok: true } | ErrorResult;
 export type BooksDeleteResult = { ok: true } | ErrorResult;
 export type BooksGetPdfDataResult = { ok: true; base64: string; title: string } | ErrorResult;
@@ -241,11 +248,13 @@ export type BooksRevealRequest = {
 
 export type DiscoverSearchRequest = {
   query: string;
-  source?: DiscoverSourceFilter | null;
+  language?: string | null;
+  page?: number | null;
 };
 
 export type DiscoverDownloadRequest = {
-  result: DiscoverBookResult;
+  result?: DiscoverBookResult;
+  resultId?: string | null;
 };
 
 export type BooksDeleteRequest = {

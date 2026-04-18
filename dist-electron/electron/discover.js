@@ -10,9 +10,7 @@ const promises_1 = __importDefault(require("node:fs/promises"));
 const node_os_1 = __importDefault(require("node:os"));
 const node_path_1 = __importDefault(require("node:path"));
 const books_1 = require("./books");
-function isDefined(value) {
-    return value !== null && value !== undefined;
-}
+const gutendexProvider_1 = require("./discover/providers/gutendexProvider");
 function decodeHtmlEntities(value) {
     return value
         .replace(/&quot;/g, '"')
@@ -34,12 +32,6 @@ function stripHtmlToText(value) {
         .replace(/[ \t]{2,}/g, ' ')
         .trim());
 }
-function toAbsoluteUrl(url) {
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-        return url;
-    }
-    return new URL(url, 'https://standardebooks.org').toString();
-}
 function normalizeForDuplicate(value) {
     return (value ?? '')
         .toLocaleLowerCase()
@@ -47,143 +39,41 @@ function normalizeForDuplicate(value) {
         .replace(/\s+/g, ' ')
         .trim();
 }
-function hasDuplicateBook(db, userId, title, author) {
+function sanitizeTempFilename(value) {
+    return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || (0, node_crypto_1.randomUUID)();
+}
+function getPreferredFormat(result) {
+    return (result.formats.find((format) => format.kind === 'epub') ??
+        result.formats.find((format) => format.kind === 'txt') ??
+        result.formats.find((format) => format.kind === 'html') ??
+        null);
+}
+function toImportedBookFormat(result) {
+    const preferredFormat = getPreferredFormat(result);
+    if (!preferredFormat) {
+        return null;
+    }
+    if (preferredFormat.kind === 'epub') {
+        return 'epub';
+    }
+    if (preferredFormat.kind === 'txt' || preferredFormat.kind === 'html') {
+        return 'txt';
+    }
+    return null;
+}
+function hasDuplicateBook(db, userId, title, author, format) {
     const rows = db
-        .prepare(`SELECT title, author
+        .prepare(`SELECT title, author, format
        FROM books
        WHERE user_id = ?`)
         .all(userId);
     const normalizedTitle = normalizeForDuplicate(title);
     const normalizedAuthor = normalizeForDuplicate(author);
     return rows.some((row) => {
-        const rowTitle = normalizeForDuplicate(row.title);
-        const rowAuthor = normalizeForDuplicate(row.author);
-        return rowTitle === normalizedTitle && rowAuthor === normalizedAuthor;
+        return (row.format === format &&
+            normalizeForDuplicate(row.title) === normalizedTitle &&
+            normalizeForDuplicate(row.author) === normalizedAuthor);
     });
-}
-function mapMimeTypeToFormat(mimeType) {
-    const value = (mimeType ?? '').toLocaleLowerCase();
-    if (value.includes('application/epub+zip')) {
-        return 'epub';
-    }
-    if (value.includes('text/plain')) {
-        return 'txt';
-    }
-    if (value.includes('text/html') || value.includes('application/xhtml+xml')) {
-        return 'html';
-    }
-    return 'other';
-}
-function pickGutendexDownload(formats) {
-    if (!formats) {
-        return null;
-    }
-    const preferenceOrder = [
-        'application/epub+zip',
-        'text/plain',
-        'text/html'
-    ];
-    for (const preferredMime of preferenceOrder) {
-        const entry = Object.entries(formats).find(([mimeType, downloadUrl]) => {
-            if (!downloadUrl || downloadUrl.endsWith('.zip')) {
-                return false;
-            }
-            return mimeType.toLocaleLowerCase().startsWith(preferredMime);
-        });
-        if (entry) {
-            return {
-                downloadUrl: entry[1],
-                format: mapMimeTypeToFormat(entry[0])
-            };
-        }
-    }
-    return null;
-}
-async function searchGutenberg(query) {
-    const response = await fetch(`https://gutendex.com/books?search=${encodeURIComponent(query)}`);
-    if (!response.ok) {
-        throw new Error(`Gutendex search failed with status ${response.status}.`);
-    }
-    const payload = (await response.json());
-    const books = payload.results ?? [];
-    return books
-        .map((book) => {
-        const bestDownload = pickGutendexDownload(book.formats);
-        if (!bestDownload?.downloadUrl) {
-            return null;
-        }
-        const authors = (book.authors ?? [])
-            .map((author) => author.name?.trim() || null)
-            .filter((author) => Boolean(author));
-        const languages = (book.languages ?? []).filter(Boolean);
-        return {
-            id: `gutenberg:${book.id}`,
-            source: 'gutenberg',
-            title: book.title?.trim() || 'Untitled',
-            author: authors.length > 0 ? authors.join(', ') : null,
-            language: languages.length > 0 ? languages.join(', ') : null,
-            coverUrl: book.formats?.['image/jpeg'] ?? null,
-            downloadUrl: bestDownload.downloadUrl,
-            format: bestDownload.format
-        };
-    })
-        .filter(isDefined);
-}
-function extractXmlTagValue(source, tagName) {
-    const pattern = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
-    const match = source.match(pattern);
-    return match?.[1] ? decodeHtmlEntities(match[1].trim()) : null;
-}
-function extractXmlLinks(source) {
-    return [...source.matchAll(/<link\b([^>]+?)\/>/gi)].map((match) => {
-        const attributeBlock = match[1] ?? '';
-        const getAttribute = (name) => attributeBlock.match(new RegExp(`${name}="([^"]*)"`, 'i'))?.[1] ?? null;
-        return {
-            href: getAttribute('href'),
-            rel: getAttribute('rel'),
-            type: getAttribute('type'),
-            title: getAttribute('title')
-        };
-    });
-}
-async function searchStandardEbooks(query) {
-    const response = await fetch(`https://standardebooks.org/feeds/opds/all?query=${encodeURIComponent(query)}&per-page=24&page=1`);
-    if (!response.ok) {
-        throw new Error(`Standard Ebooks search failed with status ${response.status}.`);
-    }
-    const xml = await response.text();
-    const entries = xml.match(/<entry>[\s\S]*?<\/entry>/gi) ?? [];
-    return entries
-        .map((entry) => {
-        const title = extractXmlTagValue(entry, 'title');
-        const authorMatch = entry.match(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/i);
-        const author = authorMatch?.[1] ? decodeHtmlEntities(authorMatch[1].trim()) : null;
-        const language = extractXmlTagValue(entry, 'dc:language');
-        const links = extractXmlLinks(entry);
-        const coverUrl = links.find((link) => link.rel === 'http://opds-spec.org/image')?.href ?? null;
-        const epubLink = links.find((link) => link.type === 'application/epub+zip' && /recommended compatible epub/i.test(link.title ?? '')) ??
-            links.find((link) => link.type === 'application/epub+zip') ??
-            null;
-        const htmlLink = links.find((link) => link.type === 'application/xhtml+xml') ?? null;
-        const preferredLink = epubLink ?? htmlLink;
-        if (!title || !preferredLink?.href) {
-            return null;
-        }
-        return {
-            id: `standardebooks:${extractXmlTagValue(entry, 'id') ?? title}`,
-            source: 'standardebooks',
-            title,
-            author,
-            language,
-            coverUrl: coverUrl ? toAbsoluteUrl(coverUrl) : null,
-            downloadUrl: toAbsoluteUrl(preferredLink.href),
-            format: mapMimeTypeToFormat(preferredLink.type)
-        };
-    })
-        .filter(isDefined);
-}
-function sanitizeTempFilename(value) {
-    return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || (0, node_crypto_1.randomUUID)();
 }
 function inferFormatFromUrlOrHeaders(url, contentType, contentDisposition) {
     const dispositionFilename = contentDisposition?.match(/filename\*?=(?:UTF-8'')?\"?([^\";]+)/i)?.[1] ?? null;
@@ -198,7 +88,17 @@ function inferFormatFromUrlOrHeaders(url, contentType, contentDisposition) {
     if (candidate.endsWith('.html') || candidate.endsWith('.htm') || candidate.endsWith('.xhtml')) {
         return 'html';
     }
-    return mapMimeTypeToFormat(contentType);
+    const normalizedContentType = (contentType ?? '').toLocaleLowerCase();
+    if (normalizedContentType.includes('application/epub+zip')) {
+        return 'epub';
+    }
+    if (normalizedContentType.includes('text/plain')) {
+        return 'txt';
+    }
+    if (normalizedContentType.includes('text/html') || normalizedContentType.includes('application/xhtml+xml')) {
+        return 'html';
+    }
+    return 'other';
 }
 async function createImportableTempFile(response, result) {
     const arrayBuffer = await response.arrayBuffer();
@@ -225,40 +125,35 @@ async function createImportableTempFile(response, result) {
 }
 async function searchDiscoverBooks(payload) {
     const query = payload.query?.trim() ?? '';
-    const source = payload.source ?? 'all';
     if (!query) {
         return { ok: true, results: [] };
     }
     try {
-        const results = [];
-        if (source === 'all' || source === 'gutenberg') {
-            results.push(...(await searchGutenberg(query)));
-        }
-        if (source === 'all' || source === 'standardebooks') {
-            results.push(...(await searchStandardEbooks(query)));
-        }
+        const results = await gutendexProvider_1.gutendexProvider.search(query, {
+            language: payload.language,
+            page: payload.page
+        });
         return { ok: true, results };
     }
     catch (error) {
         return {
             ok: false,
-            error: error instanceof Error ? error.message : 'Failed to search open libraries.'
+            error: error instanceof Error ? error.message : 'Failed to search Project Gutenberg.'
         };
     }
 }
 async function downloadDiscoverBook(db, userId, userDataPath, payload) {
     const result = payload.result;
-    const downloadUrl = result?.downloadUrl?.trim();
     const title = result?.title?.trim();
-    if (!downloadUrl || !title) {
-        return { ok: false, error: 'This book is missing a download URL.' };
+    const preferredFormat = result ? getPreferredFormat(result) : null;
+    const importedFormat = result ? toImportedBookFormat(result) : null;
+    if (!title || !result || !preferredFormat?.url || !importedFormat) {
+        return { ok: false, error: 'This book does not have a supported downloadable format.' };
     }
-    if (hasDuplicateBook(db, userId, title, result.author ?? null)) {
-        return { ok: false, error: 'This book is already in your library.' };
-    }
+    const duplicateDetected = hasDuplicateBook(db, userId, title, result.author ?? null, importedFormat);
     let cleanupPath = null;
     try {
-        const response = await fetch(downloadUrl, {
+        const response = await fetch(preferredFormat.url, {
             headers: {
                 'user-agent': 'DiplomaApp/1.0 (Discover Books MVP)'
             },
@@ -278,7 +173,8 @@ async function downloadDiscoverBook(db, userId, userDataPath, payload) {
         }
         return {
             ok: true,
-            book: importResult.book
+            book: importResult.book,
+            duplicateWarning: duplicateDetected ? 'A similar local book already exists, so this may be a duplicate import.' : null
         };
     }
     catch (error) {
