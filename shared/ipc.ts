@@ -100,23 +100,38 @@ export type EpubBookmark = {
 };
 
 export type ReaderTheme = 'light' | 'sepia' | 'dark';
+export type EpubMarginSize = 'small' | 'medium' | 'large';
+export type EpubFontFamily = 'serif' | 'sans' | 'georgia' | 'openDyslexic';
+export type PdfZoomPreset = 'fitWidth' | 'fitPage' | 'actualSize';
 
 export type ReaderSettings = {
   theme: ReaderTheme;
   epubFontSize: number;
   epubLineHeight: number;
+  epubMargins: EpubMarginSize;
+  epubFontFamily: EpubFontFamily;
+  pdfBackground: ReaderTheme;
+  pdfZoomPreset: PdfZoomPreset;
 };
 
 export const READER_SETTINGS_DEFAULTS: ReaderSettings = {
   theme: 'light',
   epubFontSize: 100,
-  epubLineHeight: 1.6
+  epubLineHeight: 1.6,
+  epubMargins: 'medium',
+  epubFontFamily: 'serif',
+  pdfBackground: 'light',
+  pdfZoomPreset: 'fitWidth'
 };
 
 export type ReaderSettingsPatch = {
   theme?: ReaderTheme;
   epubFontSize?: number;
   epubLineHeight?: number;
+  epubMargins?: EpubMarginSize;
+  epubFontFamily?: EpubFontFamily;
+  pdfBackground?: ReaderTheme;
+  pdfZoomPreset?: PdfZoomPreset;
 };
 
 export type RecentBookEntry = {

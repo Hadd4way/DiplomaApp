@@ -22,6 +22,8 @@ import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import {
   getEpubThemeBodyStyles,
+  getEpubFontFamilyStack,
+  getEpubMarginCssValue,
   getReaderButtonStyles,
   getReaderThemePalette
 } from '@/lib/reader-theme';
@@ -225,28 +227,41 @@ const EPUB_SETTINGS_STYLE_ID = 'reader-settings-style';
 
 function getEpubSettingsCss(settings: ReturnType<typeof useReaderSettings>['settings']): string {
   const bodyStyles = getEpubThemeBodyStyles(settings);
+  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
   return `
     html {
       font-size: ${settings.epubFontSize}% !important;
-      line-height: ${settings.epubLineHeight} !important;
       background: ${bodyStyles.background} !important;
       color: ${bodyStyles.color} !important;
+      -webkit-text-size-adjust: 100% !important;
     }
 
     body {
-      font-size: 1em !important;
+      font-size: 1rem !important;
       line-height: ${settings.epubLineHeight} !important;
+      font-family: ${fontStack} !important;
       background: ${bodyStyles.background} !important;
       color: ${bodyStyles.color} !important;
+      margin: 0 !important;
     }
 
     body, p, div, span, li, a, blockquote, section, article, td, th {
+      font-size: inherit !important;
       line-height: ${settings.epubLineHeight} !important;
       color: ${bodyStyles.color} !important;
+      font-family: ${fontStack} !important;
     }
 
-    p, div, span, li, a, blockquote, section, article {
-      font-size: 1em !important;
+    h1 { font-size: 2em !important; font-family: ${fontStack} !important; }
+    h2 { font-size: 1.5em !important; font-family: ${fontStack} !important; }
+    h3 { font-size: 1.17em !important; font-family: ${fontStack} !important; }
+    h4 { font-size: 1em !important; font-family: ${fontStack} !important; }
+    h5 { font-size: 0.83em !important; font-family: ${fontStack} !important; }
+    h6 { font-size: 0.67em !important; font-family: ${fontStack} !important; }
+
+    img, svg, video, canvas {
+      max-width: 100% !important;
+      height: auto !important;
     }
   `;
 }
@@ -273,6 +288,7 @@ function upsertEpubSettingsStyle(
 
 function applyInlineEpubStyles(documentNode: Document, settings: ReturnType<typeof useReaderSettings>['settings']): void {
   const bodyStyles = getEpubThemeBodyStyles(settings);
+  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
   const html = documentNode.documentElement;
   const body = documentNode.body;
   if (!html || !body) {
@@ -281,29 +297,69 @@ function applyInlineEpubStyles(documentNode: Document, settings: ReturnType<type
 
   upsertEpubSettingsStyle(documentNode, settings);
   html.style.setProperty('font-size', `${settings.epubFontSize}%`, 'important');
-  html.style.setProperty('line-height', `${settings.epubLineHeight}`, 'important');
   html.style.setProperty('background', bodyStyles.background, 'important');
   html.style.setProperty('color', bodyStyles.color, 'important');
+  html.style.setProperty('-webkit-text-size-adjust', '100%', 'important');
 
-  body.style.setProperty('font-size', `${settings.epubFontSize}%`, 'important');
+  body.style.setProperty('font-size', '1rem', 'important');
   body.style.setProperty('line-height', `${settings.epubLineHeight}`, 'important');
+  body.style.setProperty('font-family', fontStack, 'important');
   body.style.setProperty('background', bodyStyles.background, 'important');
   body.style.setProperty('color', bodyStyles.color, 'important');
+  body.style.setProperty('margin', '0', 'important');
 }
 
 function applyRenditionSettings(rendition: any, settings: ReturnType<typeof useReaderSettings>['settings']): void {
   const bodyStyles = getEpubThemeBodyStyles(settings);
+  const fontStack = getEpubFontFamilyStack(settings.epubFontFamily);
+
+  rendition.themes?.fontSize?.(`${settings.epubFontSize}%`);
 
   rendition.themes?.default?.({
     html: {
       'font-size': `${settings.epubFontSize}%`,
-      'line-height': `${settings.epubLineHeight}`,
+      '-webkit-text-size-adjust': '100%',
       background: bodyStyles.background,
       color: bodyStyles.color
     },
-    body: bodyStyles,
+    body: {
+      ...bodyStyles,
+      'font-size': '1rem',
+      'font-family': fontStack,
+      margin: '0'
+    },
     p: {
-      'line-height': `${settings.epubLineHeight}`
+      'font-size': 'inherit',
+      'line-height': `${settings.epubLineHeight}`,
+      'font-family': fontStack
+    },
+    div: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    span: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    li: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    a: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    blockquote: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    section: {
+      'font-size': 'inherit',
+      'font-family': fontStack
+    },
+    article: {
+      'font-size': 'inherit',
+      'font-family': fontStack
     }
   });
   rendition.themes?.select?.('default');
@@ -411,6 +467,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingEpubHighlightDeletion[]>([]);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const epubFramePadding = React.useMemo(() => getEpubMarginCssValue(settings.epubMargins), [settings.epubMargins]);
   const currentBookmarkLabel = React.useMemo(
     () => findTocLabelByHref(tocItems, currentHref) ?? 'Location',
     [currentHref, tocItems]
@@ -1745,11 +1802,11 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           />
           <ReaderSettingsPanel
             open={settingsPanelOpen}
+            format="epub"
             settings={settings}
             onClose={() => setSettingsPanelOpen(false)}
             onChange={updateSettings}
             palette={palette}
-            showEpubControls
           />
         </>
       }
@@ -1773,11 +1830,14 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       <div ref={readerStageRef} className="relative flex min-h-0 min-w-0 flex-1" style={{ backgroundColor: palette.viewportBg }}>
         <div className="flex h-full w-full items-center justify-center p-4">
           <div
-            className="relative h-full w-full max-w-5xl overflow-hidden rounded-sm border"
+            className="reader-elevated-surface relative h-full w-full max-w-5xl overflow-hidden rounded-sm border"
             style={{
               backgroundColor: palette.epubBodyBackground,
               borderColor: palette.buttonBorder,
-              boxShadow: palette.shadow
+              boxShadow: palette.shadow,
+              paddingLeft: epubFramePadding,
+              paddingRight: epubFramePadding,
+              transition: 'padding 180ms ease'
             }}
           >
             <div ref={readerContainerRef} className="h-full w-full" />

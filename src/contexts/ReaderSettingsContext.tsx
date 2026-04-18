@@ -119,7 +119,11 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
     setSettings((current) => ({
       theme: patch.theme ?? current.theme,
       epubFontSize: patch.epubFontSize ?? current.epubFontSize,
-      epubLineHeight: patch.epubLineHeight ?? current.epubLineHeight
+      epubLineHeight: patch.epubLineHeight ?? current.epubLineHeight,
+      epubMargins: patch.epubMargins ?? current.epubMargins,
+      epubFontFamily: patch.epubFontFamily ?? current.epubFontFamily,
+      pdfBackground: patch.pdfBackground ?? current.pdfBackground,
+      pdfZoomPreset: patch.pdfZoomPreset ?? current.pdfZoomPreset
     }));
     pendingPatchRef.current = { ...pendingPatchRef.current, ...patch };
     setError(null);

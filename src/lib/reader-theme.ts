@@ -1,5 +1,10 @@
 import type { CSSProperties } from 'react';
-import type { ReaderSettings, ReaderTheme } from '../../shared/ipc';
+import type {
+  EpubFontFamily,
+  EpubMarginSize,
+  ReaderSettings,
+  ReaderTheme
+} from '../../shared/ipc';
 
 export type ReaderThemePalette = {
   appBg: string;
@@ -97,6 +102,19 @@ const READER_THEME_PALETTES: Record<ReaderTheme, ReaderThemePalette> = {
   }
 };
 
+const EPUB_MARGIN_VALUES: Record<EpubMarginSize, string> = {
+  small: '1rem',
+  medium: '1.75rem',
+  large: '2.5rem'
+};
+
+const EPUB_FONT_STACKS: Record<EpubFontFamily, string> = {
+  serif: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif',
+  sans: '"Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+  georgia: 'Georgia, "Times New Roman", serif',
+  openDyslexic: '"OpenDyslexic", "Atkinson Hyperlegible", "Segoe UI", Arial, sans-serif'
+};
+
 export function getReaderThemePalette(theme: ReaderTheme): ReaderThemePalette {
   return READER_THEME_PALETTES[theme];
 }
@@ -134,11 +152,23 @@ export function getReaderButtonStyles(theme: ReaderTheme, active = false): CSSPr
   };
 }
 
+export function getEpubMarginCssValue(margins: EpubMarginSize): string {
+  return EPUB_MARGIN_VALUES[margins];
+}
+
+export function getEpubFontFamilyStack(fontFamily: EpubFontFamily): string {
+  return EPUB_FONT_STACKS[fontFamily];
+}
+
+export function getPdfViewportBackground(theme: ReaderTheme): string {
+  return getReaderThemePalette(theme).pageShellBg;
+}
+
 export function getEpubThemeBodyStyles(settings: ReaderSettings): Record<string, string> {
   const palette = getReaderThemePalette(settings.theme);
   return {
-    'font-size': `${settings.epubFontSize}%`,
     'line-height': `${settings.epubLineHeight}`,
+    'font-family': getEpubFontFamilyStack(settings.epubFontFamily),
     background: palette.epubBodyBackground,
     color: palette.epubBodyColor
   };

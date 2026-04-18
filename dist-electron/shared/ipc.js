@@ -40,5 +40,9 @@ exports.IPC_CHANNELS = {
 exports.READER_SETTINGS_DEFAULTS = {
     theme: 'light',
     epubFontSize: 100,
-    epubLineHeight: 1.6
+    epubLineHeight: 1.6,
+    epubMargins: 'medium',
+    epubFontFamily: 'serif',
+    pdfBackground: 'light',
+    pdfZoomPreset: 'fitWidth'
 };

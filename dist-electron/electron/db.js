@@ -10,6 +10,10 @@ const node_path_1 = __importDefault(require("node:path"));
 const better_sqlite3_1 = __importDefault(require("better-sqlite3"));
 let dbInstance = null;
 exports.LOCAL_DB_ID = 'local-user';
+function hasColumn(db, tableName, columnName) {
+    const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+    return columns.some((column) => column.name === columnName);
+}
 function runMigrations(db) {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
@@ -44,6 +48,10 @@ function runMigrations(db) {
       theme TEXT NOT NULL,
       epub_font_size INTEGER NOT NULL,
       epub_line_height REAL NOT NULL,
+      epub_margins TEXT NOT NULL DEFAULT 'medium',
+      epub_font_family TEXT NOT NULL DEFAULT 'serif',
+      pdf_background TEXT NOT NULL DEFAULT 'light',
+      pdf_zoom_preset TEXT NOT NULL DEFAULT 'fitWidth',
       updated_at INTEGER NOT NULL
     );
 
@@ -62,6 +70,18 @@ function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_reading_stats_last_opened_at ON reading_stats(last_opened_at DESC);
     CREATE INDEX IF NOT EXISTS idx_reading_stats_updated_at ON reading_stats(updated_at DESC);
   `);
+    if (!hasColumn(db, 'reader_settings', 'epub_margins')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN epub_margins TEXT NOT NULL DEFAULT 'medium';");
+    }
+    if (!hasColumn(db, 'reader_settings', 'epub_font_family')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN epub_font_family TEXT NOT NULL DEFAULT 'serif';");
+    }
+    if (!hasColumn(db, 'reader_settings', 'pdf_background')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN pdf_background TEXT NOT NULL DEFAULT 'light';");
+    }
+    if (!hasColumn(db, 'reader_settings', 'pdf_zoom_preset')) {
+        db.exec("ALTER TABLE reader_settings ADD COLUMN pdf_zoom_preset TEXT NOT NULL DEFAULT 'fitWidth';");
+    }
 }
 function ensureLocalLibraryIdentity(db) {
     const existing = db.prepare('SELECT id FROM users WHERE id = ? LIMIT 1').get(exports.LOCAL_DB_ID);

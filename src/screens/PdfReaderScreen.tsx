@@ -24,12 +24,12 @@ import { type PdfOutlineItem } from '@/components/outline-tree';
 import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
-import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
+import { getPdfViewportBackground, getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
-import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note } from '../../shared/ipc';
+import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note, PdfZoomPreset } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { toJSON, toMarkdown } from '@/lib/book-export';
 import { useReadingSessionStats } from '@/lib/reading-stats';
@@ -464,7 +464,7 @@ export function PdfReaderScreen({
   const [pageInputValue, setPageInputValue] = React.useState('1');
   const [pageInputError, setPageInputError] = React.useState<string | null>(null);
   const [scale, setScale] = React.useState(1);
-  const [scaleMode, setScaleMode] = React.useState<ScaleMode>('fitWidth');
+  const [scaleMode, setScaleMode] = React.useState<ScaleMode>(presetToScaleMode(settings.pdfZoomPreset));
   const [fitWidthReady, setFitWidthReady] = React.useState(false);
   const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
   const [canvasHeight, setCanvasHeight] = React.useState<number>(0);
@@ -517,6 +517,7 @@ export function PdfReaderScreen({
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const readerPalette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
+  const pdfViewportBackground = React.useMemo(() => getPdfViewportBackground(settings.pdfBackground), [settings.pdfBackground]);
   const { registerActivity, flush: flushReadingStats } = useReadingSessionStats({
     bookId,
     format: 'pdf',
@@ -525,6 +526,15 @@ export function PdfReaderScreen({
   const { query: searchQuery, results: searchResults, isSearching, setQuery: setSearchQuery, clearQuery } = usePdfSearch(doc, bookId);
   const bookmarkedPages = React.useMemo(() => new Set(bookmarks.map((bookmark) => bookmark.page)), [bookmarks]);
   const isCurrentPageBookmarked = bookmarkedPages.has(page);
+
+  React.useEffect(() => {
+    const nextMode = presetToScaleMode(settings.pdfZoomPreset);
+    setScaleMode((prev) => (prev === nextMode ? prev : nextMode));
+    if (settings.pdfZoomPreset === 'actualSize') {
+      setScale((prev) => (Math.abs(prev - 1) < 0.001 ? prev : 1));
+    }
+  }, [settings.pdfZoomPreset]);
+
   const exportContent = React.useMemo(() => {
     if (!exportData) {
       return '';
@@ -579,9 +589,17 @@ export function PdfReaderScreen({
     setScale((prev) => clampScale(Number((prev - 0.1).toFixed(1))));
   }, []);
 
-  const setFitMode = React.useCallback(() => {
-    setScaleMode('fitWidth');
-  }, []);
+  const applyZoomPreset = React.useCallback(
+    (preset: PdfZoomPreset) => {
+      updateSettings({ pdfZoomPreset: preset });
+      const nextMode = presetToScaleMode(preset);
+      setScaleMode(nextMode);
+      if (preset === 'actualSize') {
+        setScale(1);
+      }
+    },
+    [updateSettings]
+  );
 
   const toggleContents = React.useCallback(() => {
     setSidebarOpen((prev) => !prev);
@@ -1711,7 +1729,7 @@ export function PdfReaderScreen({
       setError(null);
       setRendering(true);
       setRestoreApplied(false);
-      setScaleMode('fitPage');
+      setScaleMode(presetToScaleMode(settings.pdfZoomPreset));
       setScale(1);
       setFitWidthReady(false);
       setCanvasWidth(0);
@@ -2453,9 +2471,9 @@ export function PdfReaderScreen({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setScaleMode('fitWidth')}
+            onClick={() => applyZoomPreset('fitWidth')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, scaleMode === 'fitWidth')}
+            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'fitWidth' && scaleMode !== 'manual')}
           >
             Fit
           </Button>
@@ -2463,9 +2481,9 @@ export function PdfReaderScreen({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setScaleMode('fitPage')}
+            onClick={() => applyZoomPreset('fitPage')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, scaleMode === 'fitPage')}
+            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'fitPage' && scaleMode !== 'manual')}
           >
             Page
           </Button>
@@ -2473,12 +2491,9 @@ export function PdfReaderScreen({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => {
-              setScaleMode('manual');
-              setScale(1);
-            }}
+            onClick={() => applyZoomPreset('actualSize')}
             disabled={loading || rendering}
-            style={getReaderButtonStyles(settings.theme, scaleMode === 'manual' && Math.round(scale * 100) === 100)}
+            style={getReaderButtonStyles(settings.theme, settings.pdfZoomPreset === 'actualSize' && Math.round(scale * 100) === 100)}
           >
             100%
           </Button>
@@ -2679,11 +2694,11 @@ export function PdfReaderScreen({
     <>
       <ReaderSettingsPanel
         open={settingsPanelOpen}
+        format="pdf"
         settings={settings}
         onClose={() => setSettingsPanelOpen(false)}
         onChange={updateSettings}
         palette={readerPalette}
-        showEpubControls={false}
       />
       {notesPanel}
       {bookmarksPanel}
@@ -2800,11 +2815,11 @@ export function PdfReaderScreen({
       viewportClassName="flex-col"
     >
       <div
-        className="relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col"
-        style={{ backgroundColor: readerPalette.viewportBg }}
+        className="reader-elevated-surface relative flex min-h-0 min-w-0 flex-1 basis-0 flex-col"
+        style={{ backgroundColor: pdfViewportBackground }}
       >
           <div ref={readerViewportRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-            <div className="w-full min-h-full flex justify-center px-8 py-6">
+            <div className="reader-elevated-surface w-full min-h-full flex justify-center px-8 py-6">
               <div
                 ref={pageStageRef}
                 className="group relative"
@@ -2859,7 +2874,7 @@ export function PdfReaderScreen({
                     ) : null}
 
                     <div
-                      className="relative overflow-hidden rounded-sm border bg-white"
+                      className="reader-elevated-surface relative overflow-hidden rounded-sm border bg-white"
                       ref={setPageRootNode}
                       style={{
                         width: canvasWidth > 0 ? `${canvasWidth}px` : undefined,
@@ -3142,4 +3157,14 @@ export function PdfReaderScreen({
       />
     </ReaderShell>
   );
+}
+
+function presetToScaleMode(preset: PdfZoomPreset): ScaleMode {
+  if (preset === 'fitPage') {
+    return 'fitPage';
+  }
+  if (preset === 'actualSize') {
+    return 'manual';
+  }
+  return 'fitWidth';
 }

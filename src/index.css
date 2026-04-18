@@ -42,6 +42,18 @@
   color: hsl(var(--foreground));
 }
 
+.reader-range {
+  accent-color: #3b82f6;
+}
+
+.reader-elevated-surface {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
 .pdf-text-layer {
   overflow: hidden;
   line-height: 1;
