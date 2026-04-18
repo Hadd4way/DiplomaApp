@@ -18,6 +18,59 @@ import { NotesScreen } from '@/screens/NotesScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+type ReaderRuntimeBoundaryProps = {
+  children: React.ReactNode;
+  onBack: () => void;
+};
+
+type ReaderRuntimeBoundaryState = {
+  error: Error | null;
+};
+
+class ReaderRuntimeBoundary extends React.Component<ReaderRuntimeBoundaryProps, ReaderRuntimeBoundaryState> {
+  state: ReaderRuntimeBoundaryState = {
+    error: null
+  };
+
+  static getDerivedStateFromError(error: Error): ReaderRuntimeBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Reader runtime error', error, errorInfo);
+  }
+
+  componentDidUpdate(prevProps: ReaderRuntimeBoundaryProps) {
+    if (this.state.error && prevProps.children !== this.props.children) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (!this.state.error) {
+      return this.props.children;
+    }
+
+    return (
+      <div className="mx-auto flex w-full max-w-3xl items-start justify-center py-10">
+        <Alert variant="destructive">
+          <AlertTitle>Reader crashed while opening this book</AlertTitle>
+          <AlertDescription>
+            <div className="space-y-3">
+              <p>{this.state.error.message || 'Unknown reader error.'}</p>
+              <Button type="button" variant="outline" onClick={this.props.onBack}>
+                Back to Library
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+}
 
 function getRendererApi() {
   if (!window.api) {
@@ -257,15 +310,20 @@ export default function App() {
         }
 
         return (
-          <PdfReaderScreen
-            title={activePdfData.title || activeBook.title}
-            base64={activePdfData.base64}
-            bookId={activeBook.id}
-            initialPage={readerInitialPage}
-            onInitialPageApplied={() => setReaderInitialPage(null)}
-            loading={loading}
+          <ReaderRuntimeBoundary
+            key={`pdf:${activeBook.id}:${activePdfData.title}`}
             onBack={onBackToLibrary}
-          />
+          >
+            <PdfReaderScreen
+              title={activePdfData.title || activeBook.title}
+              base64={activePdfData.base64}
+              bookId={activeBook.id}
+              initialPage={readerInitialPage}
+              onInitialPageApplied={() => setReaderInitialPage(null)}
+              loading={loading}
+              onBack={onBackToLibrary}
+            />
+          </ReaderRuntimeBoundary>
         );
       }
 

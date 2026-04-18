@@ -15,6 +15,13 @@ const ReaderSettingsContext = React.createContext<ReaderSettingsContextValue | n
 const SETTINGS_WRITE_DEBOUNCE_MS = 300;
 const DESKTOP_FALLBACK_TOKEN = '';
 
+function normalizeReaderSettings(settings: Partial<ReaderSettings> | null | undefined): ReaderSettings {
+  return {
+    ...READER_SETTINGS_DEFAULTS,
+    ...(settings ?? {})
+  };
+}
+
 export function ReaderSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = React.useState<ReaderSettings>(READER_SETTINGS_DEFAULTS);
   const [loading, setLoading] = React.useState(true);
@@ -58,7 +65,7 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
         if (hasLocalChangesRef.current) {
           return;
         }
-        setSettings(result.settings);
+        setSettings(normalizeReaderSettings(result.settings));
       } catch (loadError) {
         if (!canceled) {
           setError(loadError instanceof Error ? loadError.message : 'Failed to load reader settings.');
@@ -98,7 +105,7 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
         return;
       }
       setError(null);
-      setSettings(result.settings);
+      setSettings(normalizeReaderSettings(result.settings));
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Failed to save reader settings.');
     }

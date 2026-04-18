@@ -117,24 +117,6 @@ export function ReaderSettingsPanel({
       className={cn('backdrop-blur-xl', className)}
     >
       <div className="space-y-4 p-1">
-        <section
-          className="overflow-hidden rounded-[22px] border p-4"
-          style={{
-            borderColor: palette.chromeBorder,
-            background: `linear-gradient(180deg, ${palette.panelBg} 0%, ${palette.accentBg} 100%)`
-          }}
-        >
-          <p className="text-[11px] font-semibold uppercase tracking-[0.24em]" style={{ color: palette.mutedText }}>
-            Premium Reading
-          </p>
-          <h3 className="mt-2 text-base font-semibold" style={{ color: palette.chromeText }}>
-            Fine-tune this reader in real time
-          </h3>
-          <p className="mt-1 text-xs leading-5" style={{ color: palette.mutedText }}>
-            Theme, typography, and page presentation are saved automatically.
-          </p>
-        </section>
-
         <Section title="Theme" description="Shared reader chrome for both PDF and EPUB.">
           <div
             className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"

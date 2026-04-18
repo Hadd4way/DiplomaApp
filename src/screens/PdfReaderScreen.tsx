@@ -30,6 +30,7 @@ import { Input } from '@/components/ui/input';
 import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note, PdfZoomPreset } from '../../shared/ipc';
+import { READER_SETTINGS_DEFAULTS } from '../../shared/ipc';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { toJSON, toMarkdown } from '@/lib/book-export';
 import { useReadingSessionStats } from '@/lib/reading-stats';
@@ -446,6 +447,10 @@ export function PdfReaderScreen({
   loading,
   onBack
 }: Props) {
+  const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
+  const safeTheme = settings.theme ?? READER_SETTINGS_DEFAULTS.theme;
+  const safePdfBackground = settings.pdfBackground ?? READER_SETTINGS_DEFAULTS.pdfBackground;
+  const safePdfZoomPreset = settings.pdfZoomPreset ?? READER_SETTINGS_DEFAULTS.pdfZoomPreset;
   const readerRootRef = React.useRef<HTMLDivElement | null>(null);
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const pageStageRef = React.useRef<HTMLDivElement | null>(null);
@@ -464,7 +469,7 @@ export function PdfReaderScreen({
   const [pageInputValue, setPageInputValue] = React.useState('1');
   const [pageInputError, setPageInputError] = React.useState<string | null>(null);
   const [scale, setScale] = React.useState(1);
-  const [scaleMode, setScaleMode] = React.useState<ScaleMode>(presetToScaleMode(settings.pdfZoomPreset));
+  const [scaleMode, setScaleMode] = React.useState<ScaleMode>(presetToScaleMode(safePdfZoomPreset));
   const [fitWidthReady, setFitWidthReady] = React.useState(false);
   const [canvasWidth, setCanvasWidth] = React.useState<number>(0);
   const [canvasHeight, setCanvasHeight] = React.useState<number>(0);
@@ -515,9 +520,8 @@ export function PdfReaderScreen({
   const canSaveRef = React.useRef(false);
   const lastSearchQueryRef = React.useRef('');
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
-  const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
-  const readerPalette = React.useMemo(() => getReaderThemePalette(settings.theme), [settings.theme]);
-  const pdfViewportBackground = React.useMemo(() => getPdfViewportBackground(settings.pdfBackground), [settings.pdfBackground]);
+  const readerPalette = React.useMemo(() => getReaderThemePalette(safeTheme), [safeTheme]);
+  const pdfViewportBackground = React.useMemo(() => getPdfViewportBackground(safePdfBackground), [safePdfBackground]);
   const { registerActivity, flush: flushReadingStats } = useReadingSessionStats({
     bookId,
     format: 'pdf',
@@ -528,12 +532,12 @@ export function PdfReaderScreen({
   const isCurrentPageBookmarked = bookmarkedPages.has(page);
 
   React.useEffect(() => {
-    const nextMode = presetToScaleMode(settings.pdfZoomPreset);
+    const nextMode = presetToScaleMode(safePdfZoomPreset);
     setScaleMode((prev) => (prev === nextMode ? prev : nextMode));
-    if (settings.pdfZoomPreset === 'actualSize') {
+    if (safePdfZoomPreset === 'actualSize') {
       setScale((prev) => (Math.abs(prev - 1) < 0.001 ? prev : 1));
     }
-  }, [settings.pdfZoomPreset]);
+  }, [safePdfZoomPreset]);
 
   const exportContent = React.useMemo(() => {
     if (!exportData) {
@@ -2257,7 +2261,7 @@ export function PdfReaderScreen({
 
       if (ctrlOrMeta && event.key === '0') {
         event.preventDefault();
-        setFitMode();
+        applyZoomPreset('fitWidth');
         return;
       }
 
@@ -2306,7 +2310,7 @@ export function PdfReaderScreen({
     pageCount,
     page,
     searchPanelOpen,
-    setFitMode,
+    applyZoomPreset,
     sidebarOpen,
     toggleContents,
     toggleBookmarkForPage,
