@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { ReaderShell } from '@/components/reader/ReaderShell';
+import { HighlightsPanel, type ReaderHighlightItem } from '@/components/reader/HighlightsPanel';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { type PdfOutlineItem } from '@/components/outline-tree';
 import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
@@ -484,6 +485,7 @@ export function PdfReaderScreen({
   const [notesPanelOpen, setNotesPanelOpen] = React.useState(false);
   const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
   const [searchPanelOpen, setSearchPanelOpen] = React.useState(false);
+  const [highlightsPanelOpen, setHighlightsPanelOpen] = React.useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
   const [bookNotes, setBookNotes] = React.useState<Note[]>([]);
   const [bookNotesLoading, setBookNotesLoading] = React.useState(false);
@@ -500,6 +502,7 @@ export function PdfReaderScreen({
     null
   );
   const [pageHighlights, setPageHighlights] = React.useState<Highlight[]>([]);
+  const [bookHighlights, setBookHighlights] = React.useState<Highlight[]>([]);
   const [highlightContextMenu, setHighlightContextMenu] = React.useState<HighlightContextMenuState>(null);
   const [highlightNoteEditor, setHighlightNoteEditor] = React.useState<HighlightNoteEditorState>(null);
   const [pendingHighlightDeletions, setPendingHighlightDeletions] = React.useState<PendingHighlightDeletion[]>([]);
@@ -531,6 +534,18 @@ export function PdfReaderScreen({
     return toMarkdown(exportData.book.title, exportData.notes, exportData.highlights);
   }, [exportData, exportFormat]);
   const exportPreview = React.useMemo(() => toPreview(exportContent, 40), [exportContent]);
+  const unifiedHighlightItems = React.useMemo<ReaderHighlightItem[]>(
+    () =>
+      bookHighlights.map((highlight) => ({
+        id: highlight.id,
+        text: highlight.text,
+        note: highlight.note,
+        page: highlight.page,
+        cfiRange: highlight.cfiRange,
+        createdAt: highlight.createdAt
+      })),
+    [bookHighlights]
+  );
 
   const goPrev = React.useCallback(() => {
     registerActivity();
@@ -562,6 +577,7 @@ export function PdfReaderScreen({
 
   const toggleBookNotesPanel = React.useCallback(() => {
     setSettingsPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setNotesPanelOpen((prev) => !prev);
   }, []);
 
@@ -569,6 +585,7 @@ export function PdfReaderScreen({
     registerActivity();
     setBookmarksPanelOpen(false);
     setNotesPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setSettingsPanelOpen(false);
     setSearchPanelOpen(true);
   }, [registerActivity]);
@@ -576,14 +593,27 @@ export function PdfReaderScreen({
   const openBookmarksPanel = React.useCallback(() => {
     setSearchPanelOpen(false);
     setNotesPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setSettingsPanelOpen(false);
     setBookmarksPanelOpen(true);
   }, []);
+
+  const openHighlightsPanel = React.useCallback(() => {
+    registerActivity();
+    setSearchPanelOpen(false);
+    setNotesPanelOpen(false);
+    setBookmarksPanelOpen(false);
+    setSettingsPanelOpen(false);
+    setHighlightContextMenu(null);
+    setHighlightNoteEditor(null);
+    setHighlightsPanelOpen(true);
+  }, [registerActivity]);
 
   const openSettingsPanel = React.useCallback(() => {
     setNotesPanelOpen(false);
     setBookmarksPanelOpen(false);
     setSearchPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setSettingsPanelOpen((prev) => !prev);
   }, []);
 
@@ -1108,6 +1138,23 @@ export function PdfReaderScreen({
     }
   }, [bookId, page]);
 
+  const loadBookHighlights = React.useCallback(async () => {
+    if (!window.api) {
+      setBookHighlights([]);
+      return;
+    }
+    try {
+      const result = await window.api.highlights.list({ bookId });
+      if (!result.ok) {
+        setBookHighlights([]);
+        return;
+      }
+      setBookHighlights(result.highlights);
+    } catch {
+      setBookHighlights([]);
+    }
+  }, [bookId]);
+
   const clampPopoverPosition = React.useCallback((x: number, y: number, width = 280, height = 180) => {
     const stage = pageStageRef.current;
     if (!stage) {
@@ -1158,6 +1205,27 @@ export function PdfReaderScreen({
       });
     },
     [clampPopoverPosition]
+  );
+
+  const openHighlightNoteEditorFromPanel = React.useCallback(
+    (item: ReaderHighlightItem) => {
+      const targetHighlight = bookHighlights.find((highlight) => highlight.id === item.id) ?? null;
+      const stage = pageStageRef.current;
+      if (!targetHighlight || !stage) {
+        return;
+      }
+
+      const stageRect = stage.getBoundingClientRect();
+      const position = clampPopoverPosition(stageRect.width - 304, 20, 280, 260);
+      if (typeof targetHighlight.page === 'number' && targetHighlight.page !== page) {
+        setPage(clampPage(targetHighlight.page, pageCount));
+        setPageInputError(null);
+      }
+      setHighlightsPanelOpen(false);
+      openHighlightNoteEditor(targetHighlight, position.x, position.y);
+      focusReader();
+    },
+    [bookHighlights, clampPopoverPosition, focusReader, openHighlightNoteEditor, page, pageCount]
   );
 
   const createHighlightFromSelection = React.useCallback(async () => {
@@ -1223,10 +1291,8 @@ export function PdfReaderScreen({
     try {
       const result = await window.api.highlights.createMerged({ bookId, page, rects, text: selectedText });
       if (result.ok) {
-        setPageHighlights((prev) => {
-          const remaining = prev.filter((item) => item.id !== result.highlight.id);
-          return [result.highlight, ...remaining];
-        });
+        setPageHighlights((prev) => [result.highlight, ...prev.filter((item) => item.id !== result.highlight.id)]);
+        await loadBookHighlights();
         if (selectionBounds.width > 0 || selectionBounds.height > 0) {
             const position = clampPopoverPosition(
               selectionBounds.right - pageRect.left,
@@ -1246,7 +1312,7 @@ export function PdfReaderScreen({
     } finally {
       selection.removeAllRanges();
     }
-  }, [bookId, clampPopoverPosition, loadPageHighlights, page]);
+  }, [bookId, clampPopoverPosition, loadBookHighlights, loadPageHighlights, page]);
 
   const finalizeHighlightDelete = React.useCallback(
     async (highlight: Highlight) => {
@@ -1262,13 +1328,17 @@ export function PdfReaderScreen({
         if (!result.ok && highlight.bookId === bookId && highlight.page === page) {
           await loadPageHighlights();
         }
+        if (!result.ok) {
+          await loadBookHighlights();
+        }
       } catch {
+        await loadBookHighlights();
         if (highlight.bookId === bookId && highlight.page === page) {
           await loadPageHighlights();
         }
       }
     },
-    [bookId, loadPageHighlights, page]
+    [bookId, loadBookHighlights, loadPageHighlights, page]
   );
 
   const queueHighlightDeletion = React.useCallback(
@@ -1284,6 +1354,7 @@ export function PdfReaderScreen({
       }
 
       setPageHighlights((prev) => prev.filter((item) => item.id !== safeId));
+      setBookHighlights((prev) => prev.filter((item) => item.id !== safeId));
       setPendingHighlightDeletions((prev) => {
         const filtered = prev.filter((item) => item.id !== safeId);
         return [...filtered, { id: safeId, highlight }];
@@ -1328,13 +1399,16 @@ export function PdfReaderScreen({
           text: pending.highlight.text,
           note: pending.highlight.note
         });
-        if (result.ok && pending.highlight.page === page && pending.highlight.bookId === bookId) {
-          await loadPageHighlights();
+        if (result.ok) {
+          await loadBookHighlights();
+          if (pending.highlight.page === page && pending.highlight.bookId === bookId) {
+            await loadPageHighlights();
+          }
         }
       } catch {
       }
     },
-    [bookId, loadPageHighlights, page, pendingHighlightDeletions]
+    [bookId, loadBookHighlights, loadPageHighlights, page, pendingHighlightDeletions]
   );
 
   const openHighlightContextMenu = React.useCallback(
@@ -1412,6 +1486,7 @@ export function PdfReaderScreen({
         return;
       }
       setPageHighlights((prev) => prev.map((item) => (item.id === result.highlight.id ? result.highlight : item)));
+      setBookHighlights((prev) => prev.map((item) => (item.id === result.highlight.id ? result.highlight : item)));
       setHighlightContextMenu(null);
       setHighlightNoteEditor(null);
     } catch (err) {
@@ -1425,7 +1500,10 @@ export function PdfReaderScreen({
     setBookNotesError(null);
     setBookmarks([]);
     setBookmarksError(null);
+    setBookHighlights([]);
+    setPageHighlights([]);
     setBookmarksPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setExportDialogOpen(false);
     setExportError(null);
     setExportMessage(null);
@@ -1474,6 +1552,10 @@ export function PdfReaderScreen({
   React.useEffect(() => {
     void loadPageHighlights();
   }, [loadPageHighlights]);
+
+  React.useEffect(() => {
+    void loadBookHighlights();
+  }, [loadBookHighlights]);
 
   React.useEffect(() => {
     setHighlightContextMenu(null);
@@ -2050,6 +2132,12 @@ export function PdfReaderScreen({
           focusReader();
           return;
         }
+        if (highlightsPanelOpen) {
+          event.preventDefault();
+          setHighlightsPanelOpen(false);
+          focusReader();
+          return;
+        }
         if (notesPanelOpen) {
           event.preventDefault();
           setNotesPanelOpen(false);
@@ -2176,6 +2264,7 @@ export function PdfReaderScreen({
   }, [
     focusReader,
     bookmarksPanelOpen,
+    highlightsPanelOpen,
     goToNextSearchMatch,
     goToPrevSearchMatch,
     goNext,
@@ -2640,6 +2729,33 @@ export function PdfReaderScreen({
     </ReaderSidePanel>
   );
 
+  const highlightsPanel = (
+    <HighlightsPanel
+      items={unifiedHighlightItems}
+      isOpen={highlightsPanelOpen}
+      onClose={() => setHighlightsPanelOpen(false)}
+      onJumpToItem={(item) => {
+        if (typeof item.page !== 'number') {
+          return;
+        }
+        setPage(clampPage(item.page, pageCount));
+        setPageInputError(null);
+        setHighlightsPanelOpen(false);
+        focusReader();
+      }}
+      onDeleteItem={(item) => {
+        const targetHighlight = bookHighlights.find((highlight) => highlight.id === item.id) ?? null;
+        if (!targetHighlight) {
+          return;
+        }
+        queueHighlightDeletion(targetHighlight);
+      }}
+      onEditNote={openHighlightNoteEditorFromPanel}
+      theme={settings.theme}
+      rightOffset={notesPanelOpen ? 344 : 12}
+    />
+  );
+
   const rightPanel = (
     <>
       <ReaderSettingsPanel
@@ -2653,6 +2769,7 @@ export function PdfReaderScreen({
       {notesPanel}
       {bookmarksPanel}
       {searchPanel}
+      {highlightsPanel}
     </>
   );
 
@@ -2721,7 +2838,14 @@ export function PdfReaderScreen({
           >
             Notes
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openHighlightsPanel}
+            disabled={loading}
+            style={getReaderButtonStyles(settings.theme, highlightsPanelOpen)}
+          >
             <Highlighter className="h-4 w-4" />
             Highlights
           </Button>

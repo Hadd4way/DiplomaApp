@@ -13,6 +13,7 @@ import {
   Trash2,
   SlidersHorizontal
 } from 'lucide-react';
+import { HighlightsPanel, type ReaderHighlightItem } from '@/components/reader/HighlightsPanel';
 import { ReaderShell } from '@/components/reader/ReaderShell';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
@@ -329,6 +330,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const [tocItems, setTocItems] = React.useState<TocItem[]>([]);
   const [sidebarOpen, setSidebarOpen] = React.useState(true);
   const [bookmarksPanelOpen, setBookmarksPanelOpen] = React.useState(false);
+  const [highlightsPanelOpen, setHighlightsPanelOpen] = React.useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
@@ -350,6 +352,18 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
   const activeBookmark = React.useMemo(
     () => epubBookmarks.find((bookmark) => isMatchingBookmarkCfi(currentCfi, bookmark.cfi)) ?? null,
     [currentCfi, epubBookmarks]
+  );
+  const highlightItems = React.useMemo<ReaderHighlightItem[]>(
+    () =>
+      epubHighlights.map((highlight) => ({
+        id: highlight.id,
+        text: highlight.text,
+        note: highlight.note,
+        page: highlight.page,
+        cfiRange: highlight.cfiRange,
+        createdAt: highlight.createdAt
+      })),
+    [epubHighlights]
   );
   const isCurrentLocationBookmarked = activeBookmark !== null;
   const { registerActivity, bindActivityTarget, flush: flushReadingStats } = useReadingSessionStats({
@@ -422,6 +436,22 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
       });
     },
     [clampPopoverPosition]
+  );
+
+  const openHighlightEditorFromPanel = React.useCallback(
+    (item: ReaderHighlightItem) => {
+      const highlight = epubHighlights.find((entry) => entry.id === item.id) ?? null;
+      const stage = readerStageRef.current;
+      if (!highlight || !stage) {
+        return;
+      }
+
+      const stageRect = stage.getBoundingClientRect();
+      const position = clampPopoverPosition(stageRect.width - 304, 20, 280, 260);
+      setHighlightsPanelOpen(false);
+      openHighlightEditor(highlight, position.x, position.y);
+    },
+    [clampPopoverPosition, epubHighlights, openHighlightEditor]
   );
 
   const openHighlightMenu = React.useCallback(
@@ -838,6 +868,15 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
     renditionRef.current?.next?.();
   }, [registerActivity]);
 
+  const openHighlightsPanel = React.useCallback(() => {
+    registerActivity();
+    setBookmarksPanelOpen(false);
+    setSettingsPanelOpen(false);
+    setHighlightMenu(null);
+    setHighlightEditor(null);
+    setHighlightsPanelOpen(true);
+  }, [registerActivity]);
+
   React.useEffect(() => {
     epubHighlightsRef.current = epubHighlights;
   }, [epubHighlights]);
@@ -1195,6 +1234,7 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
 
   React.useEffect(() => {
     setBookmarksPanelOpen(false);
+    setHighlightsPanelOpen(false);
     setHighlightMenu(null);
     setHighlightEditor(null);
     setPendingHighlightDeletions([]);
@@ -1294,7 +1334,11 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setBookmarksPanelOpen(true)}
+            onClick={() => {
+              setHighlightsPanelOpen(false);
+              setSettingsPanelOpen(false);
+              setBookmarksPanelOpen(true);
+            }}
             style={getReaderButtonStyles(settings.theme, bookmarksPanelOpen)}
           >
             <Bookmark className="h-4 w-4" />
@@ -1303,7 +1347,13 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
           <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
             Notes
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings.theme)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={openHighlightsPanel}
+            style={getReaderButtonStyles(settings.theme, highlightsPanelOpen)}
+          >
             <Highlighter className="h-4 w-4" />
             Highlights
           </Button>
@@ -1330,7 +1380,11 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setSettingsPanelOpen((prev) => !prev)}
+            onClick={() => {
+              setBookmarksPanelOpen(false);
+              setHighlightsPanelOpen(false);
+              setSettingsPanelOpen((prev) => !prev);
+            }}
             style={getReaderButtonStyles(settings.theme, settingsPanelOpen)}
           >
             <SlidersHorizontal className="h-4 w-4" />
@@ -1417,6 +1471,29 @@ export function EpubReaderScreen({ title, bookId, loading, onBack }: Props) {
               })}
             </div>
           </ReaderSidePanel>
+          <HighlightsPanel
+            items={highlightItems}
+            isOpen={highlightsPanelOpen}
+            onClose={() => setHighlightsPanelOpen(false)}
+            onJumpToItem={(item) => {
+              if (!item.cfiRange) {
+                return;
+              }
+              registerActivity();
+              void renditionRef.current?.display?.(item.cfiRange);
+              setHighlightsPanelOpen(false);
+            }}
+            onDeleteItem={(item) => {
+              const highlight = epubHighlights.find((entry) => entry.id === item.id) ?? null;
+              if (!highlight) {
+                return;
+              }
+              queueHighlightDeletion(highlight);
+            }}
+            onEditNote={openHighlightEditorFromPanel}
+            theme={settings.theme}
+            rightOffset={settingsPanelOpen ? 344 : 12}
+          />
           <ReaderSettingsPanel
             open={settingsPanelOpen}
             settings={settings}
