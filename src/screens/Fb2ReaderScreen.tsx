@@ -16,7 +16,6 @@ import {
 import type { EpubBookmark, Highlight } from '../../shared/ipc';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { ExportDialog } from '@/components/ExportDialog';
-import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { HighlightsPanel, type ReaderHighlightItem } from '@/components/reader/HighlightsPanel';
 import { ReaderShell } from '@/components/reader/ReaderShell';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
@@ -61,6 +60,15 @@ type HighlightMenuState = {
   highlightId: string;
   x: number;
   y: number;
+} | null;
+
+type HighlightEditorState = {
+  highlightId: string;
+  x: number;
+  y: number;
+  draftNote: string;
+  saving: boolean;
+  error: string | null;
 } | null;
 
 type OverlayRect = {
@@ -350,10 +358,7 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
   const [activeSearchIndex, setActiveSearchIndex] = React.useState(-1);
   const [currentLocation, setCurrentLocation] = React.useState<string | null>(null);
   const [highlightMenu, setHighlightMenu] = React.useState<HighlightMenuState>(null);
-  const [editingHighlight, setEditingHighlight] = React.useState<Highlight | null>(null);
-  const [editingNoteValue, setEditingNoteValue] = React.useState('');
-  const [editingNoteError, setEditingNoteError] = React.useState<string | null>(null);
-  const [editingNoteSaving, setEditingNoteSaving] = React.useState(false);
+  const [highlightEditor, setHighlightEditor] = React.useState<HighlightEditorState>(null);
   const [resolvedHighlightOverlays, setResolvedHighlightOverlays] = React.useState<ResolvedHighlightOverlay[]>([]);
   const { settings, loading: settingsLoading, error: settingsError, updateSettings } = useReaderSettings();
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
@@ -526,33 +531,43 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
   }, [activeSearchIndex, navigateToSearchIndex, searchResults.length]);
 
   const openHighlightEditor = React.useCallback((highlight: Highlight) => {
-    setEditingHighlight(highlight);
-    setEditingNoteValue(highlight.note ?? '');
-    setEditingNoteError(null);
-    setEditingNoteSaving(false);
-    setHighlightMenu(null);
-  }, []);
-
-  const saveHighlightNote = React.useCallback(async () => {
-    if (!editingHighlight) {
+    const menuPosition = highlightMenu;
+    const stage = stageRef.current;
+    if (!stage) {
       return;
     }
-    setEditingNoteSaving(true);
-    setEditingNoteError(null);
+    const stageRect = stage.getBoundingClientRect();
+    const x = menuPosition?.x ?? Math.max(12, stageRect.width - 304);
+    const y = menuPosition?.y ? menuPosition.y + 6 : 20;
+    setHighlightMenu(null);
+    setHighlightEditor({
+      highlightId: highlight.id,
+      x,
+      y,
+      draftNote: highlight.note ?? '',
+      saving: false,
+      error: null
+    });
+  }, [highlightMenu]);
+
+  const saveHighlightNote = React.useCallback(async () => {
+    if (!highlightEditor) {
+      return;
+    }
+    setHighlightEditor((prev) => (prev ? { ...prev, saving: true, error: null } : prev));
     try {
-      const updated = await updateHighlightNote(editingHighlight.id, normalizeHighlightNote(editingNoteValue));
+      const updated = await updateHighlightNote(highlightEditor.highlightId, normalizeHighlightNote(highlightEditor.draftNote));
       if (!updated) {
-        setEditingNoteError('Failed to save note.');
+        setHighlightEditor((prev) => (prev ? { ...prev, saving: false, error: 'Failed to save note.' } : prev));
         return;
       }
-      setEditingHighlight(null);
-      setEditingNoteValue('');
+      setHighlightEditor(null);
     } catch (saveError) {
-      setEditingNoteError(saveError instanceof Error ? saveError.message : String(saveError));
-    } finally {
-      setEditingNoteSaving(false);
+      setHighlightEditor((prev) =>
+        prev ? { ...prev, saving: false, error: saveError instanceof Error ? saveError.message : String(saveError) } : prev
+      );
     }
-  }, [editingHighlight, editingNoteValue, updateHighlightNote]);
+  }, [highlightEditor, updateHighlightNote]);
 
   const openHighlightMenu = React.useCallback((highlightId: string, event: React.MouseEvent<HTMLButtonElement>) => {
     const stage = stageRef.current;
@@ -573,6 +588,10 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
     if (!article || !selection || selection.isCollapsed) {
       return;
     }
+    const stage = stageRef.current;
+    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const stageRect = stage?.getBoundingClientRect() ?? null;
+    const selectionRect = range?.getBoundingClientRect() ?? null;
     const payload = serializeSelectionRange(article, selection);
     if (!payload) {
       return;
@@ -581,7 +600,14 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
     const created = await createHighlight(payload);
     if (created) {
       selection.removeAllRanges();
-      setHighlightsPanelOpen(true);
+      if (stageRect && selectionRect) {
+        setHighlightsPanelOpen(false);
+        setHighlightMenu({
+          highlightId: created.id,
+          x: Math.max(12, selectionRect.left - stageRect.left + selectionRect.width / 2),
+          y: Math.max(12, selectionRect.bottom - stageRect.top + 8)
+        });
+      }
     }
   }, [createHighlight, registerActivity]);
 
@@ -767,12 +793,51 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
   }, []);
 
   React.useEffect(() => {
+    const closeOnPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      if (target.closest('[data-fb2-highlight-popover="true"]')) {
+        return;
+      }
+      setHighlightMenu(null);
+      setHighlightEditor(null);
+    };
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return;
+      }
+      setHighlightMenu(null);
+      setHighlightEditor(null);
+    };
+
+    document.addEventListener('pointerdown', closeOnPointerDown);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointerDown);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
+
+  React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeElement = document.activeElement;
       const typing = isTypingTarget(event.target ?? activeElement);
       const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
       if (event.key === 'Escape') {
+        if (highlightEditor) {
+          event.preventDefault();
+          setHighlightEditor(null);
+          return;
+        }
+        if (highlightMenu) {
+          event.preventDefault();
+          setHighlightMenu(null);
+          return;
+        }
         if (settingsPanelOpen) {
           event.preventDefault();
           setSettingsPanelOpen(false);
@@ -835,6 +900,8 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
     bookmarksState,
     goToNextSearchResult,
     goToPrevSearchResult,
+    highlightEditor,
+    highlightMenu,
     highlightsPanelOpen,
     openSearchPanel,
     registerActivity,
@@ -1222,6 +1289,7 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
           </div>
           {highlightMenu ? (
             <div
+              data-fb2-highlight-popover="true"
               className="absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
               style={{
                 left: `${highlightMenu.x}px`,
@@ -1269,28 +1337,73 @@ export function Fb2ReaderScreen({ title, bookId, initialCfi = null, onInitialCfi
               })()}
             </div>
           ) : null}
+          {highlightEditor ? (
+            <div
+              data-fb2-highlight-popover="true"
+              className="absolute z-20 w-[280px] rounded-md border p-3 shadow-lg"
+              style={{
+                left: `${highlightEditor.x}px`,
+                top: `${highlightEditor.y}px`,
+                backgroundColor: palette.panelBg,
+                borderColor: palette.chromeBorder,
+                color: palette.chromeText
+              }}
+            >
+              {(() => {
+                const activeHighlight = highlightById.get(highlightEditor.highlightId) ?? null;
+                if (!activeHighlight) {
+                  return <p className="text-xs" style={{ color: palette.mutedText }}>Highlight not found.</p>;
+                }
+                return (
+                  <>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>Highlight</p>
+                    <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: palette.chromeText }}>
+                      {activeHighlight.text ?? '(highlight without text)'}
+                    </p>
+                    <textarea
+                      value={highlightEditor.draftNote}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setHighlightEditor((prev) => (prev ? { ...prev, draftNote: value, error: null } : prev));
+                      }}
+                      rows={5}
+                      placeholder="Add a note to this highlight..."
+                      className="mt-3 w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      style={{
+                        backgroundColor: palette.inputBg,
+                        borderColor: palette.buttonBorder,
+                        color: palette.inputText
+                      }}
+                    />
+                    {highlightEditor.error ? <p className="mt-2 text-xs text-destructive">{highlightEditor.error}</p> : null}
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        style={getReaderButtonStyles(settings)}
+                        disabled={highlightEditor.saving}
+                        onClick={() => {
+                          void saveHighlightNote();
+                        }}
+                      >
+                        Save
+                      </Button>
+                      <button
+                        type="button"
+                        className="rounded px-2 py-1 text-xs transition-colors hover:bg-slate-100"
+                        onClick={() => setHighlightEditor(null)}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
         </div>
       </ReaderShell>
-      <NoteEditorDialog
-        open={Boolean(editingHighlight)}
-        title={editingHighlight?.note ? 'Edit highlight note' : 'Add highlight note'}
-        subtitle={displayTitle}
-        value={editingNoteValue}
-        onValueChange={(value) => {
-          setEditingNoteValue(value);
-          setEditingNoteError(null);
-        }}
-        error={editingNoteError}
-        saving={editingNoteSaving}
-        onCancel={() => {
-          setEditingHighlight(null);
-          setEditingNoteValue('');
-          setEditingNoteError(null);
-        }}
-        onSave={() => {
-          void saveHighlightNote();
-        }}
-      />
       <ExportDialog
         open={exportState.exportDialogOpen}
         loading={exportState.exportLoading}
