@@ -1092,9 +1092,6 @@ export function FlowDocumentReader({
               <Bookmark className="h-4 w-4" />
               Bookmarks
             </Button>
-            <Button type="button" variant="outline" size="sm" disabled style={getReaderButtonStyles(settings)}>
-              Notes
-            </Button>
             <Button type="button" variant="outline" size="sm" onClick={openHighlightsPanel} style={getReaderButtonStyles(settings, highlightsPanelOpen)}>
               <Highlighter className="h-4 w-4" />
               Highlights

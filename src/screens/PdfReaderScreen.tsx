@@ -31,7 +31,6 @@ import { GlobalWorkerOptions, TextLayer, getDocument, type PDFDocumentProxy } fr
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import type { Book, Bookmark as BookmarkItem, Highlight, HighlightRect, Note, PdfZoomPreset } from '../../shared/ipc';
 import { READER_SETTINGS_DEFAULTS } from '../../shared/ipc';
-import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import { toJSON, toMarkdown } from '@/lib/book-export';
 import { useReadingSessionStats } from '@/lib/reading-stats';
 import { usePdfSearch } from '@/lib/usePdfSearch';
@@ -2275,12 +2274,6 @@ export function PdfReaderScreen({
         return;
       }
 
-      if (event.key === 'n' || event.key === 'N') {
-        event.preventDefault();
-        openAddNote();
-        return;
-      }
-
       if (event.key === 'b' || event.key === 'B') {
         event.preventDefault();
         void toggleBookmarkForPage(page);
@@ -2306,8 +2299,6 @@ export function PdfReaderScreen({
     goToPrevSearchMatch,
     goNext,
     goPrev,
-    notesPanelOpen,
-    openAddNote,
     openSearchPanel,
     settingsPanelOpen,
     pageCount,
@@ -2519,17 +2510,6 @@ export function PdfReaderScreen({
           </Button>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={openAddNote}
-          disabled={loading || rendering}
-          style={getReaderButtonStyles(settings)}
-        >
-          Add note
-        </Button>
-
         <div className="inline-flex items-center gap-2 text-xs" style={{ color: readerPalette.mutedText }}>
           <ListTree className="h-3.5 w-3.5" />
           {rendering ? 'Rendering...' : `Page ${page} of ${pageCount}`}
@@ -2549,53 +2529,6 @@ export function PdfReaderScreen({
     </div>
   );
 
-  const notesPanel = (
-    <ReaderSidePanel
-      open={notesPanelOpen}
-      title="Notes"
-      settings={settings}
-      onClose={() => setNotesPanelOpen(false)}
-      rightOffset={12}
-      headerActions={
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={openAddNote}
-          disabled={loading || rendering}
-          style={getReaderButtonStyles(settings)}
-        >
-          Add
-        </Button>
-      }
-    >
-      <div className="space-y-2">
-        {bookNotesError ? <p className="text-xs text-destructive">{bookNotesError}</p> : null}
-        {bookNotesLoading ? <p className="text-xs" style={{ color: readerPalette.mutedText }}>Loading...</p> : null}
-        {!bookNotesLoading && bookNotes.length === 0 ? (
-          <p className="text-xs" style={{ color: readerPalette.mutedText }}>No notes for this book.</p>
-        ) : null}
-        {bookNotes.map((note) => (
-          <button
-            key={note.id}
-            type="button"
-            onClick={() => {
-              setPage(clampPage(note.page, pageCount));
-              setPageInputError(null);
-              setNotesPanelOpen(false);
-              focusReader();
-            }}
-            className="w-full rounded-md border p-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            style={{ borderColor: readerPalette.chromeBorder }}
-          >
-            <p className="text-xs font-semibold" style={{ color: readerPalette.chromeText }}>Page {note.page}</p>
-            <p className="mt-1 line-clamp-2 text-xs" style={{ color: readerPalette.mutedText }}>{note.content}</p>
-          </button>
-        ))}
-      </div>
-    </ReaderSidePanel>
-  );
-
   const bookmarksPanel = (
     <ReaderSidePanel
       open={bookmarksPanelOpen}
@@ -2603,7 +2536,7 @@ export function PdfReaderScreen({
       settings={settings}
       onClose={() => setBookmarksPanelOpen(false)}
       icon={<Bookmark className="h-4 w-4" />}
-      rightOffset={notesPanelOpen ? 344 : 12}
+      rightOffset={12}
     >
       <div className="space-y-2">
         {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
@@ -2664,7 +2597,7 @@ export function PdfReaderScreen({
       onRegisterActivity={registerActivity}
       inputRef={searchInputRef}
       placeholder="Search in this PDF..."
-      rightOffset={notesPanelOpen ? 344 : 12}
+      rightOffset={12}
       emptyQueryMessage="Type a query to search all pages."
       noResultsMessage="No matches found."
     />
@@ -2693,7 +2626,7 @@ export function PdfReaderScreen({
       }}
       onEditNote={openHighlightNoteEditorFromPanel}
       settings={settings}
-      rightOffset={notesPanelOpen ? 344 : 12}
+      rightOffset={12}
     />
   );
 
@@ -2707,7 +2640,6 @@ export function PdfReaderScreen({
         onChange={updateSettings}
         palette={readerPalette}
       />
-      {notesPanel}
       {bookmarksPanel}
       {searchPanel}
       {highlightsPanel}
@@ -2768,16 +2700,6 @@ export function PdfReaderScreen({
           >
             <Bookmark className="h-4 w-4" />
             Bookmarks
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={toggleBookNotesPanel}
-            disabled={loading}
-            style={getReaderButtonStyles(settings, notesPanelOpen)}
-          >
-            Notes
           </Button>
           <Button
             type="button"
@@ -3122,24 +3044,6 @@ export function PdfReaderScreen({
             </div>
           ) : null}
       </div>
-
-      <NoteEditorDialog
-        open={noteOpen}
-        title="Add note"
-        subtitle={`${title} - page ${page}`}
-        value={noteContent}
-        onValueChange={(value) => {
-          setNoteContent(value);
-          setNoteError(null);
-        }}
-        error={noteError}
-        saving={noteSaving}
-        onCancel={() => {
-          setNoteOpen(false);
-          setNoteError(null);
-        }}
-        onSave={() => void saveNote()}
-      />
       <ExportDialog
         open={exportDialogOpen}
         loading={exportLoading}
