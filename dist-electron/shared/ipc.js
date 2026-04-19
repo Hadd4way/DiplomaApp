@@ -6,6 +6,8 @@ exports.IPC_CHANNELS = {
     discoverSearch: 'discover:search',
     discoverDownload: 'discover:download',
     discoverDownloadProgress: 'discover:download-progress',
+    recommendationsHome: 'recommendations:home',
+    recommendationsForBook: 'recommendations:for-book',
     booksList: 'books:list',
     booksAddSample: 'books:add-sample',
     booksImport: 'books:import',

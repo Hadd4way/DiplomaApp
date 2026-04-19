@@ -295,23 +295,6 @@ function useLibraryRefreshSignal(refreshKey?: string) {
     setRefreshSignal((value) => value + 1);
   }, [refreshKey]);
 
-  React.useEffect(() => {
-    const refresh = () => setRefreshSignal((value) => value + 1);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refresh();
-      }
-    };
-
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-
-    return () => {
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, []);
-
   return refreshSignal;
 }
 

@@ -17,6 +17,10 @@ const api: RendererApi = {
       };
     }
   },
+  recommendations: {
+    getHome: () => ipcRenderer.invoke(IPC_CHANNELS.recommendationsHome),
+    getForBook: (payload) => ipcRenderer.invoke(IPC_CHANNELS.recommendationsForBook, payload)
+  },
   books: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.booksList),
     addSample: () => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample),

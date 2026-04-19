@@ -82,6 +82,14 @@ function PlaceholderCover({ title, author }: { title: string; author: string | n
   );
 }
 
+function MetaLine({ children }: { children?: React.ReactNode }) {
+  return (
+    <p className={cn('line-clamp-2 min-h-8 text-xs text-muted-foreground', children ? 'opacity-100' : 'opacity-0')} aria-hidden={!children}>
+      {children ?? 'placeholder'}
+    </p>
+  );
+}
+
 export function BookCard({
   book,
   onOpen,
@@ -195,13 +203,20 @@ export function BookCard({
         aria-label={`Open ${book.title}`}
       >
         <CardContent className={cn('space-y-3 p-4', isContinueCard ? 'pb-5' : '')}>
-          <div className="space-y-2">
-            <p className={cn('line-clamp-2 font-medium leading-5', isContinueCard ? 'min-h-12 text-base' : 'min-h-10 text-sm')}>
+          <div className="flex min-h-[128px] flex-col">
+            <p
+              className={cn(
+                'line-clamp-2 font-medium leading-5',
+                isContinueCard ? 'min-h-12 text-base' : 'min-h-10 text-sm'
+              )}
+            >
               {book.title}
             </p>
-            {book.subtitle ? <p className="line-clamp-2 text-xs text-muted-foreground">{book.subtitle}</p> : null}
-            {authorLine ? <p className="line-clamp-2 text-xs text-muted-foreground">{authorLine}</p> : null}
-            <div className="flex items-center justify-between gap-2">
+            <div className="mt-2 space-y-1">
+              <MetaLine>{book.subtitle}</MetaLine>
+              <MetaLine>{authorLine}</MetaLine>
+            </div>
+            <div className="mt-auto flex items-center justify-between gap-2 pt-2">
               <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {book.format.toUpperCase()}
               </span>
@@ -209,7 +224,7 @@ export function BookCard({
             </div>
           </div>
 
-          <div className="space-y-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-3">
+          <div className="flex min-h-[78px] flex-col justify-between space-y-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-3">
             <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
               <span>{metric?.currentLocationLabel ?? (book.format === 'pdf' ? 'Opening position unavailable' : 'Continue Reading')}</span>
               <span>{metric?.pageCountLabel ?? 'Loading progress...'}</span>
@@ -229,7 +244,7 @@ export function BookCard({
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex min-h-8 items-center justify-between gap-2">
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Highlighter className="h-3.5 w-3.5" />

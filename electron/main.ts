@@ -37,7 +37,8 @@ import {
   type ReaderSettingsUpdateRequest,
   type ProgressGetLastPageRequest,
   type ProgressSetLastPageRequest,
-  type StatsMarkOpenedRequest
+  type StatsMarkOpenedRequest,
+  type RecommendationsForBookRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, getTxtData, importBook, listBooks, revealBook } from './books';
@@ -60,6 +61,7 @@ import { getFlowProgress, setFlowProgress } from './flow-progress';
 import { getReaderProgressDb } from './reader-progress-db';
 import { getReaderSettings, updateReaderSettings } from './reader-settings';
 import { getRecentBooks, markBookOpened } from './reading-stats';
+import { getHomeRecommendations, getRecommendationsForBook } from './recommendations';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -126,6 +128,10 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.discoverSearch, (_event, payload: DiscoverSearchRequest) => searchDiscoverBooks(db, payload));
   ipcMain.handle(IPC_CHANNELS.discoverDownload, (event, payload: DiscoverDownloadRequest) =>
     downloadDiscoverBook(db, libraryId, userDataPath, payload, event.sender)
+  );
+  ipcMain.handle(IPC_CHANNELS.recommendationsHome, () => getHomeRecommendations(db, libraryId));
+  ipcMain.handle(IPC_CHANNELS.recommendationsForBook, (_event, payload: RecommendationsForBookRequest) =>
+    getRecommendationsForBook(db, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.booksList, () => listBooks(db, libraryId));
   ipcMain.handle(IPC_CHANNELS.booksAddSample, () => addSampleBook(db, libraryId));

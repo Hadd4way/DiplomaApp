@@ -246,7 +246,6 @@ export default function App() {
 
   const onBackToLibrary = () => {
     resetReaderState();
-    setLibraryRefreshKey((value) => value + 1);
     setCurrentView('library');
   };
 

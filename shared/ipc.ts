@@ -3,6 +3,8 @@ export const IPC_CHANNELS = {
   discoverSearch: 'discover:search',
   discoverDownload: 'discover:download',
   discoverDownloadProgress: 'discover:download-progress',
+  recommendationsHome: 'recommendations:home',
+  recommendationsForBook: 'recommendations:for-book',
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
@@ -201,6 +203,29 @@ export type RecentBookEntry = {
   lastOpenedAt: number | null;
 };
 
+export type RecommendationReason =
+  | 'matching-author'
+  | 'matching-genre'
+  | 'continue-reading'
+  | 'rediscover'
+  | 'recently-opened-signal'
+  | 'author-collection'
+  | 'similar-title';
+
+export type RecommendationEntry = {
+  book: Book;
+  score: number;
+  reasons: RecommendationReason[];
+  matchedAuthors: string[];
+  matchedSubjects: string[];
+};
+
+export type RecommendationProfileSummary = {
+  topAuthors: string[];
+  topSubjects: string[];
+  recentBookIds: string[];
+};
+
 export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
@@ -263,6 +288,21 @@ export type ReaderSettingsGetResult = { ok: true; settings: ReaderSettings } | E
 export type ReaderSettingsUpdateResult = { ok: true; settings: ReaderSettings } | ErrorResult;
 export type StatsMarkOpenedResult = { ok: true } | ErrorResult;
 export type StatsGetRecentBooksResult = { ok: true; books: RecentBookEntry[] } | ErrorResult;
+export type RecommendationsHomeResult =
+  | {
+      ok: true;
+      recommendations: RecommendationEntry[];
+      profile: RecommendationProfileSummary;
+    }
+  | ErrorResult;
+export type RecommendationsForBookResult =
+  | {
+      ok: true;
+      bookId: string;
+      similarBooks: RecommendationEntry[];
+      moreByAuthor: RecommendationEntry[];
+    }
+  | ErrorResult;
 
 export type BooksRevealRequest = {
   bookId: string;
@@ -436,6 +476,10 @@ export type StatsMarkOpenedRequest = {
   format: BookFormat;
 };
 
+export type RecommendationsForBookRequest = {
+  bookId: string;
+};
+
 export interface RendererBooksApi {
   list: () => Promise<BooksListResult>;
   addSample: () => Promise<BooksAddSampleResult>;
@@ -510,9 +554,15 @@ export interface RendererStatsApi {
   getRecentBooks: () => Promise<StatsGetRecentBooksResult>;
 }
 
+export interface RendererRecommendationsApi {
+  getHome: () => Promise<RecommendationsHomeResult>;
+  getForBook: (payload: RecommendationsForBookRequest) => Promise<RecommendationsForBookResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   discover: RendererDiscoverApi;
+  recommendations: RendererRecommendationsApi;
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;

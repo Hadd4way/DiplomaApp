@@ -19,6 +19,7 @@ const flow_progress_1 = require("./flow-progress");
 const reader_progress_db_1 = require("./reader-progress-db");
 const reader_settings_1 = require("./reader-settings");
 const reading_stats_1 = require("./reading-stats");
+const recommendations_1 = require("./recommendations");
 let mainWindow = null;
 function resolveUserIdFromToken(db, token) {
     const safeToken = token.trim();
@@ -72,6 +73,8 @@ electron_1.app.whenReady().then(() => {
     }));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverSearch, (_event, payload) => (0, discover_1.searchDiscoverBooks)(db, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverDownload, (event, payload) => (0, discover_1.downloadDiscoverBook)(db, libraryId, userDataPath, payload, event.sender));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.recommendationsHome, () => (0, recommendations_1.getHomeRecommendations)(db, libraryId));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.recommendationsForBook, (_event, payload) => (0, recommendations_1.getRecommendationsForBook)(db, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksList, () => (0, books_1.listBooks)(db, libraryId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksAddSample, () => (0, books_1.addSampleBook)(db, libraryId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksImport, () => (0, books_1.importBook)(db, libraryId, userDataPath, mainWindow));

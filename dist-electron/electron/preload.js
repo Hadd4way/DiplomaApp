@@ -17,6 +17,10 @@ const api = {
             };
         }
     },
+    recommendations: {
+        getHome: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.recommendationsHome),
+        getForBook: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.recommendationsForBook, payload)
+    },
     books: {
         list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList),
         addSample: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample),
