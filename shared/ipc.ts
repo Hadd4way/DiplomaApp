@@ -53,7 +53,8 @@ export type PingResponse = {
 };
 
 export type BookFormat = 'pdf' | 'epub' | 'fb2' | 'txt';
-export type DiscoverBookSource = 'gutenberg';
+export type DiscoverBookSource = 'gutenberg' | 'standardebooks';
+export type DiscoverSourceFilter = 'all' | DiscoverBookSource;
 export type DiscoverBookFormat = 'epub' | 'txt' | 'html' | 'other';
 
 export type Book = {
@@ -100,6 +101,7 @@ export type DiscoverBookResult = {
   author: string | null;
   languages: string[];
   coverUrl: string | null;
+  description?: string | null;
   downloadCount: number | null;
   formats: Array<{
     kind: DiscoverBookFormat;
@@ -260,6 +262,7 @@ export type BooksRevealRequest = {
 
 export type DiscoverSearchRequest = {
   query: string;
+  source?: DiscoverSourceFilter | null;
   language?: string | null;
   page?: number | null;
 };

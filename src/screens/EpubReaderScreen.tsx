@@ -1194,6 +1194,10 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
           elapsed: elapsed()
         });
         const epubBytes = Uint8Array.from(atob(epubDataResult.base64), (char) => char.charCodeAt(0));
+        const epubArrayBuffer = epubBytes.buffer.slice(
+          epubBytes.byteOffset,
+          epubBytes.byteOffset + epubBytes.byteLength
+        );
         log('epub:bytes:decoded', { byteLength: epubBytes.byteLength, elapsed: elapsed() });
 
         let startCfi: string | null = initialCfi?.trim() || null;
@@ -1216,7 +1220,22 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
           label: string;
           createBook: () => any;
         }> = [
-          { label: 'array-buffer-binary', createBook: () => ePub(epubBytes.buffer, { openAs: 'binary' }) },
+          {
+            label: 'array-buffer-binary',
+            createBook: () => ePub(epubArrayBuffer, { openAs: 'binary' })
+          },
+          {
+            label: 'array-buffer-epub',
+            createBook: () => ePub(epubArrayBuffer, { openAs: 'epub', replacements: 'blobUrl' })
+          },
+          {
+            label: 'array-buffer-default',
+            createBook: () => ePub(epubArrayBuffer, { replacements: 'blobUrl' })
+          },
+          {
+            label: 'base64-openAs',
+            createBook: () => ePub(epubDataResult.base64, { openAs: 'base64', replacements: 'blobUrl' })
+          },
           { label: 'base64', createBook: () => ePub(epubDataResult.base64, { encoding: 'base64' }) }
         ];
 

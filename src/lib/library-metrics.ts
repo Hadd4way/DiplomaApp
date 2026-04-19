@@ -39,6 +39,11 @@ function base64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
+function base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const bytes = base64ToUint8Array(base64);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
 function clampPercent(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -93,10 +98,34 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
     throw new Error(progressResult.error);
   }
 
-  const epubBook = ePub(epubResult.base64, { encoding: 'base64' });
+  const epubArrayBuffer = base64ToArrayBuffer(epubResult.base64);
+  const openCandidates = [
+    () => ePub(epubArrayBuffer, { openAs: 'epub' }),
+    () => ePub(epubArrayBuffer),
+    () => ePub(epubResult.base64, { encoding: 'base64' })
+  ];
+
+  let epubBook: ReturnType<typeof ePub> | null = null;
 
   try {
-    await epubBook.ready;
+    let lastError: unknown = null;
+    for (const createBook of openCandidates) {
+      let candidate: ReturnType<typeof ePub> | null = null;
+      try {
+        candidate = createBook();
+        await candidate.ready;
+        epubBook = candidate;
+        break;
+      } catch (error) {
+        lastError = error;
+        candidate?.destroy?.();
+      }
+    }
+
+    if (!epubBook) {
+      throw lastError instanceof Error ? lastError : new Error('Failed to open EPUB for metrics.');
+    }
+
     await epubBook.locations?.generate?.(1000);
 
     const pageCount = epubBook.locations?.length?.() ?? null;

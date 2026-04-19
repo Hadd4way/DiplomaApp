@@ -9,6 +9,7 @@ import type {
   BookFormat,
   DiscoverDownloadProgressEvent,
   DiscoverBookResult,
+  DiscoverBookSource,
   DiscoverDownloadRequest,
   DiscoverDownloadResult,
   DiscoverSearchRequest,
@@ -17,6 +18,7 @@ import type {
 import { IPC_CHANNELS } from '../shared/ipc';
 import { importBookFromPath } from './books';
 import { gutendexProvider } from './discover/providers/gutendexProvider';
+import { standardEbooksProvider } from './discover/providers/standardEbooksProvider';
 
 function decodeHtmlEntities(value: string): string {
   return value
@@ -53,6 +55,45 @@ function normalizeForDuplicate(value: string | null | undefined) {
 
 function sanitizeTempFilename(value: string) {
   return value.replace(/[^a-z0-9._-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || randomUUID();
+}
+
+function normalizeSearchValue(value: string | null | undefined) {
+  return (value ?? '')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getSourcePriority(source: DiscoverBookSource) {
+  return source === 'standardebooks' ? 0 : 1;
+}
+
+function rankDiscoverResults(query: string, results: DiscoverBookResult[]) {
+  const normalizedQuery = normalizeSearchValue(query);
+
+  return [...results].sort((left, right) => {
+    const leftExactTitle = normalizeSearchValue(left.title) === normalizedQuery;
+    const rightExactTitle = normalizeSearchValue(right.title) === normalizedQuery;
+
+    if (leftExactTitle !== rightExactTitle) {
+      return leftExactTitle ? -1 : 1;
+    }
+
+    if (leftExactTitle && rightExactTitle && left.source !== right.source) {
+      return getSourcePriority(left.source) - getSourcePriority(right.source);
+    }
+
+    if (left.source !== right.source) {
+      return getSourcePriority(left.source) - getSourcePriority(right.source);
+    }
+
+    if (left.source === 'gutenberg' && right.source === 'gutenberg') {
+      return (right.downloadCount ?? -1) - (left.downloadCount ?? -1);
+    }
+
+    return left.title.localeCompare(right.title);
+  });
 }
 
 function emitDownloadProgress(target: WebContents | null, event: DiscoverDownloadProgressEvent) {
@@ -145,6 +186,80 @@ function inferFormatFromUrlOrHeaders(url: string, contentType: string | null, co
   return 'other';
 }
 
+function extractHtmlDownloadRedirectUrl(html: string, baseUrl: string) {
+  const metaRefreshUrl =
+    html.match(/<meta[^>]+http-equiv=["']refresh["'][^>]+content=["'][^"']*url=([^"'>]+)["']/i)?.[1] ??
+    html.match(/<meta[^>]+content=["'][^"']*url=([^"'>]+)["'][^>]+http-equiv=["']refresh["']/i)?.[1] ??
+    null;
+
+  const contentUrl =
+    html.match(/property=["']schema:contentUrl["'][^>]+href=["']([^"']+)["']/i)?.[1] ??
+    html.match(/href=["']([^"']+)["'][^>]+property=["']schema:contentUrl["']/i)?.[1] ??
+    null;
+
+  const candidate = metaRefreshUrl ?? contentUrl;
+  if (!candidate) {
+    return null;
+  }
+
+  try {
+    const resolved = new URL(candidate, baseUrl);
+    if (/\.epub$/i.test(resolved.pathname) && !resolved.searchParams.has('source')) {
+      resolved.searchParams.set('source', 'download');
+    }
+    return resolved.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchDiscoverDownloadResponse(
+  result: DiscoverBookResult,
+  url: string,
+  redirectDepth = 0
+): Promise<Response> {
+  if (redirectDepth > 2) {
+    throw new Error('Too many intermediate download pages while fetching this book.');
+  }
+
+  const response = await fetch(url, {
+    headers: {
+      'user-agent': 'DiplomaApp/1.0 (Discover Books MVP)'
+    },
+    redirect: 'follow'
+  });
+
+  if (!response.ok) {
+    return response;
+  }
+
+  const contentType = response.headers.get('content-type')?.toLocaleLowerCase() ?? '';
+  const looksLikeHtml = contentType.includes('text/html') || contentType.includes('application/xhtml+xml');
+  if (!looksLikeHtml) {
+    return response;
+  }
+
+  const html = await response.text();
+  if (result.source !== 'standardebooks') {
+    return new Response(html, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }
+
+  const redirectedUrl = extractHtmlDownloadRedirectUrl(html, response.url);
+  if (!redirectedUrl || redirectedUrl === response.url) {
+    return new Response(html, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers
+    });
+  }
+
+  return fetchDiscoverDownloadResponse(result, redirectedUrl, redirectDepth + 1);
+}
+
 async function createImportableTempFile(
   response: Response,
   result: DiscoverBookResult,
@@ -221,15 +336,52 @@ export async function searchDiscoverBooks(payload: DiscoverSearchRequest): Promi
   }
 
   try {
-    const results = await gutendexProvider.search(query, {
+    const options = {
       language: payload.language,
-      page: payload.page
-    });
-    return { ok: true, results };
+      page: payload.page,
+      source: payload.source
+    };
+
+    if (payload.source === 'gutenberg') {
+      const results = await gutendexProvider.search(query, options);
+      return { ok: true, results: rankDiscoverResults(query, results) };
+    }
+
+    if (payload.source === 'standardebooks') {
+      const results = await standardEbooksProvider.search(query, options);
+      return { ok: true, results: rankDiscoverResults(query, results) };
+    }
+
+    const [gutenbergResults, standardEbooksResults] = await Promise.allSettled([
+      gutendexProvider.search(query, options),
+      standardEbooksProvider.search(query, options)
+    ]);
+
+    const successfulResults = [
+      gutenbergResults.status === 'fulfilled' ? gutenbergResults.value : [],
+      standardEbooksResults.status === 'fulfilled' ? standardEbooksResults.value : []
+    ].flat();
+
+    if (successfulResults.length > 0) {
+      return {
+        ok: true,
+        results: rankDiscoverResults(query, successfulResults)
+      };
+    }
+
+    const failureMessages = [gutenbergResults, standardEbooksResults]
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)))
+      .filter(Boolean);
+
+    return {
+      ok: false,
+      error: failureMessages[0] ?? 'Failed to search discover providers.'
+    };
   } catch (error) {
     return {
       ok: false,
-      error: error instanceof Error ? error.message : 'Failed to search Project Gutenberg.'
+      error: error instanceof Error ? error.message : 'Failed to search discover providers.'
     };
   }
 }
@@ -263,12 +415,7 @@ export async function downloadDiscoverBook(
       message: 'Starting download...'
     });
 
-    const response = await fetch(preferredFormat.url, {
-      headers: {
-        'user-agent': 'DiplomaApp/1.0 (Discover Books MVP)'
-      },
-      redirect: 'follow'
-    });
+    const response = await fetchDiscoverDownloadResponse(result, preferredFormat.url);
 
     if (!response.ok) {
       emitDownloadProgress(progressTarget ?? null, {

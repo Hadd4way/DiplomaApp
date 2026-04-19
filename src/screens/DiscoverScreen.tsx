@@ -15,7 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { Book, DiscoverBookResult, DiscoverDownloadProgressEvent } from '../../shared/ipc';
+import type {
+  Book,
+  DiscoverBookResult,
+  DiscoverDownloadProgressEvent,
+  DiscoverSourceFilter
+} from '../../shared/ipc';
 
 type Props = {
   books: Book[];
@@ -59,6 +64,44 @@ function getDuplicateKey(title: string, author: string | null) {
 
 function getFormatBadgeLabel(kind: DiscoverBookResult['formats'][number]['kind']) {
   return kind === 'txt' ? 'TXT' : kind === 'html' ? 'HTML' : kind.toUpperCase();
+}
+
+function getSourceLabel(source: DiscoverBookResult['source']) {
+  return source === 'standardebooks' ? 'Standard Ebooks' : 'Project Gutenberg';
+}
+
+function getPremiumBadgeLabel(result: DiscoverBookResult) {
+  return result.source === 'standardebooks' ? 'Curated Edition' : null;
+}
+
+function getSourceDescription(sourceFilter: DiscoverSourceFilter) {
+  if (sourceFilter === 'standardebooks') {
+    return 'Source: Standard Ebooks';
+  }
+  if (sourceFilter === 'gutenberg') {
+    return 'Source: Project Gutenberg';
+  }
+  return 'Source: All Sources';
+}
+
+function getSearchLoadingLabel(sourceFilter: DiscoverSourceFilter) {
+  if (sourceFilter === 'standardebooks') {
+    return 'Searching Standard Ebooks...';
+  }
+  if (sourceFilter === 'gutenberg') {
+    return 'Searching Project Gutenberg...';
+  }
+  return 'Searching all sources...';
+}
+
+function getEmptyStateTitle(sourceFilter: DiscoverSourceFilter) {
+  if (sourceFilter === 'standardebooks') {
+    return 'No Standard Ebooks titles matched that search.';
+  }
+  if (sourceFilter === 'gutenberg') {
+    return 'No Project Gutenberg books matched that search.';
+  }
+  return 'No books matched that search across Standard Ebooks or Project Gutenberg.';
 }
 
 function getFriendlyDiscoverError(error: string) {
@@ -152,6 +195,7 @@ function createIdleState(): DownloadCardState {
 export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: Props) {
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
+  const [sourceFilter, setSourceFilter] = React.useState<DiscoverSourceFilter>('all');
   const [results, setResults] = React.useState<DiscoverBookResult[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -204,6 +248,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
       const api = getRendererApi();
       const response = await api.discover.search({
         query: trimmedQuery,
+        source: sourceFilter,
         language: language.trim() || undefined
       });
       if (!response.ok) {
@@ -220,7 +265,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
     } finally {
       setLoading(false);
     }
-  }, [language, query]);
+  }, [language, query, sourceFilter]);
 
   const performDownload = React.useCallback(
     async (result: DiscoverBookResult) => {
@@ -308,7 +353,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
               <div className="space-y-1">
                 <h1 className="text-3xl font-semibold tracking-tight">Discover Books</h1>
                 <p className="max-w-2xl text-sm text-muted-foreground">
-                  Search Project Gutenberg, preview polished metadata, and bring great books into your local library.
+                  Search Project Gutenberg for breadth, Standard Ebooks for curated EPUBs, and bring great books into your local library.
                 </p>
               </div>
             </div>
@@ -345,7 +390,26 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
 
             <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
               <Globe className="h-3.5 w-3.5" />
-              Source: Project Gutenberg
+              {getSourceDescription(sourceFilter)}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {([
+                ['all', 'All Sources'],
+                ['gutenberg', 'Gutenberg'],
+                ['standardebooks', 'Standard Ebooks']
+              ] as Array<[DiscoverSourceFilter, string]>).map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={sourceFilter === value ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSourceFilter(value)}
+                  className={cn(sourceFilter === value ? '' : 'bg-background/70')}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
           </form>
         </CardContent>
@@ -367,9 +431,9 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                   <BookOpenText className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-xl font-semibold tracking-tight">Search free books from Project Gutenberg</h2>
+                  <h2 className="text-xl font-semibold tracking-tight">Search free books from two public-domain sources</h2>
                   <p className="max-w-md text-sm text-muted-foreground">
-                    Discover public-domain books and download them into your local collection with progress, retry, and instant open actions.
+                    Explore Gutenberg for quantity and Standard Ebooks for polished curated editions, then download straight into your local collection.
                   </p>
                 </div>
               </CardContent>
@@ -378,13 +442,13 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
             <Card className="border-dashed bg-card/80">
               <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
                 <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Searching Project Gutenberg...</p>
+                <p className="text-sm text-muted-foreground">{getSearchLoadingLabel(sourceFilter)}</p>
               </CardContent>
             </Card>
           ) : results.length === 0 ? (
             <Card className="border-dashed bg-card/80">
               <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <p className="text-sm font-medium">No Project Gutenberg books matched that search.</p>
+                <p className="text-sm font-medium">{getEmptyStateTitle(sourceFilter)}</p>
                 <p className="max-w-md text-sm text-muted-foreground">
                   Try a broader title, another author spelling, or a different language code.
                 </p>
@@ -419,8 +483,13 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                             <div className="space-y-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                  Project Gutenberg
+                                  {getSourceLabel(result.source)}
                                 </span>
+                                {getPremiumBadgeLabel(result) ? (
+                                  <span className="inline-flex rounded-full border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                                    {getPremiumBadgeLabel(result)}
+                                  </span>
+                                ) : null}
                                 {result.formats.map((format) => (
                                   <span
                                     key={`${result.id}:${format.mimeType}:${format.url}`}
@@ -434,12 +503,18 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                               <p className="line-clamp-2 text-sm text-muted-foreground">{result.author || 'Unknown author'}</p>
                             </div>
 
+                            {result.description ? (
+                              <p className="line-clamp-4 text-sm leading-6 text-muted-foreground">{result.description}</p>
+                            ) : null}
+
                             <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
                               <p>Language: {result.languages.length > 0 ? result.languages.join(', ') : 'Unknown'}</p>
-                              <p>Source: Project Gutenberg</p>
+                              <p>Source: {getSourceLabel(result.source)}</p>
                               <p>Format: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
                               <p>
-                                Downloads: {typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : 'Unknown'}
+                                {result.source === 'standardebooks'
+                                  ? 'Edition: Premium EPUB'
+                                  : `Downloads: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : 'Unknown'}`}
                               </p>
                             </div>
                           </div>
