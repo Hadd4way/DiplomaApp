@@ -9,40 +9,10 @@ import type {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 import { READER_SETTINGS_DEFAULTS } from '../../shared/ipc';
-
-const THEME_OPTIONS: Array<{ value: ReaderTheme; label: string; description: string }> = [
-  { value: 'light', label: 'Light', description: 'Bright workspace with neutral contrast.' },
-  { value: 'sepia', label: 'Sepia', description: 'Warm paper-like colors for longer sessions.' },
-  { value: 'dark', label: 'Dark', description: 'Low-glare reading for evening work.' }
-];
-
-const TEXT_SIZE_OPTIONS: Array<{ value: TextSizePreset; label: string }> = [
-  { value: 'normal', label: 'Normal' },
-  { value: 'large', label: 'Large' },
-  { value: 'extraLarge', label: 'Extra large' }
-];
-
-const EPUB_MARGIN_OPTIONS: Array<{ value: EpubMarginSize; label: string }> = [
-  { value: 'small', label: 'Small' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'large', label: 'Large' }
-];
-
-const EPUB_FONT_OPTIONS: Array<{ value: EpubFontFamily; label: string }> = [
-  { value: 'serif', label: 'Serif' },
-  { value: 'sans', label: 'Sans' },
-  { value: 'georgia', label: 'Georgia' },
-  { value: 'openDyslexic', label: 'OpenDyslexic' }
-];
-
-const PDF_ZOOM_OPTIONS: Array<{ value: PdfZoomPreset; label: string }> = [
-  { value: 'fitWidth', label: 'Fit width' },
-  { value: 'fitPage', label: 'Fit page' },
-  { value: 'actualSize', label: 'Actual size' }
-];
 
 type ToggleRowProps = {
   title: string;
@@ -90,7 +60,34 @@ function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
 
 export function SettingsScreen() {
   const { settings, loading, error, updateSettings } = useReaderSettings();
+  const { language, setLanguage, t } = useLanguage();
   const palette = getReaderThemePalette(settings);
+  const THEME_OPTIONS: Array<{ value: ReaderTheme; label: string; description: string }> = [
+    { value: 'light', label: t.settings.themeLight, description: t.settings.themeLightDescription },
+    { value: 'sepia', label: t.settings.themeSepia, description: t.settings.themeSepiaDescription },
+    { value: 'dark', label: t.settings.themeDark, description: t.settings.themeDarkDescription }
+  ];
+  const TEXT_SIZE_OPTIONS: Array<{ value: TextSizePreset; label: string }> = [
+    { value: 'normal', label: t.settings.textSizeNormal },
+    { value: 'large', label: t.settings.textSizeLarge },
+    { value: 'extraLarge', label: t.settings.textSizeExtraLarge }
+  ];
+  const EPUB_MARGIN_OPTIONS: Array<{ value: EpubMarginSize; label: string }> = [
+    { value: 'small', label: t.settings.marginSmall },
+    { value: 'medium', label: t.settings.marginMedium },
+    { value: 'large', label: t.settings.marginLarge }
+  ];
+  const EPUB_FONT_OPTIONS: Array<{ value: EpubFontFamily; label: string }> = [
+    { value: 'serif', label: t.settings.fontSerif },
+    { value: 'sans', label: t.settings.fontSans },
+    { value: 'georgia', label: t.settings.fontGeorgia },
+    { value: 'openDyslexic', label: t.settings.fontOpenDyslexic }
+  ];
+  const PDF_ZOOM_OPTIONS: Array<{ value: PdfZoomPreset; label: string }> = [
+    { value: 'fitWidth', label: t.settings.zoomFitWidth },
+    { value: 'fitPage', label: t.settings.zoomFitPage },
+    { value: 'actualSize', label: t.settings.zoomActualSize }
+  ];
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 overflow-auto">
@@ -105,33 +102,46 @@ export function SettingsScreen() {
         >
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-2">
-              <CardTitle className="text-3xl">Settings</CardTitle>
+              <CardTitle className="text-3xl">{t.settings.title}</CardTitle>
               <CardDescription className="max-w-2xl">
-                Configure the reading experience for EPUB, FB2, TXT, and PDF. Changes are applied immediately and saved automatically.
+                {t.settings.description}
               </CardDescription>
             </div>
             <Button type="button" variant="outline" onClick={() => updateSettings(READER_SETTINGS_DEFAULTS)}>
-              Reset defaults
+              {t.settings.resetDefaults}
             </Button>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="rounded-md border border-border bg-background/70 px-3 py-2">
-              <span className="font-medium">Status:</span>{' '}
-              {loading ? 'Loading settings...' : 'Settings are ready'}
+              <span className="font-medium">{t.settings.status}:</span>{' '}
+              {loading ? t.settings.loading : t.settings.ready}
             </div>
             {error ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
                 {error}
               </div>
             ) : (
-              <div className="text-muted-foreground">Reader theme: {settings.theme}</div>
+              <div className="text-muted-foreground">
+                {t.settings.themeSummary}: {THEME_OPTIONS.find((option) => option.value === settings.theme)?.label}
+              </div>
             )}
           </CardContent>
         </Card>
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-6">
-            <SettingCard title="Appearance" description="Pick the global look and the default text scale for the app UI.">
+            <SettingCard title={t.settings.languageTitle} description={t.settings.languageDescription}>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant={language === 'ru' ? 'default' : 'outline'} onClick={() => setLanguage('ru')}>
+                  {t.settings.languageRu}
+                </Button>
+                <Button type="button" variant={language === 'en' ? 'default' : 'outline'} onClick={() => setLanguage('en')}>
+                  {t.settings.languageEn}
+                </Button>
+              </div>
+            </SettingCard>
+
+            <SettingCard title={t.settings.appearanceTitle} description={t.settings.appearanceDescription}>
               <div className="grid gap-3 md:grid-cols-3">
                 {THEME_OPTIONS.map((option) => {
                   const optionPalette = getReaderThemePalette(option.value);
@@ -161,8 +171,8 @@ export function SettingsScreen() {
 
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm font-medium">Interface text size</p>
-                  <p className="text-sm text-muted-foreground">Scales menus, controls, and reading interface labels.</p>
+                  <p className="text-sm font-medium">{t.settings.interfaceTextSizeTitle}</p>
+                  <p className="text-sm text-muted-foreground">{t.settings.interfaceTextSizeDescription}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {TEXT_SIZE_OPTIONS.map((option) => (
@@ -179,11 +189,11 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title="Flow Reading" description="Defaults for EPUB, FB2, and TXT books with reflowable text.">
+            <SettingCard title={t.settings.flowReadingTitle} description={t.settings.flowReadingDescription}>
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="epub-font-family">
-                    Font family
+                    {t.settings.fontFamily}
                   </label>
                   <select
                     id="epub-font-family"
@@ -201,7 +211,7 @@ export function SettingsScreen() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="epub-margins">
-                    Margins
+                    {t.settings.margins}
                   </label>
                   <select
                     id="epub-margins"
@@ -222,7 +232,7 @@ export function SettingsScreen() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <label className="text-sm font-medium" htmlFor="epub-font-size">
-                      Font size
+                      {t.settings.fontSize}
                     </label>
                     <span className="text-sm text-muted-foreground">{settings.epubFontSize}%</span>
                   </div>
@@ -241,7 +251,7 @@ export function SettingsScreen() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <label className="text-sm font-medium" htmlFor="epub-line-height">
-                      Line height
+                      {t.settings.lineHeight}
                     </label>
                     <span className="text-sm text-muted-foreground">{settings.epubLineHeight.toFixed(1)}</span>
                   </div>
@@ -261,10 +271,10 @@ export function SettingsScreen() {
           </div>
 
           <div className="space-y-6">
-            <SettingCard title="PDF" description="Choose how PDF documents open by default.">
+            <SettingCard title={t.settings.pdfTitle} description={t.settings.pdfDescription}>
               <div className="space-y-2">
                 <label className="text-sm font-medium" htmlFor="pdf-background">
-                  Background theme
+                  {t.settings.backgroundTheme}
                 </label>
                 <select
                   id="pdf-background"
@@ -282,7 +292,7 @@ export function SettingsScreen() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium" htmlFor="pdf-zoom">
-                  Default zoom
+                  {t.settings.defaultZoom}
                 </label>
                 <select
                   id="pdf-zoom"
@@ -299,45 +309,45 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title="Accessibility" description="Improve readability and reduce visual strain.">
+            <SettingCard title={t.settings.accessibilityTitle} description={t.settings.accessibilityDescription}>
               <div className="space-y-3">
                 <ToggleRow
-                  title="Dyslexia friendly mode"
-                  description="Uses a dyslexia-oriented UI font and increases spacing in reflowable text."
+                  title={t.settings.dyslexiaFriendlyMode}
+                  description={t.settings.dyslexiaFriendlyModeDescription}
                   checked={settings.dyslexiaFriendlyMode}
                   onChange={(checked) => updateSettings({ dyslexiaFriendlyMode: checked })}
                 />
                 <ToggleRow
-                  title="High contrast mode"
-                  description="Overrides the theme with maximum contrast across the app."
+                  title={t.settings.highContrastMode}
+                  description={t.settings.highContrastModeDescription}
                   checked={settings.highContrastMode}
                   onChange={(checked) => updateSettings({ highContrastMode: checked })}
                 />
                 <ToggleRow
-                  title="Reduce motion"
-                  description="Disables extra movement and keeps transitions minimal."
+                  title={t.settings.reduceMotion}
+                  description={t.settings.reduceMotionDescription}
                   checked={settings.reduceMotion}
                   onChange={(checked) => updateSettings({ reduceMotion: checked })}
                 />
               </div>
             </SettingCard>
 
-            <SettingCard title="Current Profile" description="Quick summary of the active reader setup.">
+            <SettingCard title={t.settings.currentProfileTitle} description={t.settings.currentProfileDescription}>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border border-border px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Theme</p>
-                  <p className="mt-2 text-lg font-semibold capitalize">{settings.highContrastMode ? 'High contrast' : settings.theme}</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileTheme}</p>
+                  <p className="mt-2 text-lg font-semibold">{settings.highContrastMode ? t.settings.highContrastProfile : THEME_OPTIONS.find((option) => option.value === settings.theme)?.label}</p>
                 </div>
                 <div className="rounded-lg border border-border px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">PDF zoom</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profilePdfZoom}</p>
                   <p className="mt-2 text-lg font-semibold">{PDF_ZOOM_OPTIONS.find((option) => option.value === settings.pdfZoomPreset)?.label}</p>
                 </div>
                 <div className="rounded-lg border border-border px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">EPUB font</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileEpubFont}</p>
                   <p className="mt-2 text-lg font-semibold">{EPUB_FONT_OPTIONS.find((option) => option.value === settings.epubFontFamily)?.label}</p>
                 </div>
                 <div className="rounded-lg border border-border px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Text size</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileTextSize}</p>
                   <p className="mt-2 text-lg font-semibold">{TEXT_SIZE_OPTIONS.find((option) => option.value === settings.textSizePreset)?.label}</p>
                 </div>
               </div>

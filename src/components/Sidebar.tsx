@@ -1,6 +1,7 @@
 import { BookOpen, Brain, Settings } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 
 export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'settings';
@@ -10,15 +11,15 @@ type Props = {
   onViewChange: (view: AppView) => void;
 };
 
-const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
-  { view: 'library', label: 'Library', icon: BookOpen },
-  { view: 'knowledge-hub', label: 'Knowledge Hub', icon: Brain },
-  { view: 'settings', label: 'Settings', icon: Settings }
-];
-
 export function Sidebar({ currentView, onViewChange }: Props) {
   const { settings } = useReaderSettings();
+  const { t } = useLanguage();
   const palette = getReaderThemePalette(settings);
+  const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
+    { view: 'library', label: t.sidebar.library, icon: BookOpen },
+    { view: 'knowledge-hub', label: t.sidebar.knowledgeHub, icon: Brain },
+    { view: 'settings', label: t.sidebar.settings, icon: Settings }
+  ];
 
   return (
     <aside
@@ -30,10 +31,10 @@ export function Sidebar({ currentView, onViewChange }: Props) {
       }}
     >
       <div className="mb-6">
-        <p className="text-lg font-semibold tracking-tight">Reader</p>
+        <p className="text-lg font-semibold tracking-tight">{t.sidebar.title}</p>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1" aria-label="Main navigation">
+      <nav className="flex flex-1 flex-col gap-1" aria-label={t.sidebar.navigationLabel}>
         {navItems.map((item) => {
           const isActive = item.view === currentView;
           const Icon = item.icon;
@@ -68,9 +69,6 @@ export function Sidebar({ currentView, onViewChange }: Props) {
             >
               <Icon className="h-4 w-4" />
               <span>{item.label}</span>
-              {item.view === 'settings' ? (
-                <span className="ml-auto text-[10px] uppercase tracking-wide opacity-80">Soon</span>
-              ) : null}
             </button>
           );
         })}
