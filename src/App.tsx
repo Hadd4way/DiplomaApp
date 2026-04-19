@@ -19,6 +19,7 @@ import { TxtReaderScreen } from '@/screens/TxtReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
 import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
+import { SettingsScreen } from '@/screens/SettingsScreen';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
@@ -434,7 +435,7 @@ export default function App() {
       return <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />;
     }
 
-    return <PlaceholderScreen title="Settings" />;
+    return <SettingsScreen />;
   };
 
   return (
