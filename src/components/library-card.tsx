@@ -11,6 +11,7 @@ import type { Book } from '../../shared/ipc';
 
 type Props = {
   books: Book[];
+  refreshKey?: number;
   loading: boolean;
   error: string | null;
   notice?: string | null;
@@ -41,6 +42,7 @@ function getFilterButtonClassName(active: boolean) {
 
 export function LibraryCard({
   books,
+  refreshKey = 0,
   loading,
   error,
   notice,
@@ -55,9 +57,13 @@ export function LibraryCard({
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortKey>('recent-opened');
   const [formatFilter, setFormatFilter] = React.useState<FormatFilter>('all');
-  const metrics = useLibraryBookMetrics(books);
-  const activity = useLibraryBookActivity(books);
-  const { recentBooks } = useRecentBooks(books.map((book) => `${book.id}:${book.createdAt}`).join('|'));
+  const refreshToken = React.useMemo(
+    () => `${refreshKey}|${books.map((book) => `${book.id}:${book.createdAt}`).join('|')}`,
+    [books, refreshKey]
+  );
+  const metrics = useLibraryBookMetrics(books, refreshToken);
+  const activity = useLibraryBookActivity(books, refreshToken);
+  const { recentBooks } = useRecentBooks(refreshToken);
   const recentOrder = new Map(recentBooks.map((entry, index) => [entry.bookId, index]));
   const lastOpenedAtByBookId = new Map(recentBooks.map((entry) => [entry.bookId, entry.lastOpenedAt]));
   const trimmedQuery = searchQuery.trim().toLocaleLowerCase();

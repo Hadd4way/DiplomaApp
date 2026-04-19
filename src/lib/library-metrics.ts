@@ -58,6 +58,44 @@ function formatPercent(value: number | null): string {
   return `${Math.round(clampPercent(value))}% read`;
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
+
+function getMetricFallback(book: Book): BookMetric {
+  return {
+    pageCount: null,
+    currentLocation: null,
+    progressPercent: null,
+    progressLabel: 'Progress unavailable',
+    pageCountLabel:
+      book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : book.format === 'txt' ? 'TXT' : 'EPUB',
+    currentLocationLabel: book.format === 'pdf' ? 'Page unavailable' : 'Continue Reading'
+  };
+}
+
+function getActivityFallback(): BookActivitySummary {
+  return {
+    highlightCount: 0,
+    bookmarkCount: 0
+  };
+}
+
 async function loadPdfMetric(book: Book): Promise<BookMetric> {
   const api = getRendererApi();
   const [pdfResult, lastPage] = await Promise.all([
@@ -100,8 +138,10 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
 
   const epubArrayBuffer = base64ToArrayBuffer(epubResult.base64);
   const openCandidates = [
-    () => ePub(epubArrayBuffer, { openAs: 'epub' }),
-    () => ePub(epubArrayBuffer),
+    () => ePub(epubArrayBuffer, { openAs: 'binary' }),
+    () => ePub(epubArrayBuffer, { openAs: 'epub', replacements: 'blobUrl' }),
+    () => ePub(epubArrayBuffer, { replacements: 'blobUrl' }),
+    () => ePub(epubResult.base64, { openAs: 'base64', replacements: 'blobUrl' }),
     () => ePub(epubResult.base64, { encoding: 'base64' })
   ];
 
@@ -113,7 +153,7 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
       let candidate: ReturnType<typeof ePub> | null = null;
       try {
         candidate = createBook();
-        await candidate.ready;
+        await withTimeout(candidate.ready, 8000, `Timed out while opening EPUB "${book.title}".`);
         epubBook = candidate;
         break;
       } catch (error) {
@@ -126,20 +166,43 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
       throw lastError instanceof Error ? lastError : new Error('Failed to open EPUB for metrics.');
     }
 
-    await epubBook.locations?.generate?.(1000);
+    try {
+      await withTimeout(
+        epubBook.locations?.generate?.(1000) ?? Promise.resolve(),
+        12000,
+        `Timed out while generating EPUB locations for "${book.title}".`
+      );
+    } catch {
+      // Fall back to spine length if locations generation is too slow or unsupported.
+    }
 
-    const pageCount = epubBook.locations?.length?.() ?? null;
-    const progressPercent =
-      progressResult.cfi && epubBook.locations?.percentageFromCfi
+    const generatedLocationCount = epubBook.locations?.length?.() ?? null;
+    const spineSectionCount =
+      Array.isArray((epubBook as { spine?: { spineItems?: unknown[]; items?: unknown[] } }).spine?.spineItems)
+        ? (epubBook as { spine?: { spineItems?: unknown[] } }).spine?.spineItems?.length ?? null
+        : Array.isArray((epubBook as { spine?: { items?: unknown[] } }).spine?.items)
+          ? (epubBook as { spine?: { items?: unknown[] } }).spine?.items?.length ?? null
+          : null;
+    const pageCount = generatedLocationCount || spineSectionCount || null;
+    const progressPercent = progressResult.cfi
+      ? epubBook.locations?.percentageFromCfi && generatedLocationCount
         ? epubBook.locations.percentageFromCfi(progressResult.cfi) * 100
-        : 0;
+        : spineSectionCount
+          ? Math.min(100, Math.max(1, (1 / spineSectionCount) * 100))
+          : 0
+      : 0;
+    const pageCountLabel = generatedLocationCount
+      ? `${generatedLocationCount} locations`
+      : spineSectionCount
+        ? `${spineSectionCount} sections`
+        : 'EPUB';
 
     return {
       pageCount,
       currentLocation: progressResult.cfi ? 1 : null,
       progressPercent,
       progressLabel: formatPercent(progressPercent),
-      pageCountLabel: pageCount ? `${pageCount} locations` : 'EPUB',
+      pageCountLabel,
       currentLocationLabel: progressResult.cfi ? 'Continue Reading' : 'Start Reading'
     };
   } finally {
@@ -225,40 +288,39 @@ async function loadBookMetric(book: Book): Promise<BookMetric> {
   return loadEpubMetric(book);
 }
 
-export function useLibraryBookMetrics(books: Book[]) {
+function useLibraryRefreshSignal(refreshKey?: string) {
+  const [refreshSignal, setRefreshSignal] = React.useState(0);
+
+  React.useEffect(() => {
+    setRefreshSignal((value) => value + 1);
+  }, [refreshKey]);
+
+  React.useEffect(() => {
+    const refresh = () => setRefreshSignal((value) => value + 1);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
+  return refreshSignal;
+}
+
+export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
   const [metrics, setMetrics] = React.useState<Record<string, BookMetric>>({});
+  const refreshSignal = useLibraryRefreshSignal(refreshKey);
 
   React.useEffect(() => {
     let canceled = false;
-
-    const load = async () => {
-      const entries = await Promise.all(
-        books.map(async (book) => {
-          try {
-            const metric = await loadBookMetric(book);
-            return [book.id, metric] as const;
-          } catch {
-            return [
-              book.id,
-              {
-                pageCount: null,
-                currentLocation: null,
-                progressPercent: null,
-                progressLabel: 'Progress unavailable',
-                pageCountLabel:
-                  book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : book.format === 'txt' ? 'TXT' : 'EPUB',
-                currentLocationLabel:
-                  book.format === 'pdf' ? 'Page unavailable' : 'Continue Reading'
-              }
-            ] as const;
-          }
-        })
-      );
-
-      if (!canceled) {
-        setMetrics(Object.fromEntries(entries));
-      }
-    };
 
     if (books.length === 0) {
       setMetrics({});
@@ -267,71 +329,45 @@ export function useLibraryBookMetrics(books: Book[]) {
       };
     }
 
-    void load();
+    const nextMetrics = Object.fromEntries(books.map((book) => [book.id, getMetricFallback(book)]));
+    setMetrics(nextMetrics);
+
+    for (const book of books) {
+      void withTimeout(loadBookMetric(book), 15000, `Timed out while loading metrics for ${book.title}`)
+        .then((metric) => {
+          if (canceled) {
+            return;
+          }
+          setMetrics((current) => ({
+            ...current,
+            [book.id]: metric
+          }));
+        })
+        .catch(() => {
+          if (canceled) {
+            return;
+          }
+          setMetrics((current) => ({
+            ...current,
+            [book.id]: getMetricFallback(book)
+          }));
+        });
+    }
 
     return () => {
       canceled = true;
     };
-  }, [books]);
+  }, [books, refreshSignal]);
 
   return metrics;
 }
 
-export function useLibraryBookActivity(books: Book[]) {
+export function useLibraryBookActivity(books: Book[], refreshKey?: string) {
   const [activity, setActivity] = React.useState<Record<string, BookActivitySummary>>({});
+  const refreshSignal = useLibraryRefreshSignal(refreshKey);
 
   React.useEffect(() => {
     let canceled = false;
-
-    const load = async () => {
-      const entries = await Promise.all(
-        books.map(async (book) => {
-          try {
-            const api = getRendererApi();
-
-            if (book.format === 'pdf') {
-              const [highlightsResult, bookmarksResult] = await Promise.all([
-                api.highlights.list({ bookId: book.id }),
-                api.bookmarks.list({ bookId: book.id })
-              ]);
-
-              return [
-                book.id,
-                {
-                  highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
-                  bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
-                }
-              ] as const;
-            }
-
-            const [highlightsResult, bookmarksResult] = await Promise.all([
-              api.epubHighlights.list({ bookId: book.id }),
-              api.epubBookmarks.list({ bookId: book.id })
-            ]);
-
-            return [
-              book.id,
-              {
-                highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
-                bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
-              }
-            ] as const;
-          } catch {
-            return [
-              book.id,
-              {
-                highlightCount: 0,
-                bookmarkCount: 0
-              }
-            ] as const;
-          }
-        })
-      );
-
-      if (!canceled) {
-        setActivity(Object.fromEntries(entries));
-      }
-    };
 
     if (books.length === 0) {
       setActivity({});
@@ -340,12 +376,62 @@ export function useLibraryBookActivity(books: Book[]) {
       };
     }
 
-    void load();
+    setActivity(Object.fromEntries(books.map((book) => [book.id, getActivityFallback()])));
+
+    for (const book of books) {
+      void withTimeout(
+        (async () => {
+          const api = getRendererApi();
+
+          if (book.format === 'pdf') {
+            const [highlightsResult, bookmarksResult] = await Promise.all([
+              api.highlights.list({ bookId: book.id }),
+              api.bookmarks.list({ bookId: book.id })
+            ]);
+
+            return {
+              highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
+              bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
+            };
+          }
+
+          const [highlightsResult, bookmarksResult] = await Promise.all([
+            api.epubHighlights.list({ bookId: book.id }),
+            api.epubBookmarks.list({ bookId: book.id })
+          ]);
+
+          return {
+            highlightCount: highlightsResult.ok ? highlightsResult.highlights.length : 0,
+            bookmarkCount: bookmarksResult.ok ? bookmarksResult.bookmarks.length : 0
+          };
+        })(),
+        10000,
+        `Timed out while loading activity for ${book.title}`
+      )
+        .then((summary) => {
+          if (canceled) {
+            return;
+          }
+          setActivity((current) => ({
+            ...current,
+            [book.id]: summary
+          }));
+        })
+        .catch(() => {
+          if (canceled) {
+            return;
+          }
+          setActivity((current) => ({
+            ...current,
+            [book.id]: getActivityFallback()
+          }));
+        });
+    }
 
     return () => {
       canceled = true;
     };
-  }, [books]);
+  }, [books, refreshSignal]);
 
   return activity;
 }

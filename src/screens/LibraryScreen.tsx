@@ -5,6 +5,7 @@ import type { Book } from '../../shared/ipc';
 
 type Props = {
   books: Book[];
+  refreshKey?: number;
   loading: boolean;
   error: string | null;
   onOpen: (book: Book) => void;
@@ -17,6 +18,7 @@ type Props = {
 
 export function LibraryScreen({
   books,
+  refreshKey = 0,
   loading,
   error,
   onOpen,
@@ -49,6 +51,7 @@ export function LibraryScreen({
     <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
       <LibraryCard
         books={books}
+        refreshKey={refreshKey}
         loading={loading}
         error={error}
         notice={notice}

@@ -394,6 +394,8 @@ export function FlowDocumentReader({
   const chapterRefs = React.useRef<Array<HTMLElement | null>>([]);
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchFlashTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestChapterIndexRef = React.useRef(0);
+  const latestScrollRatioRef = React.useRef(0);
   const restoreDoneRef = React.useRef(false);
   const initialLocationAppliedRef = React.useRef(false);
   const [documentData, setDocumentData] = React.useState<FlowReaderDocument | null>(null);
@@ -474,21 +476,49 @@ export function FlowDocumentReader({
       if (!window.api?.flowProgress) {
         return;
       }
+      latestChapterIndexRef.current = Math.max(0, chapterIndex);
+      latestScrollRatioRef.current = clampRatio(scrollRatio);
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
       }
       saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
         void window.api.flowProgress
           .set({
             bookId,
-            chapterIndex: Math.max(0, chapterIndex),
-            scrollRatio: clampRatio(scrollRatio)
+            chapterIndex: latestChapterIndexRef.current,
+            scrollRatio: latestScrollRatioRef.current
           })
           .catch(() => undefined);
       }, 250);
     },
     [bookId]
   );
+
+  const flushProgressSave = React.useCallback(() => {
+    if (!window.api?.flowProgress) {
+      return;
+    }
+
+    const container = scrollContainerRef.current;
+    if (container) {
+      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+      latestScrollRatioRef.current = maxScroll > 0 ? clampRatio(container.scrollTop / maxScroll) : 0;
+    }
+
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    void window.api.flowProgress
+      .set({
+        bookId,
+        chapterIndex: latestChapterIndexRef.current,
+        scrollRatio: latestScrollRatioRef.current
+      })
+      .catch(() => undefined);
+  }, [bookId]);
 
   const openSearchPanel = React.useCallback(() => {
     setBookmarksPanelOpen(false);
@@ -787,6 +817,7 @@ export function FlowDocumentReader({
       const chapterId = documentData.chapters[nextChapterIndex]?.id ?? `${namespace}-chapter-${nextChapterIndex}`;
       setCurrentLocation(serializeFlowPointLocation(namespace, { chapterId, blockId: activeBlockId }));
       setActiveChapterIndex(nextChapterIndex);
+      latestChapterIndexRef.current = nextChapterIndex;
 
       const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
       const ratio = maxScroll > 0 ? container.scrollTop / maxScroll : 0;
@@ -829,14 +860,12 @@ export function FlowDocumentReader({
 
   React.useEffect(() => {
     return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
+      flushProgressSave();
       if (searchFlashTimerRef.current) {
         clearTimeout(searchFlashTimerRef.current);
       }
     };
-  }, []);
+  }, [flushProgressSave]);
 
   React.useEffect(() => {
     const closeOnPointerDown = (event: PointerEvent) => {
@@ -1032,6 +1061,7 @@ export function FlowDocumentReader({
               variant="outline"
               size="sm"
               onClick={() => {
+                flushProgressSave();
                 flushReadingStats();
                 onBack();
               }}

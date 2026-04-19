@@ -95,6 +95,7 @@ export default function App() {
   const [activePdfData, setActivePdfData] = React.useState<{ base64: string; title: string } | null>(null);
   const [readerInitialPage, setReaderInitialPage] = React.useState<number | null>(null);
   const [readerInitialCfi, setReaderInitialCfi] = React.useState<string | null>(null);
+  const [libraryRefreshKey, setLibraryRefreshKey] = React.useState(0);
 
   const handleResult = React.useCallback(
     <
@@ -155,6 +156,7 @@ export default function App() {
     setError(null);
     try {
       await loadBooks();
+      setLibraryRefreshKey((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -174,6 +176,7 @@ export default function App() {
       }
 
       await loadBooks();
+      setLibraryRefreshKey((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -194,6 +197,7 @@ export default function App() {
 
       setCurrentView('library');
       await loadBooks();
+      setLibraryRefreshKey((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -242,6 +246,7 @@ export default function App() {
 
   const onBackToLibrary = () => {
     resetReaderState();
+    setLibraryRefreshKey((value) => value + 1);
     setCurrentView('library');
   };
 
@@ -297,6 +302,7 @@ export default function App() {
       }
 
       await loadBooks();
+      setLibraryRefreshKey((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -397,6 +403,7 @@ export default function App() {
       return (
         <LibraryScreen
           books={books}
+          refreshKey={libraryRefreshKey}
           loading={loading}
           error={error}
           onOpen={onOpenBook}
