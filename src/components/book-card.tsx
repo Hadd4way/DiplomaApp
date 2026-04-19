@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { Book } from '../../shared/ipc';
 import type { BookActivitySummary, BookMetric } from '@/lib/library-metrics';
 import { cn } from '@/lib/utils';
@@ -33,12 +34,6 @@ type Props = {
   lastOpenedAt?: number | null;
   variant?: 'library' | 'continue';
 };
-
-const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric'
-});
 
 function getInitials(title: string) {
   return title
@@ -62,7 +57,15 @@ function getPlaceholderPalette(seed: string) {
   return palettes[value % palettes.length];
 }
 
-function PlaceholderCover({ title, author }: { title: string; author: string | null | undefined }) {
+function PlaceholderCover({
+  title,
+  author,
+  fallbackAuthor
+}: {
+  title: string;
+  author: string | null | undefined;
+  fallbackAuthor: string;
+}) {
   const [gradient, badgeBackground, textColor] = getPlaceholderPalette(`${title}:${author ?? ''}`);
   const initials = getInitials(title);
 
@@ -75,7 +78,7 @@ function PlaceholderCover({ title, author }: { title: string; author: string | n
         </div>
         <div className="space-y-1">
           <p className={cn('line-clamp-3 text-xs font-semibold leading-4', textColor)}>{title}</p>
-          <p className="line-clamp-2 text-[11px] text-black/60">{author || 'Unknown author'}</p>
+          <p className="line-clamp-2 text-[11px] text-black/60">{author || fallbackAuthor}</p>
         </div>
       </div>
     </div>
@@ -101,8 +104,20 @@ export function BookCard({
   lastOpenedAt,
   variant = 'library'
 }: Props) {
+  const { language, t } = useLanguage();
   const [confirmOpen, setConfirmOpen] = React.useState(false);
-  const metadataLabel = lastOpenedAt ? `Opened ${createdAtFormatter.format(lastOpenedAt)}` : `Added ${createdAtFormatter.format(book.createdAt)}`;
+  const createdAtFormatter = React.useMemo(
+    () =>
+      new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }),
+    [language]
+  );
+  const metadataLabel = lastOpenedAt
+    ? `${t.bookCard.openedOn} ${createdAtFormatter.format(lastOpenedAt)}`
+    : `${t.bookCard.addedOn} ${createdAtFormatter.format(book.createdAt)}`;
   const isContinueCard = variant === 'continue';
   const authorLine = [book.author, book.publishYear ? String(book.publishYear) : null].filter(Boolean).join(' • ');
 
@@ -130,8 +145,8 @@ export function BookCard({
               className="absolute right-2 top-2 z-10 h-8 w-8 p-0"
               disabled={loading}
               onClick={(event) => event.stopPropagation()}
-              title="Book actions"
-              aria-label={`Actions for ${book.title}`}
+              title={t.bookCard.bookActions}
+              aria-label={`${t.bookCard.actionsFor} ${book.title}`}
             >
               <MoreHorizontal className="h-4 w-4" />
             </Button>
@@ -144,7 +159,7 @@ export function BookCard({
               }}
             >
               <FolderOpen className="mr-2 h-4 w-4" />
-              Show in folder
+              {t.bookCard.showInFolder}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
@@ -154,7 +169,7 @@ export function BookCard({
               }}
             >
               <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+              {t.bookCard.delete}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -164,19 +179,19 @@ export function BookCard({
           className="flex h-full w-full items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onOpen(book)}
           disabled={loading}
-          aria-label={`Open ${book.title}`}
+          aria-label={`${t.bookCard.openBook} ${book.title}`}
         >
           <div className="flex h-full w-full items-center justify-center px-6">
             <div className="h-36 w-28 overflow-hidden rounded-2xl border border-white/50 bg-background/85 shadow-lg shadow-black/5 backdrop-blur">
               {book.coverUrl ? (
                 <img
                   src={book.coverUrl}
-                  alt={`${book.title} cover`}
+                  alt={`${book.title} ${t.discover.coverAlt}`}
                   className="h-full w-full object-cover"
                   loading="lazy"
                 />
               ) : (
-                <PlaceholderCover title={book.title} author={book.author} />
+                <PlaceholderCover title={book.title} author={book.author} fallbackAuthor={t.bookCard.unknownAuthor} />
               )}
             </div>
           </div>
@@ -200,7 +215,7 @@ export function BookCard({
             onOpen(book);
           }
         }}
-        aria-label={`Open ${book.title}`}
+        aria-label={`${t.bookCard.openBook} ${book.title}`}
       >
         <CardContent className={cn('space-y-3 p-4', isContinueCard ? 'pb-5' : '')}>
           <div className="flex min-h-[128px] flex-col">
@@ -226,8 +241,8 @@ export function BookCard({
 
           <div className="flex min-h-[78px] flex-col justify-between space-y-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-3">
             <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-              <span>{metric?.currentLocationLabel ?? (book.format === 'pdf' ? 'Opening position unavailable' : 'Continue Reading')}</span>
-              <span>{metric?.pageCountLabel ?? 'Loading progress...'}</span>
+              <span>{metric?.currentLocationLabel ?? (book.format === 'pdf' ? t.bookCard.positionUnavailable : t.bookCard.continueReading)}</span>
+              <span>{metric?.pageCountLabel ?? t.bookCard.loadingProgress}</span>
             </div>
             {!isContinueCard ? (
               <div className="space-y-1">
@@ -237,10 +252,10 @@ export function BookCard({
                     style={{ width: `${Math.max(0, Math.min(100, metric?.progressPercent ?? 0))}%` }}
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground">{metric?.progressLabel ?? 'Loading progress...'}</p>
+                <p className="text-[11px] text-muted-foreground">{metric?.progressLabel ?? t.bookCard.loadingProgress}</p>
               </div>
             ) : (
-              <p className="text-sm font-medium text-foreground/90">{metric?.progressLabel ?? 'Loading progress...'}</p>
+              <p className="text-sm font-medium text-foreground/90">{metric?.progressLabel ?? t.bookCard.loadingProgress}</p>
             )}
           </div>
 
@@ -265,7 +280,7 @@ export function BookCard({
               }}
               disabled={loading}
             >
-              Open
+              {t.bookCard.open}
             </Button>
           </div>
         </CardContent>
@@ -274,19 +289,17 @@ export function BookCard({
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete book?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the book from your library and delete its local files.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t.bookCard.deleteTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.bookCard.deleteDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={loading}>{t.bookCard.cancel}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={loading}
               onClick={() => onDelete(book.id)}
             >
-              Delete
+              {t.bookCard.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

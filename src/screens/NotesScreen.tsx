@@ -13,6 +13,7 @@ import {
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 type Props = {
   books: Book[];
@@ -28,6 +29,7 @@ function formatDate(timestamp: number): string {
 }
 
 export function NotesScreen({ books, onOpenNote }: Props) {
+  const { t } = useLanguage();
   const [notes, setNotes] = React.useState<Note[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -124,7 +126,7 @@ export function NotesScreen({ books, onOpenNote }: Props) {
 
     const content = editContent.trim();
     if (!content) {
-      setEditError('Note content is required.');
+      setEditError(t.notes.editRequired);
       return;
     }
 
@@ -153,9 +155,9 @@ export function NotesScreen({ books, onOpenNote }: Props) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Notes</h2>
+        <h2 className="text-lg font-semibold">{t.notes.title}</h2>
         <Button type="button" variant="outline" size="sm" onClick={() => void loadNotes()} disabled={loading}>
-          Refresh
+          {t.notes.refresh}
         </Button>
       </div>
 
@@ -165,7 +167,7 @@ export function NotesScreen({ books, onOpenNote }: Props) {
           onChange={(event) => setSelectedBookId(event.target.value)}
           className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <option value="all">All books</option>
+          <option value="all">{t.notes.allBooks}</option>
           {books.map((book) => (
             <option key={book.id} value={book.id}>
               {book.title}
@@ -175,14 +177,14 @@ export function NotesScreen({ books, onOpenNote }: Props) {
         <Input
           value={queryInput}
           onChange={(event) => setQueryInput(event.target.value)}
-          placeholder="Search notes..."
+          placeholder={t.notes.searchPlaceholder}
         />
       </div>
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
-        {!loading && notes.length === 0 ? <p className="text-sm text-muted-foreground">No notes yet.</p> : null}
+        {!loading && notes.length === 0 ? <p className="text-sm text-muted-foreground">{t.notes.noNotes}</p> : null}
 
         {notes.map((note) => (
           <button
@@ -193,8 +195,8 @@ export function NotesScreen({ books, onOpenNote }: Props) {
           >
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold">{titleByBookId.get(note.bookId) ?? 'Unknown book'}</p>
-                <p className="text-xs text-muted-foreground">Page {note.page}</p>
+                <p className="text-sm font-semibold">{titleByBookId.get(note.bookId) ?? t.notes.unknownBook}</p>
+                <p className="text-xs text-muted-foreground">{t.notes.page} {note.page}</p>
               </div>
               <div className="flex items-center gap-1">
                 <Button
@@ -206,7 +208,7 @@ export function NotesScreen({ books, onOpenNote }: Props) {
                     handleOpenEdit(note);
                   }}
                 >
-                  Edit
+                  {t.notes.edit}
                 </Button>
                 <Button
                   type="button"
@@ -217,12 +219,12 @@ export function NotesScreen({ books, onOpenNote }: Props) {
                     setDeleteTarget(note);
                   }}
                 >
-                  Delete
+                  {t.notes.delete}
                 </Button>
               </div>
             </div>
             <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{note.content}</p>
-            <p className="mt-2 text-xs text-muted-foreground">Updated {formatDate(note.updatedAt)}</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t.notes.updated} {formatDate(note.updatedAt)}</p>
           </button>
         ))}
       </div>
@@ -230,13 +232,13 @@ export function NotesScreen({ books, onOpenNote }: Props) {
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => (open ? undefined : setDeleteTarget(null))}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete note?</AlertDialogTitle>
-            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+            <AlertDialogTitle>{t.notes.deleteTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.notes.deleteDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>{t.notes.cancel}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void handleDelete()} disabled={deleteLoading}>
-              Delete
+              {t.notes.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -244,10 +246,10 @@ export function NotesScreen({ books, onOpenNote }: Props) {
 
       <NoteEditorDialog
         open={Boolean(editTarget)}
-        title="Edit note"
+        title={t.notes.editTitle}
         subtitle={
           editTarget
-            ? `${titleByBookId.get(editTarget.bookId) ?? 'Unknown book'} - page ${editTarget.page}`
+            ? `${titleByBookId.get(editTarget.bookId) ?? t.notes.unknownBook} - ${t.notes.subtitlePage} ${editTarget.page}`
             : undefined
         }
         value={editContent}

@@ -8,6 +8,7 @@ import type {
   ReaderTheme,
   TextSizePreset
 } from '../../shared/ipc';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import type { ReaderThemePalette } from '@/lib/reader-theme';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
@@ -82,6 +83,7 @@ export function ReaderSettingsPanel({
   palette,
   className
 }: Props) {
+  const { t } = useLanguage();
   const [draftFontSize, setDraftFontSize] = React.useState(settings.epubFontSize);
   const [draftLineHeight, setDraftLineHeight] = React.useState(settings.epubLineHeight);
 
@@ -140,14 +142,14 @@ export function ReaderSettingsPanel({
           color: value ? palette.accentText : palette.buttonText
         }}
       >
-        {value ? 'On' : 'Off'}
+        {value ? t.readerPanels.on : t.readerPanels.off}
       </span>
     </button>
   );
 
   return (
     <ReaderSidePanel
-      title="Reader Settings"
+      title={t.readerPanels.readerSettings}
       settings={settings}
       open={open}
       onClose={onClose}
@@ -156,7 +158,7 @@ export function ReaderSettingsPanel({
       className={cn('backdrop-blur-xl', className)}
     >
       <div className="space-y-4 p-1">
-        <Section title="Theme" description="Shared reader chrome for PDF and all flow formats.">
+        <Section title={t.readerPanels.theme} description={t.readerPanels.themeDescription}>
           <div
             className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"
             style={{ borderColor: palette.chromeBorder, backgroundColor: palette.accentBg }}
@@ -179,17 +181,17 @@ export function ReaderSettingsPanel({
         </Section>
 
         <Section
-          title="Typography"
+          title={t.readerPanels.typography}
           description={
             isFlowFormat
-              ? 'Live flow-reader typography adjustments for comfort and focus.'
-              : 'Typography controls become active when you open an EPUB, FB2, or TXT book.'
+              ? t.readerPanels.typographyFlowDescription
+              : t.readerPanels.typographyLockedDescription
           }
         >
           <div className={cn('space-y-4 transition-opacity duration-200', isFlowFormat ? 'opacity-100' : 'opacity-50')}>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs" style={{ color: palette.mutedText }}>
-                <span>Font Size</span>
+                <span>{t.readerPanels.fontSize}</span>
                 <span>{settings.epubFontSize}%</span>
               </div>
               <input
@@ -211,7 +213,7 @@ export function ReaderSettingsPanel({
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs" style={{ color: palette.mutedText }}>
-                <span>Line Height</span>
+                <span>{t.readerPanels.lineHeight}</span>
                 <span>{settings.epubLineHeight.toFixed(1)}</span>
               </div>
               <input
@@ -233,7 +235,7 @@ export function ReaderSettingsPanel({
 
             <div className="space-y-2">
               <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
-                Margins
+                {t.readerPanels.margins}
               </div>
               <div
                 className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"
@@ -259,7 +261,7 @@ export function ReaderSettingsPanel({
 
             <div className="space-y-2">
               <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
-                Font Family
+                {t.readerPanels.fontFamily}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {EPUB_FONTS.map((font) => {
@@ -284,25 +286,25 @@ export function ReaderSettingsPanel({
         </Section>
 
         <Section
-          title="Accessibility"
-          description="Inclusive reading support across flow content and the reader interface."
+          title={t.readerPanels.accessibility}
+          description={t.readerPanels.accessibilityDescription}
         >
           <div className="space-y-3">
             {renderToggle(
-              'Dyslexia Friendly Mode',
-              'Uses a dyslexia-friendly font stack, adds spacing, and relaxes line height for easier tracking.',
+              t.readerPanels.dyslexiaFriendly,
+              t.readerPanels.dyslexiaFriendlyDescription,
               settings.dyslexiaFriendlyMode,
               'dyslexiaFriendlyMode'
             )}
             {renderToggle(
-              'High Contrast Mode',
-              'Overrides the standard theme with stronger contrast, borders, and clearer controls.',
+              t.readerPanels.highContrast,
+              t.readerPanels.highContrastDescription,
               settings.highContrastMode,
               'highContrastMode'
             )}
             <div className="space-y-2">
               <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
-                Text Size Preset
+                {t.readerPanels.textSizePreset}
               </div>
               <div className="grid grid-cols-1 gap-2">
                 {TEXT_SIZE_PRESETS.map((preset) => {
@@ -323,8 +325,8 @@ export function ReaderSettingsPanel({
               </div>
             </div>
             {renderToggle(
-              'Reduce Motion',
-              'Turns off transitions, animations, and smooth scrolling where possible.',
+              t.readerPanels.reduceMotion,
+              t.readerPanels.reduceMotionDescription,
               settings.reduceMotion,
               'reduceMotion'
             )}
@@ -332,17 +334,17 @@ export function ReaderSettingsPanel({
         </Section>
 
         <Section
-          title="PDF Display"
+          title={t.readerPanels.pdfDisplay}
           description={
             format === 'pdf'
-              ? 'Set the page shell mood and default page fitting.'
-              : 'PDF display controls become active when you open a PDF.'
+              ? t.readerPanels.pdfDescription
+              : t.readerPanels.pdfLockedDescription
           }
         >
           <div className={cn('space-y-4 transition-opacity duration-200', format === 'pdf' ? 'opacity-100' : 'opacity-50')}>
             <div className="space-y-2">
               <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
-                Background Around Page
+                {t.readerPanels.backgroundAroundPage}
               </div>
               <div
                 className="grid grid-cols-3 gap-2 rounded-2xl border p-1.5"
@@ -368,7 +370,7 @@ export function ReaderSettingsPanel({
 
             <div className="space-y-2">
               <div className="text-xs font-medium" style={{ color: palette.mutedText }}>
-                Zoom Preset
+                {t.readerPanels.zoomPreset}
               </div>
               <div className="grid grid-cols-1 gap-2">
                 {PDF_ZOOM_PRESETS.map((preset) => {

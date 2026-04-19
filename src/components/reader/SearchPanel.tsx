@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 
 export type ReaderSearchResultItem = {
@@ -54,12 +55,13 @@ export function SearchPanel({
   emptyQueryMessage = 'Type a query to search this book.',
   noResultsMessage = 'No matches found.'
 }: SearchPanelProps) {
+  const { t } = useLanguage();
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   return (
     <ReaderSidePanel
       open={open}
-      title="Search"
+      title={t.readerPanels.search}
       settings={settings}
       onClose={onClose}
       icon={<Search className="h-4 w-4" />}
@@ -86,7 +88,7 @@ export function SearchPanel({
               }
             }}
             placeholder={placeholder}
-            aria-label="Search in document"
+            aria-label={t.readerPanels.searchInDocument}
             style={{
               backgroundColor: palette.inputBg,
               borderColor: palette.buttonBorder,
@@ -102,7 +104,7 @@ export function SearchPanel({
               disabled={results.length === 0}
               style={getReaderButtonStyles(settings)}
             >
-              Prev
+              {t.readerPanels.prev}
             </Button>
             <Button
               type="button"
@@ -112,19 +114,19 @@ export function SearchPanel({
               disabled={results.length === 0}
               style={getReaderButtonStyles(settings)}
             >
-              Next
+              {t.readerPanels.next}
             </Button>
             <span className="text-xs" style={{ color: palette.mutedText }}>
               {results.length > 0 && activeIndex >= 0 ? `${activeIndex + 1} / ${results.length}` : `0 / ${results.length}`}
             </span>
           </div>
           <p className="text-xs" style={{ color: palette.mutedText }}>
-            {isSearching ? 'Searching...' : `${results.length} results`}
+            {isSearching ? t.readerPanels.searching : `${results.length} ${t.readerPanels.results}`}
           </p>
         </div>
-        {!query.trim() ? <p className="text-xs" style={{ color: palette.mutedText }}>{emptyQueryMessage}</p> : null}
+        {!query.trim() ? <p className="text-xs" style={{ color: palette.mutedText }}>{emptyQueryMessage === 'Type a query to search this book.' ? t.readerPanels.emptyQuery : emptyQueryMessage}</p> : null}
         {query.trim() && !isSearching && results.length === 0 ? (
-          <p className="text-xs" style={{ color: palette.mutedText }}>{noResultsMessage}</p>
+          <p className="text-xs" style={{ color: palette.mutedText }}>{noResultsMessage === 'No matches found.' ? t.readerPanels.noResults : noResultsMessage}</p>
         ) : null}
         <div className="space-y-2">
           {results.map((result, index) => {

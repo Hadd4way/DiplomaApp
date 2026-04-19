@@ -3,6 +3,7 @@ import type { ReaderSettings } from '../../../shared/ipc';
 import { Highlighter, MessageSquare, Trash2 } from 'lucide-react';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 
 export type ReaderHighlightItem = {
@@ -34,14 +35,14 @@ function formatCreatedAt(value: number): string {
   return new Date(value).toLocaleString();
 }
 
-function getLocationLabel(item: ReaderHighlightItem): string {
+function getLocationLabel(item: ReaderHighlightItem, pageLabel: string, flowLabel: string, fallbackLabel: string): string {
   if (typeof item.page === 'number' && Number.isFinite(item.page)) {
-    return `Page ${item.page}`;
+    return `${pageLabel} ${item.page}`;
   }
   if (item.cfiRange) {
-    return 'Flow highlight';
+    return flowLabel;
   }
-  return 'Highlight';
+  return fallbackLabel;
 }
 
 export function HighlightsPanel({
@@ -56,6 +57,7 @@ export function HighlightsPanel({
   rightOffset = 12,
   emptyMessage = 'No highlights for this book.'
 }: HighlightsPanelProps) {
+  const { t } = useLanguage();
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   return (
@@ -70,7 +72,7 @@ export function HighlightsPanel({
       <div className="space-y-2">
         {items.length === 0 ? (
           <p className="text-xs" style={{ color: palette.mutedText }}>
-            {emptyMessage}
+            {emptyMessage === 'No highlights for this book.' ? t.readerPanels.noHighlights : emptyMessage}
           </p>
         ) : null}
         {items.map((item) => (
@@ -82,10 +84,10 @@ export function HighlightsPanel({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: palette.mutedText }}>
-                  {getLocationLabel(item)}
+                  {getLocationLabel(item, t.hub.page, t.readerPanels.flowHighlight, t.readerPanels.highlight)}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed" style={{ color: palette.chromeText }}>
-                  {item.text ?? '(highlight without text)'}
+                  {item.text ?? t.readerPanels.highlightWithoutText}
                 </p>
                 {item.note ? (
                   <div
@@ -94,7 +96,7 @@ export function HighlightsPanel({
                   >
                     <p className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: palette.accentText }}>
                       <MessageSquare className="h-3 w-3" />
-                      Note
+                      {t.readerPanels.note}
                     </p>
                     <p className="mt-1 whitespace-pre-wrap text-xs" style={{ color: palette.chromeText }}>
                       {item.note}
@@ -113,7 +115,7 @@ export function HighlightsPanel({
                   onClick={() => onJumpToItem(item)}
                   style={getReaderButtonStyles(settings)}
                 >
-                  Jump
+                  {t.readerPanels.jump}
                 </Button>
                 {onEditNote ? (
                   <Button
@@ -123,7 +125,7 @@ export function HighlightsPanel({
                     onClick={() => onEditNote(item)}
                     style={getReaderButtonStyles(settings)}
                   >
-                    {item.note ? 'Edit note' : 'Add note'}
+                    {item.note ? t.readerPanels.editNote : t.readerPanels.addNote}
                   </Button>
                 ) : null}
                 <button
@@ -137,7 +139,7 @@ export function HighlightsPanel({
                   onClick={() => onDeleteItem(item)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Delete
+                  {t.readerPanels.delete}
                 </button>
               </div>
             </div>

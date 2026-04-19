@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 
 export type KnowledgeHubItem = {
@@ -37,13 +38,6 @@ type Props = {
 type SortOption = 'newest' | 'oldest' | 'book-title';
 type TypeFilter = 'all' | 'highlight' | 'note';
 type RecentFilter = 'all' | '7d' | '30d';
-
-function formatDate(timestamp: number): string {
-  if (!Number.isFinite(timestamp)) {
-    return '';
-  }
-  return new Date(timestamp).toLocaleString();
-}
 
 function getRecentThreshold(filter: RecentFilter): number | null {
   const now = Date.now();
@@ -71,6 +65,7 @@ function badgeClasses(type: KnowledgeHubItem['type']): string {
 }
 
 export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
+  const { language, t } = useLanguage();
   const [items, setItems] = React.useState<KnowledgeHubItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -86,6 +81,20 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const [editValue, setEditValue] = React.useState('');
   const [editError, setEditError] = React.useState<string | null>(null);
   const [editLoading, setEditLoading] = React.useState(false);
+  const dateFormatter = React.useMemo(
+    () => new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    [language]
+  );
+
+  const formatDate = React.useCallback(
+    (timestamp: number): string => {
+      if (!Number.isFinite(timestamp)) {
+        return '';
+      }
+      return dateFormatter.format(new Date(timestamp));
+    },
+    [dateFormatter]
+  );
 
   const loadAnnotations = React.useCallback(async () => {
     if (!window.api) {
@@ -93,19 +102,18 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       setItems([]);
       return;
     }
-    const api = window.api;
 
     setLoading(true);
     setError(null);
     try {
-      const notesPromise = api.notes.list({ bookId: null, q: null });
+      const notesPromise = window.api.notes.list({ bookId: null, q: null });
       const highlightPromises = books.map(async (book) => {
         if (book.format === 'pdf') {
-          const result = await api.highlights.list({ bookId: book.id });
+          const result = await window.api!.highlights.list({ bookId: book.id });
           return { book, result };
         }
 
-        const result = await api.epubHighlights.list({ bookId: book.id });
+        const result = await window.api!.epubHighlights.list({ bookId: book.id });
         return { book, result };
       });
 
@@ -117,7 +125,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       const nextItems: KnowledgeHubItem[] = [];
       if (notesResult.ok) {
         for (const note of notesResult.notes) {
-          const bookTitle = books.find((book) => book.id === note.bookId)?.title ?? 'Unknown book';
+          const bookTitle = books.find((book) => book.id === note.bookId)?.title ?? t.hub.unknownBook;
           nextItems.push({
             id: note.id,
             bookId: note.bookId,
@@ -159,7 +167,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [books]);
+  }, [books, t.hub.unknownBook]);
 
   React.useEffect(() => {
     void loadAnnotations();
@@ -191,7 +199,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         return a.createdAt - b.createdAt;
       }
       if (sortBy === 'book-title') {
-        const titleCompare = a.bookTitle.localeCompare(b.bookTitle);
+        const titleCompare = a.bookTitle.localeCompare(b.bookTitle, language === 'ru' ? 'ru-RU' : 'en-US');
         if (titleCompare !== 0) {
           return titleCompare;
         }
@@ -199,7 +207,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       }
       return b.createdAt - a.createdAt;
     });
-  }, [deferredQuery, items, recentThreshold, selectedBookId, selectedType, sortBy]);
+  }, [deferredQuery, items, language, recentThreshold, selectedBookId, selectedType, sortBy]);
 
   const summary = React.useMemo(() => {
     const notesCount = items.filter((item) => item.type === 'note').length;
@@ -240,7 +248,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
 
   const openEditDialog = React.useCallback((item: KnowledgeHubItem) => {
     setEditTarget(item);
-    setEditValue(item.type === 'note' ? item.note ?? '' : item.note ?? '');
+    setEditValue(item.note ?? '');
     setEditError(null);
   }, []);
 
@@ -251,7 +259,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
 
     const trimmedValue = editValue.trim();
     if (!trimmedValue) {
-      setEditError(editTarget.type === 'note' ? 'Note content is required.' : 'Note text is required.');
+      setEditError(editTarget.type === 'note' ? t.hub.noteRequired : t.hub.noteTextRequired);
       return;
     }
 
@@ -306,7 +314,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     } finally {
       setEditLoading(false);
     }
-  }, [editTarget, editValue]);
+  }, [editTarget, editValue, t.hub.noteRequired, t.hub.noteTextRequired]);
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
@@ -318,42 +326,28 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
               <div className="max-w-2xl space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-100">
                   <Brain className="h-3.5 w-3.5" />
-                  Second Brain
+                  {t.hub.secondBrain}
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-3xl font-semibold tracking-tight">Knowledge Hub</h2>
-                  <p className="max-w-xl text-sm leading-6 text-slate-300">
-                    Review ideas, patterns, and takeaways from every book in one place. Search your reading memory,
-                    refine it, and jump straight back into the source.
-                  </p>
+                  <h2 className="text-3xl font-semibold tracking-tight">{t.hub.title}</h2>
+                  <p className="max-w-xl text-sm leading-6 text-slate-300">{t.hub.description}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Items</p>
-                    <p className="mt-2 text-2xl font-semibold">{summary.total}</p>
-                  </CardContent>
-                </Card>
-                <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Highlights</p>
-                    <p className="mt-2 text-2xl font-semibold">{summary.highlights}</p>
-                  </CardContent>
-                </Card>
-                <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Notes</p>
-                    <p className="mt-2 text-2xl font-semibold">{summary.notes}</p>
-                  </CardContent>
-                </Card>
-                <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
-                  <CardContent className="p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-slate-300">Books</p>
-                    <p className="mt-2 text-2xl font-semibold">{summary.books}</p>
-                  </CardContent>
-                </Card>
+                {[
+                  [t.hub.items, summary.total],
+                  [t.hub.highlights, summary.highlights],
+                  [t.hub.notes, summary.notes],
+                  [t.hub.books, summary.books]
+                ].map(([label, value]) => (
+                  <Card key={label} className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
+                    <CardContent className="p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-300">{label}</p>
+                      <p className="mt-2 text-2xl font-semibold">{value}</p>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </div>
           </section>
@@ -363,65 +357,44 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.7fr))]">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={queryInput}
-                    onChange={(event) => setQueryInput(event.target.value)}
-                    placeholder="Search across highlights and notes..."
-                    className="pl-9"
-                  />
+                  <Input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={t.hub.searchPlaceholder} className="pl-9" />
                 </div>
-                <select
-                  value={selectedBookId}
-                  onChange={(event) => setSelectedBookId(event.target.value)}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="all">All books</option>
+                <select value={selectedBookId} onChange={(event) => setSelectedBookId(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="all">{t.hub.allBooks}</option>
                   {books.map((book) => (
                     <option key={book.id} value={book.id}>
                       {book.title}
                     </option>
                   ))}
                 </select>
-                <select
-                  value={selectedType}
-                  onChange={(event) => setSelectedType(event.target.value as TypeFilter)}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="all">All types</option>
-                  <option value="highlight">Highlights</option>
-                  <option value="note">Notes</option>
+                <select value={selectedType} onChange={(event) => setSelectedType(event.target.value as TypeFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="all">{t.hub.allTypes}</option>
+                  <option value="highlight">{t.hub.highlights}</option>
+                  <option value="note">{t.hub.notes}</option>
                 </select>
-                <select
-                  value={selectedRecent}
-                  onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="all">All time</option>
-                  <option value="7d">Recent 7 days</option>
-                  <option value="30d">Recent 30 days</option>
+                <select value={selectedRecent} onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="all">{t.hub.allTime}</option>
+                  <option value="7d">{t.hub.recent7}</option>
+                  <option value="30d">{t.hub.recent30}</option>
                 </select>
-                <select
-                  value={sortBy}
-                  onChange={(event) => setSortBy(event.target.value as SortOption)}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="newest">Newest</option>
-                  <option value="oldest">Oldest</option>
-                  <option value="book-title">Book title</option>
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortOption)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                  <option value="newest">{t.hub.newest}</option>
+                  <option value="oldest">{t.hub.oldest}</option>
+                  <option value="book-title">{t.hub.bookTitleSort}</option>
                 </select>
                 <Button type="button" variant="outline" onClick={() => void loadAnnotations()} disabled={loading}>
-                  Refresh
+                  {t.hub.refresh}
                 </Button>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
                   <Sparkles className="h-3.5 w-3.5" />
-                  {filteredItems.length} surfaced
+                  {filteredItems.length} {t.hub.surfaced}
                 </div>
                 <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
                   <Clock3 className="h-3.5 w-3.5" />
-                  Sorted by {sortBy === 'book-title' ? 'book title' : sortBy}
+                  {t.hub.sortedBy} {sortBy === 'book-title' ? t.hub.bookTitleSort : sortBy === 'newest' ? t.hub.newest : t.hub.oldest}
                 </div>
               </div>
             </div>
@@ -435,32 +408,22 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
                   <Brain className="h-10 w-10 text-slate-400" />
                   <div className="space-y-1">
-                    <p className="text-base font-medium text-slate-800">Your hub is quiet right now</p>
-                    <p className="text-sm text-slate-500">
-                      Add highlights or notes in any reader and they’ll appear here automatically.
-                    </p>
+                    <p className="text-base font-medium text-slate-800">{t.hub.quietTitle}</p>
+                    <p className="text-sm text-slate-500">{t.hub.quietDescription}</p>
                   </div>
                 </CardContent>
               </Card>
             ) : null}
 
             {filteredItems.map((item) => (
-              <Card
-                key={`${item.type}:${item.id}`}
-                className="overflow-hidden rounded-[24px] border-slate-200 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.06)]"
-              >
+              <Card key={`${item.type}:${item.id}`} className="overflow-hidden rounded-[24px] border-slate-200 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                 <CardContent className="p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 flex-1 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-base font-semibold text-slate-900">{item.bookTitle}</p>
-                        <span
-                          className={cn(
-                            'inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide',
-                            badgeClasses(item.type)
-                          )}
-                        >
-                          {item.type === 'highlight' ? 'Highlight' : 'Note'}
+                        <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide', badgeClasses(item.type))}>
+                          {item.type === 'highlight' ? t.hub.highlight : t.hub.note}
                         </span>
                         <span className="text-xs text-slate-400">{formatDate(item.createdAt)}</span>
                       </div>
@@ -469,7 +432,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                         <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4">
                           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
                             <Highlighter className="h-3.5 w-3.5" />
-                            Highlighted text
+                            {t.hub.highlightedText}
                           </div>
                           <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</p>
                         </div>
@@ -478,35 +441,28 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                       <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-4">
                         <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
                           <MessageSquare className="h-3.5 w-3.5" />
-                          Note text
+                          {t.hub.noteText}
                         </div>
-                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                          {item.note ?? 'No note yet.'}
-                        </p>
+                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.note ?? t.hub.noNoteYet}</p>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        {typeof item.page === 'number' ? <span>Page {item.page}</span> : null}
-                        {item.cfiRange ? <span className="truncate">Location jump ready</span> : null}
+                        {typeof item.page === 'number' ? <span>{t.hub.page} {item.page}</span> : null}
+                        {item.cfiRange ? <span className="truncate">{t.hub.locationReady}</span> : null}
                       </div>
                     </div>
 
                     <div className="flex shrink-0 flex-row gap-2 lg:w-[178px] lg:flex-col">
                       <Button type="button" onClick={() => onOpenItem(item)} className="flex-1 lg:w-full">
                         <BookOpen className="mr-2 h-4 w-4" />
-                        Open in book
+                        {t.hub.openInBook}
                       </Button>
                       <Button type="button" variant="outline" onClick={() => openEditDialog(item)} className="flex-1 lg:w-full">
-                        Edit note
+                        {t.hub.editNote}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setDeleteTarget(item)}
-                        className="flex-1 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 lg:w-full"
-                      >
+                      <Button type="button" variant="outline" onClick={() => setDeleteTarget(item)} className="flex-1 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 lg:w-full">
                         <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
+                        {t.hub.delete}
                       </Button>
                     </div>
                   </div>
@@ -520,17 +476,15 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => (open ? undefined : setDeleteTarget(null))}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this item?</AlertDialogTitle>
+            <AlertDialogTitle>{t.hub.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget?.type === 'highlight'
-                ? 'This highlight will be removed from the book and the Knowledge Hub.'
-                : 'This note will be removed from the book and the Knowledge Hub.'}
+              {deleteTarget?.type === 'highlight' ? t.hub.deleteHighlightDescription : t.hub.deleteNoteDescription}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>{t.hub.cancel}</AlertDialogCancel>
             <AlertDialogAction onClick={() => void handleDelete()} disabled={deleteLoading}>
-              Delete
+              {t.hub.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -538,8 +492,8 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
 
       <NoteEditorDialog
         open={Boolean(editTarget)}
-        title={editTarget?.type === 'highlight' ? 'Edit highlight note' : 'Edit note'}
-        subtitle={editTarget ? `${editTarget.bookTitle}${typeof editTarget.page === 'number' ? ` - page ${editTarget.page}` : ''}` : undefined}
+        title={editTarget?.type === 'highlight' ? t.hub.editHighlightNote : t.hub.editNoteTitle}
+        subtitle={editTarget ? `${editTarget.bookTitle}${typeof editTarget.page === 'number' ? ` - ${t.hub.page.toLowerCase()} ${editTarget.page}` : ''}` : undefined}
         value={editValue}
         onValueChange={setEditValue}
         error={editError}

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { ReaderSettings } from '../../../shared/ipc';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 
@@ -31,6 +32,7 @@ export function ReaderSidePanel({
   rightOffset = 12,
   headerActions
 }: Props) {
+  const { t } = useLanguage();
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
   if (!open) {
@@ -59,7 +61,7 @@ export function ReaderSidePanel({
         </div>
         <div className="flex items-center gap-2">
           {headerActions}
-          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings)}>
+          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings)} aria-label={t.notes.cancel}>
             <X className="h-4 w-4" />
           </Button>
         </div>

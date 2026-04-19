@@ -20,6 +20,7 @@ import { NotesScreen } from '@/screens/NotesScreen';
 import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 type ReaderRuntimeBoundaryProps = {
   children: React.ReactNode;
   onBack: () => void;
+  title: string;
+  backLabel: string;
+  fallbackMessage: string;
 };
 
 type ReaderRuntimeBoundaryState = {
@@ -61,12 +65,12 @@ class ReaderRuntimeBoundary extends React.Component<ReaderRuntimeBoundaryProps, 
     return (
       <div className="mx-auto flex w-full max-w-3xl items-start justify-center py-10">
         <Alert variant="destructive">
-          <AlertTitle>Reader crashed while opening this book</AlertTitle>
+          <AlertTitle>{this.props.title}</AlertTitle>
           <AlertDescription>
             <div className="space-y-3">
-              <p>{this.state.error.message || 'Unknown reader error.'}</p>
+              <p>{this.state.error.message || this.props.fallbackMessage}</p>
               <Button type="button" variant="outline" onClick={this.props.onBack}>
-                Back to Library
+                {this.props.backLabel}
               </Button>
             </div>
           </AlertDescription>
@@ -85,6 +89,7 @@ function getRendererApi() {
 }
 
 export default function App() {
+  const { t } = useLanguage();
   const { settings } = useReaderSettings();
   const palette = getReaderThemePalette(settings);
   const [loading, setLoading] = React.useState(false);
@@ -253,7 +258,7 @@ export default function App() {
   const onOpenNote = async (note: Note) => {
     const book = books.find((item) => item.id === note.bookId && item.format === 'pdf');
     if (!book) {
-      setError('Book for this note was not found.');
+      setError(t.app.noteBookNotFound);
       return;
     }
 
@@ -264,7 +269,7 @@ export default function App() {
   const onOpenKnowledgeHubItem = async (item: KnowledgeHubItem) => {
     const book = books.find((entry) => entry.id === item.bookId);
     if (!book) {
-      setError('Book for this annotation was not found.');
+      setError(t.app.annotationBookNotFound);
       return;
     }
 
@@ -321,7 +326,7 @@ export default function App() {
         }}
       >
         <div className="mx-auto w-full max-w-md">
-          <p className="text-sm" style={{ color: palette.mutedText }}>Loading library...</p>
+          <p className="text-sm" style={{ color: palette.mutedText }}>{t.app.loadingLibrary}</p>
         </div>
       </main>
     );
@@ -335,9 +340,9 @@ export default function App() {
         if (!activePdfData) {
           return (
             <PlaceholderScreen
-              title="PDF Reader"
-              description="Loading PDF..."
-              actionLabel="Back to Library"
+              title={t.app.pdfReader}
+              description={t.app.loadingPdf}
+              actionLabel={t.app.backToLibrary}
               onAction={onBackToLibrary}
             />
           );
@@ -347,6 +352,9 @@ export default function App() {
           <ReaderRuntimeBoundary
             key={`pdf:${activeBook.id}:${activePdfData.title}`}
             onBack={onBackToLibrary}
+            title={t.app.readerCrashedTitle}
+            backLabel={t.app.backToLibrary}
+            fallbackMessage={t.app.unknownReaderError}
           >
             <PdfReaderScreen
               title={activePdfData.title || activeBook.title}
@@ -419,8 +427,8 @@ export default function App() {
     if (currentView === 'import') {
       return (
         <PlaceholderScreen
-          title="Import"
-          actionLabel={loading ? 'Please wait...' : 'Select PDF/EPUB/FB2/TXT'}
+          title={t.app.importTitle}
+          actionLabel={loading ? t.library.pleaseWait : t.app.selectBookFile}
           actionDisabled={loading}
           onAction={onImportBook}
         />

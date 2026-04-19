@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BookOpen, BookOpenText, Compass, Download, Globe, LoaderCircle, Search, Sparkles } from 'lucide-react';
+import { BookOpen, BookOpenText, Download, Globe, LoaderCircle, Search, Sparkles } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import type {
   Book,
@@ -70,50 +71,50 @@ function getSourceLabel(source: DiscoverBookResult['source']) {
   return source === 'standardebooks' ? 'Standard Ebooks' : 'Project Gutenberg';
 }
 
-function getPremiumBadgeLabel(result: DiscoverBookResult) {
-  return result.source === 'standardebooks' ? 'Curated Edition' : null;
+function getPremiumBadgeLabel(result: DiscoverBookResult, t: ReturnType<typeof useLanguage>['t']) {
+  return result.source === 'standardebooks' ? t.discover.curatedEdition : null;
 }
 
-function getSourceDescription(sourceFilter: DiscoverSourceFilter) {
+function getSourceDescription(sourceFilter: DiscoverSourceFilter, t: ReturnType<typeof useLanguage>['t']) {
   if (sourceFilter === 'standardebooks') {
-    return 'Source: Standard Ebooks';
+    return t.discover.sourceStandardEbooks;
   }
   if (sourceFilter === 'gutenberg') {
-    return 'Source: Project Gutenberg';
+    return t.discover.sourceGutenberg;
   }
-  return 'Source: All Sources';
+  return t.discover.sourceAll;
 }
 
-function getSearchLoadingLabel(sourceFilter: DiscoverSourceFilter) {
+function getSearchLoadingLabel(sourceFilter: DiscoverSourceFilter, t: ReturnType<typeof useLanguage>['t']) {
   if (sourceFilter === 'standardebooks') {
-    return 'Searching Standard Ebooks...';
+    return t.discover.searchLoadingStandardEbooks;
   }
   if (sourceFilter === 'gutenberg') {
-    return 'Searching Project Gutenberg...';
+    return t.discover.searchLoadingGutenberg;
   }
-  return 'Searching all sources...';
+  return t.discover.searchLoadingAll;
 }
 
-function getEmptyStateTitle(sourceFilter: DiscoverSourceFilter) {
+function getEmptyStateTitle(sourceFilter: DiscoverSourceFilter, t: ReturnType<typeof useLanguage>['t']) {
   if (sourceFilter === 'standardebooks') {
-    return 'No Standard Ebooks titles matched that search.';
+    return t.discover.emptyStandardEbooks;
   }
   if (sourceFilter === 'gutenberg') {
-    return 'No Project Gutenberg books matched that search.';
+    return t.discover.emptyGutenberg;
   }
-  return 'No books matched that search across Standard Ebooks or Project Gutenberg.';
+  return t.discover.emptyAll;
 }
 
-function getFriendlyDiscoverError(error: string) {
+function getFriendlyDiscoverError(error: string, t: ReturnType<typeof useLanguage>['t']) {
   const normalized = error.toLocaleLowerCase();
   if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('failed to fetch')) {
-    return 'Network issue. Check your connection and try again.';
+    return t.discover.networkIssue;
   }
   if (normalized.includes('supported downloadable format') || normalized.includes('not supported')) {
-    return 'This edition does not have a format we can import yet.';
+    return t.discover.unsupportedFormat;
   }
   if (normalized.includes('failed to save imported book metadata') || normalized.includes('failed to copy') || normalized.includes('import')) {
-    return 'Import failed while adding the book to your local library. Please retry.';
+    return t.discover.importFailed;
   }
   return error;
 }
@@ -140,7 +141,15 @@ function getPlaceholderPalette(seed: string) {
   return palettes[value % palettes.length];
 }
 
-function PlaceholderCover({ title, author }: { title: string; author: string | null }) {
+function PlaceholderCover({
+  title,
+  author,
+  fallbackAuthor
+}: {
+  title: string;
+  author: string | null;
+  fallbackAuthor: string;
+}) {
   const [gradient, badgeBackground, textColor] = getPlaceholderPalette(`${title}:${author ?? ''}`);
   const initials = getInitials(title);
 
@@ -153,33 +162,33 @@ function PlaceholderCover({ title, author }: { title: string; author: string | n
         </div>
         <div className="space-y-1">
           <p className={cn('line-clamp-3 text-xs font-semibold leading-4', textColor)}>{title}</p>
-          <p className="line-clamp-2 text-[11px] text-black/60">{author || 'Unknown author'}</p>
+          <p className="line-clamp-2 text-[11px] text-black/60">{author || fallbackAuthor}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function getProgressLabel(downloadState: DownloadCardState) {
+function getProgressLabel(downloadState: DownloadCardState, t: ReturnType<typeof useLanguage>['t']) {
   if (downloadState.state === 'downloading') {
     return downloadState.progressPercent !== null
-      ? `Downloading... ${downloadState.progressPercent}%`
-      : 'Downloading...';
+      ? `${t.discover.downloading} ${downloadState.progressPercent}%`
+      : t.discover.downloading;
   }
 
   if (downloadState.state === 'importing') {
-    return 'Importing into your local library...';
+    return t.discover.importing;
   }
 
   if (downloadState.state === 'completed') {
-    return 'Downloaded successfully';
+    return t.discover.downloadedSuccessfully;
   }
 
   if (downloadState.state === 'failed') {
-    return downloadState.error ?? 'Download failed';
+    return downloadState.error ?? t.discover.downloadFailed;
   }
 
-  return 'Ready to download';
+  return t.discover.readyToDownload;
 }
 
 function createIdleState(): DownloadCardState {
@@ -193,6 +202,7 @@ function createIdleState(): DownloadCardState {
 }
 
 export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: Props) {
+  const { t } = useLanguage();
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
   const [sourceFilter, setSourceFilter] = React.useState<DiscoverSourceFilter>('all');
@@ -226,12 +236,12 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
             state: event.state,
             progressPercent: event.progressPercent,
             message: event.message,
-            error: event.state === 'failed' ? getFriendlyDiscoverError(event.message ?? 'Download failed.') : null
+            error: event.state === 'failed' ? getFriendlyDiscoverError(event.message ?? t.discover.downloadFailed, t) : null
           }
         };
       });
     });
-  }, []);
+  }, [t]);
 
   const runSearch = React.useCallback(async () => {
     const trimmedQuery = query.trim();
@@ -252,7 +262,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
         language: language.trim() || undefined
       });
       if (!response.ok) {
-        setError(getFriendlyDiscoverError(response.error));
+        setError(getFriendlyDiscoverError(response.error, t));
         setResults([]);
         return;
       }
@@ -261,11 +271,11 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
       setDownloadStates({});
     } catch (err) {
       setResults([]);
-      setError(getFriendlyDiscoverError(err instanceof Error ? err.message : String(err)));
+      setError(getFriendlyDiscoverError(err instanceof Error ? err.message : String(err), t));
     } finally {
       setLoading(false);
     }
-  }, [language, query, sourceFilter]);
+  }, [language, query, sourceFilter, t]);
 
   const performDownload = React.useCallback(
     async (result: DiscoverBookResult) => {
@@ -275,7 +285,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
           ...createIdleState(),
           state: 'downloading',
           progressPercent: 0,
-          message: 'Starting download...'
+          message: t.discover.startingDownload
         }
       }));
 
@@ -288,8 +298,8 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
             [result.id]: {
               ...(current[result.id] ?? createIdleState()),
               state: 'failed',
-              error: getFriendlyDiscoverError(response.error),
-              message: getFriendlyDiscoverError(response.error)
+              error: getFriendlyDiscoverError(response.error, t),
+              message: getFriendlyDiscoverError(response.error, t)
             }
           }));
           return;
@@ -303,12 +313,12 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
             state: 'completed',
             progressPercent: 100,
             importedBook: response.book,
-            message: 'Downloaded successfully',
+            message: t.discover.downloadedSuccessfully,
             error: null
           }
         }));
       } catch (err) {
-        const friendlyError = getFriendlyDiscoverError(err instanceof Error ? err.message : String(err));
+        const friendlyError = getFriendlyDiscoverError(err instanceof Error ? err.message : String(err), t);
         setDownloadStates((current) => ({
           ...current,
           [result.id]: {
@@ -320,7 +330,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
         }));
       }
     },
-    [onLibraryChanged]
+    [onLibraryChanged, t]
   );
 
   const requestDownload = React.useCallback(
@@ -351,15 +361,13 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <h1 className="text-3xl font-semibold tracking-tight">Discover Books</h1>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                  Search Project Gutenberg for breadth, Standard Ebooks for curated EPUBs, and bring great books into your local library.
-                </p>
+                <h1 className="text-3xl font-semibold tracking-tight">{t.discover.title}</h1>
+                <p className="max-w-2xl text-sm text-muted-foreground">{t.discover.subtitle}</p>
               </div>
             </div>
 
             <Button type="button" variant="outline" onClick={onBack}>
-              Back to Library
+              {t.discover.backToLibrary}
             </Button>
           </div>
 
@@ -370,7 +378,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search by title or author..."
+                  placeholder={t.discover.searchPlaceholder}
                   className="pl-9"
                 />
               </div>
@@ -378,26 +386,26 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
               <Input
                 value={language}
                 onChange={(event) => setLanguage(event.target.value)}
-                placeholder="Language code (optional, e.g. en)"
+                placeholder={t.discover.languagePlaceholder}
                 className="xl:max-w-60"
               />
 
               <Button type="submit" disabled={loading}>
                 {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Search
+                {t.discover.search}
               </Button>
             </div>
 
             <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
               <Globe className="h-3.5 w-3.5" />
-              {getSourceDescription(sourceFilter)}
+              {getSourceDescription(sourceFilter, t)}
             </div>
 
             <div className="flex flex-wrap gap-2">
               {([
-                ['all', 'All Sources'],
-                ['gutenberg', 'Gutenberg'],
-                ['standardebooks', 'Standard Ebooks']
+                ['all', t.discover.allSources],
+                ['gutenberg', t.discover.gutenberg],
+                ['standardebooks', t.discover.standardEbooks]
               ] as Array<[DiscoverSourceFilter, string]>).map(([value, label]) => (
                 <Button
                   key={value}
@@ -419,7 +427,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
         <div className="space-y-6">
           {error ? (
             <Alert variant="destructive">
-              <AlertTitle>Discover error</AlertTitle>
+              <AlertTitle>{t.discover.discoverErrorTitle}</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
@@ -431,10 +439,8 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                   <BookOpenText className="h-6 w-6 text-muted-foreground" />
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-xl font-semibold tracking-tight">Search free books from two public-domain sources</h2>
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    Explore Gutenberg for quantity and Standard Ebooks for polished curated editions, then download straight into your local collection.
-                  </p>
+                  <h2 className="text-xl font-semibold tracking-tight">{t.discover.introTitle}</h2>
+                  <p className="max-w-md text-sm text-muted-foreground">{t.discover.introDescription}</p>
                 </div>
               </CardContent>
             </Card>
@@ -442,16 +448,14 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
             <Card className="border-dashed bg-card/80">
               <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
                 <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{getSearchLoadingLabel(sourceFilter)}</p>
+                <p className="text-sm text-muted-foreground">{getSearchLoadingLabel(sourceFilter, t)}</p>
               </CardContent>
             </Card>
           ) : results.length === 0 ? (
             <Card className="border-dashed bg-card/80">
               <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <p className="text-sm font-medium">{getEmptyStateTitle(sourceFilter)}</p>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Try a broader title, another author spelling, or a different language code.
-                </p>
+                <p className="text-sm font-medium">{getEmptyStateTitle(sourceFilter, t)}</p>
+                <p className="max-w-md text-sm text-muted-foreground">{t.discover.emptyDescription}</p>
               </CardContent>
             </Card>
           ) : (
@@ -470,12 +474,12 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                             {result.coverUrl ? (
                               <img
                                 src={result.coverUrl}
-                                alt={`${result.title} cover`}
+                                alt={`${result.title} ${t.discover.coverAlt}`}
                                 className="h-full w-full object-cover"
                                 loading="lazy"
                               />
                             ) : (
-                              <PlaceholderCover title={result.title} author={result.author} />
+                              <PlaceholderCover title={result.title} author={result.author} fallbackAuthor={t.discover.unknownAuthor} />
                             )}
                           </div>
 
@@ -485,9 +489,9 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                                 <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                   {getSourceLabel(result.source)}
                                 </span>
-                                {getPremiumBadgeLabel(result) ? (
+                                {getPremiumBadgeLabel(result, t) ? (
                                   <span className="inline-flex rounded-full border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                                    {getPremiumBadgeLabel(result)}
+                                    {getPremiumBadgeLabel(result, t)}
                                   </span>
                                 ) : null}
                                 {result.formats.map((format) => (
@@ -504,7 +508,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                                 <p className="line-clamp-2 text-sm text-muted-foreground">{result.subtitle}</p>
                               ) : null}
                               <p className="line-clamp-2 text-sm text-muted-foreground">
-                                {[result.author || 'Unknown author', result.publishYear ? String(result.publishYear) : null]
+                                {[result.author || t.discover.unknownAuthor, result.publishYear ? String(result.publishYear) : null]
                                   .filter(Boolean)
                                   .join(' • ')}
                               </p>
@@ -515,14 +519,14 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                             ) : null}
 
                             <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
-                              <p>Language: {result.languages.length > 0 ? result.languages.join(', ') : 'Unknown'}</p>
-                              <p>Source: {getSourceLabel(result.source)}</p>
-                              <p>Year: {result.publishYear ?? 'Unknown'}</p>
-                              <p>Format: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
+                              <p>{t.discover.language}: {result.languages.length > 0 ? result.languages.join(', ') : t.discover.unknown}</p>
+                              <p>{t.discover.source}: {getSourceLabel(result.source)}</p>
+                              <p>{t.discover.year}: {result.publishYear ?? t.discover.unknown}</p>
+                              <p>{t.discover.format}: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
                               <p>
                                 {result.source === 'standardebooks'
-                                  ? 'Edition: Premium EPUB'
-                                  : `Downloads: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : 'Unknown'}`}
+                                  ? t.discover.editionPremium
+                                  : `${t.discover.downloads}: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : t.discover.unknown}`}
                               </p>
                             </div>
                           </div>
@@ -530,14 +534,14 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
 
                         {likelyDuplicate ? (
                           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                            A local book with the same title and author already exists.
+                            {t.discover.sameTitleAuthorExists}
                           </div>
                         ) : null}
 
-                        {(downloadState.state === 'downloading' || downloadState.state === 'importing') ? (
+                        {downloadState.state === 'downloading' || downloadState.state === 'importing' ? (
                           <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-3">
                             <div className="flex items-center justify-between gap-3 text-sm">
-                              <span className="font-medium">{getProgressLabel(downloadState)}</span>
+                              <span className="font-medium">{getProgressLabel(downloadState, t)}</span>
                               {downloadState.progressPercent !== null ? (
                                 <span className="text-muted-foreground">{downloadState.progressPercent}%</span>
                               ) : null}
@@ -557,16 +561,16 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                         {downloadState.state === 'completed' && downloadState.importedBook ? (
                           <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
                             <div>
-                              <p className="font-medium text-emerald-950">Downloaded successfully</p>
-                              <p className="text-sm text-emerald-900/80">Your book is now part of the local library.</p>
+                              <p className="font-medium text-emerald-950">{t.discover.downloadedSuccessfully}</p>
+                              <p className="text-sm text-emerald-900/80">{t.discover.localLibraryDescription}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <Button type="button" size="sm" onClick={() => void onOpenBook(downloadState.importedBook!)}>
+                              <Button type="button" size="sm" onClick={() => void onOpenBook(downloadState.importedBook)}>
                                 <BookOpen className="h-4 w-4" />
-                                Open Now
+                                {t.discover.openNow}
                               </Button>
                               <Button type="button" size="sm" variant="outline" onClick={onBack}>
-                                Show in Library
+                                {t.discover.showInLibrary}
                               </Button>
                             </div>
                           </div>
@@ -575,12 +579,12 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                         {downloadState.state === 'failed' ? (
                           <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3">
                             <div>
-                              <p className="font-medium text-rose-950">Download failed</p>
-                              <p className="text-sm text-rose-900/80">{downloadState.error ?? 'Please try again.'}</p>
+                              <p className="font-medium text-rose-950">{t.discover.downloadFailed}</p>
+                              <p className="text-sm text-rose-900/80">{downloadState.error ?? t.discover.tryAgain}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button type="button" size="sm" onClick={() => void requestDownload(result)}>
-                                Retry
+                                {t.discover.retry}
                               </Button>
                             </div>
                           </div>
@@ -598,12 +602,12 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                               <Download className="h-4 w-4" />
                             )}
                             {downloadState.state === 'completed'
-                              ? 'Downloaded'
+                              ? t.discover.downloaded
                               : downloadState.state === 'importing'
-                                ? 'Importing...'
+                                ? t.discover.importing
                                 : downloadState.state === 'downloading'
-                                  ? 'Downloading...'
-                                  : 'Download'}
+                                  ? t.discover.downloading
+                                  : t.discover.download}
                           </Button>
                         </div>
                       </CardContent>
@@ -619,13 +623,11 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
       <AlertDialog open={Boolean(duplicatePrompt)} onOpenChange={(open) => !open && setDuplicatePrompt(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>This book already exists.</AlertDialogTitle>
-            <AlertDialogDescription>
-              A local copy with the same title and author is already in your library. You can open the existing book, import this one anyway, or cancel.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t.discover.duplicateTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{t.discover.duplicateDescription}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t.discover.cancel}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-background text-foreground hover:bg-muted"
               onClick={() => {
@@ -636,7 +638,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                 setDuplicatePrompt(null);
               }}
             >
-              Open Existing
+              {t.discover.openExisting}
             </AlertDialogAction>
             <AlertDialogAction
               onClick={() => {
@@ -648,7 +650,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                 void performDownload(result);
               }}
             >
-              Import Anyway
+              {t.discover.importAnyway}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

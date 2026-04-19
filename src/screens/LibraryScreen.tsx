@@ -1,6 +1,7 @@
 import { LibraryCard } from '@/components/library-card';
 import { DiscoverScreen } from '@/screens/DiscoverScreen';
 import * as React from 'react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { Book } from '../../shared/ipc';
 
 type Props = {
@@ -28,6 +29,7 @@ export function LibraryScreen({
   onAddSample,
   onReload
 }: Props) {
+  const { t } = useLanguage();
   const [mode, setMode] = React.useState<'library' | 'discover'>('library');
   const [notice, setNotice] = React.useState<string | null>(null);
 
@@ -40,7 +42,7 @@ export function LibraryScreen({
           onOpenBook={onOpen}
           onLibraryChanged={async () => {
             await Promise.resolve(onReload());
-            setNotice('Your library now includes the downloaded book, and richer metadata will fill in automatically.');
+            setNotice(t.library.importedNotice);
           }}
         />
       </div>

@@ -2,6 +2,7 @@ import * as React from 'react';
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist';
 import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import ePub from 'epubjs';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { parseFb2Document } from '@/lib/fb2';
 import { parseTxtDocument } from '@/lib/txt';
 import type { Book, RecentBookEntry } from '../../shared/ipc';
@@ -51,11 +52,11 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-function formatPercent(value: number | null): string {
+function formatPercent(value: number | null, t: ReturnType<typeof useLanguage>['t']): string {
   if (value === null) {
-    return 'No progress yet';
+    return t.bookCard.noProgressYet;
   }
-  return `${Math.round(clampPercent(value))}% read`;
+  return `${Math.round(clampPercent(value))}${t.bookCard.percentRead}`;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
@@ -77,15 +78,15 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
   });
 }
 
-function getMetricFallback(book: Book): BookMetric {
+function getMetricFallback(book: Book, t: ReturnType<typeof useLanguage>['t']): BookMetric {
   return {
     pageCount: null,
     currentLocation: null,
     progressPercent: null,
-    progressLabel: 'Progress unavailable',
+    progressLabel: t.bookCard.progressUnavailable,
     pageCountLabel:
-      book.format === 'pdf' ? 'Pages unavailable' : book.format === 'fb2' ? 'FB2' : book.format === 'txt' ? 'TXT' : 'EPUB',
-    currentLocationLabel: book.format === 'pdf' ? 'Page unavailable' : 'Continue Reading'
+      book.format === 'pdf' ? t.bookCard.pagesUnavailable : book.format === 'fb2' ? 'FB2' : book.format === 'txt' ? 'TXT' : 'EPUB',
+    currentLocationLabel: book.format === 'pdf' ? t.bookCard.pageUnavailable : t.bookCard.continueReading
   };
 }
 
@@ -96,7 +97,7 @@ function getActivityFallback(): BookActivitySummary {
   };
 }
 
-async function loadPdfMetric(book: Book): Promise<BookMetric> {
+async function loadPdfMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   const api = getRendererApi();
   const [pdfResult, lastPage] = await Promise.all([
     api.books.getPdfData({ bookId: book.id }),
@@ -116,13 +117,13 @@ async function loadPdfMetric(book: Book): Promise<BookMetric> {
     pageCount,
     currentLocation: safeLastPage,
     progressPercent,
-    progressLabel: formatPercent(progressPercent),
-    pageCountLabel: `${pageCount} pages`,
-    currentLocationLabel: safeLastPage ? `Page ${safeLastPage} / ${pageCount}` : `Start on page 1`
+    progressLabel: formatPercent(progressPercent, t),
+    pageCountLabel: `${pageCount} ${t.bookCard.pages}`,
+    currentLocationLabel: safeLastPage ? `${t.bookCard.pageOf} ${safeLastPage} / ${pageCount}` : t.bookCard.startOnPage
   };
 }
 
-async function loadEpubMetric(book: Book): Promise<BookMetric> {
+async function loadEpubMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   const api = getRendererApi();
   const [epubResult, progressResult] = await Promise.all([
     api.books.getEpubData({ bookId: book.id }),
@@ -192,25 +193,25 @@ async function loadEpubMetric(book: Book): Promise<BookMetric> {
           : 0
       : 0;
     const pageCountLabel = generatedLocationCount
-      ? `${generatedLocationCount} locations`
+      ? `${generatedLocationCount} ${t.bookCard.locations}`
       : spineSectionCount
-        ? `${spineSectionCount} sections`
+        ? `${spineSectionCount} ${t.bookCard.sections}`
         : 'EPUB';
 
     return {
       pageCount,
       currentLocation: progressResult.cfi ? 1 : null,
       progressPercent,
-      progressLabel: formatPercent(progressPercent),
+      progressLabel: formatPercent(progressPercent, t),
       pageCountLabel,
-      currentLocationLabel: progressResult.cfi ? 'Continue Reading' : 'Start Reading'
+      currentLocationLabel: progressResult.cfi ? t.bookCard.continueReading : t.bookCard.startReading
     };
   } finally {
     epubBook.destroy?.();
   }
 }
 
-async function loadFb2Metric(book: Book): Promise<BookMetric> {
+async function loadFb2Metric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   const api = getRendererApi();
   const [fb2Result, progressResult] = await Promise.all([
     api.books.getFb2Data({ bookId: book.id }),
@@ -236,13 +237,13 @@ async function loadFb2Metric(book: Book): Promise<BookMetric> {
     pageCount: chapterCount,
     currentLocation: chapterIndex,
     progressPercent,
-    progressLabel: formatPercent(progressPercent),
-    pageCountLabel: chapterCount ? `${chapterCount} chapters` : 'FB2',
-    currentLocationLabel: chapterIndex !== null ? `Chapter ${chapterIndex + 1}` : 'Start Reading'
+    progressLabel: formatPercent(progressPercent, t),
+    pageCountLabel: chapterCount ? `${chapterCount} ${t.bookCard.chapters}` : 'FB2',
+    currentLocationLabel: chapterIndex !== null ? `${t.bookCard.chapter} ${chapterIndex + 1}` : t.bookCard.startReading
   };
 }
 
-async function loadTxtMetric(book: Book): Promise<BookMetric> {
+async function loadTxtMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   const api = getRendererApi();
   const [txtResult, progressResult] = await Promise.all([
     api.books.getTxtData({ bookId: book.id }),
@@ -268,24 +269,24 @@ async function loadTxtMetric(book: Book): Promise<BookMetric> {
     pageCount: sectionCount,
     currentLocation: chapterIndex,
     progressPercent,
-    progressLabel: formatPercent(progressPercent),
-    pageCountLabel: sectionCount ? `${sectionCount} sections` : 'TXT',
-    currentLocationLabel: chapterIndex !== null ? `Section ${chapterIndex + 1}` : 'Start Reading'
+    progressLabel: formatPercent(progressPercent, t),
+    pageCountLabel: sectionCount ? `${sectionCount} ${t.bookCard.sections}` : 'TXT',
+    currentLocationLabel: chapterIndex !== null ? `${t.bookCard.section} ${chapterIndex + 1}` : t.bookCard.startReading
   };
 }
 
-async function loadBookMetric(book: Book): Promise<BookMetric> {
+async function loadBookMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   if (book.format === 'pdf') {
-    return loadPdfMetric(book);
+    return loadPdfMetric(book, t);
   }
   if (book.format === 'fb2') {
-    return loadFb2Metric(book);
+    return loadFb2Metric(book, t);
   }
   if (book.format === 'txt') {
-    return loadTxtMetric(book);
+    return loadTxtMetric(book, t);
   }
 
-  return loadEpubMetric(book);
+  return loadEpubMetric(book, t);
 }
 
 function useLibraryRefreshSignal(refreshKey?: string) {
@@ -299,6 +300,7 @@ function useLibraryRefreshSignal(refreshKey?: string) {
 }
 
 export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
+  const { t } = useLanguage();
   const [metrics, setMetrics] = React.useState<Record<string, BookMetric>>({});
   const refreshSignal = useLibraryRefreshSignal(refreshKey);
 
@@ -312,11 +314,11 @@ export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
       };
     }
 
-    const nextMetrics = Object.fromEntries(books.map((book) => [book.id, getMetricFallback(book)]));
+    const nextMetrics = Object.fromEntries(books.map((book) => [book.id, getMetricFallback(book, t)]));
     setMetrics(nextMetrics);
 
     for (const book of books) {
-      void withTimeout(loadBookMetric(book), 15000, `Timed out while loading metrics for ${book.title}`)
+      void withTimeout(loadBookMetric(book, t), 15000, `Timed out while loading metrics for ${book.title}`)
         .then((metric) => {
           if (canceled) {
             return;
@@ -332,7 +334,7 @@ export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
           }
           setMetrics((current) => ({
             ...current,
-            [book.id]: getMetricFallback(book)
+            [book.id]: getMetricFallback(book, t)
           }));
         });
     }
@@ -340,7 +342,7 @@ export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
     return () => {
       canceled = true;
     };
-  }, [books, refreshSignal]);
+  }, [books, refreshSignal, t]);
 
   return metrics;
 }

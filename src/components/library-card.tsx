@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { BookCard } from '@/components/book-card';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { cn } from '@/lib/utils';
 import { useLibraryBookActivity, useLibraryBookMetrics, useRecentBooks } from '@/lib/library-metrics';
 import type { Book } from '../../shared/ipc';
@@ -27,13 +28,6 @@ type Props = {
 type SortKey = 'recent-opened' | 'recent-added' | 'title' | 'format';
 type FormatFilter = 'all' | 'pdf' | 'epub' | 'fb2' | 'txt';
 
-const headerDateFormatter = new Intl.DateTimeFormat('ru-RU', {
-  weekday: 'long',
-  day: 'numeric',
-  month: 'long',
-  year: 'numeric'
-});
-
 const controlButtonClassName = 'h-9 rounded-full px-4 text-xs font-semibold';
 
 function getFilterButtonClassName(active: boolean) {
@@ -54,6 +48,7 @@ export function LibraryCard({
   onAddSample,
   onReload
 }: Props) {
+  const { language, t } = useLanguage();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortKey>('recent-opened');
   const [formatFilter, setFormatFilter] = React.useState<FormatFilter>('all');
@@ -67,6 +62,16 @@ export function LibraryCard({
   const recentOrder = new Map(recentBooks.map((entry, index) => [entry.bookId, index]));
   const lastOpenedAtByBookId = new Map(recentBooks.map((entry) => [entry.bookId, entry.lastOpenedAt]));
   const trimmedQuery = searchQuery.trim().toLocaleLowerCase();
+  const headerDateFormatter = React.useMemo(
+    () =>
+      new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      }),
+    [language]
+  );
 
   const continueReadingBooks = recentBooks
     .map((entry) => books.find((book) => book.id === entry.bookId) ?? null)
@@ -120,8 +125,8 @@ export function LibraryCard({
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
             <div className="space-y-2">
               <div className="space-y-1">
-                <h1 className="text-3xl font-semibold tracking-tight">Library</h1>
-                <p className="text-sm text-muted-foreground">Continue where you left off and keep your collection within reach.</p>
+                <h1 className="text-3xl font-semibold tracking-tight">{t.library.title}</h1>
+                <p className="text-sm text-muted-foreground">{t.library.subtitle}</p>
                 <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground/80">
                   {headerDateFormatter.format(new Date())}
                 </p>
@@ -132,17 +137,17 @@ export function LibraryCard({
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={onImport} disabled={loading}>
               <Plus className="h-4 w-4" />
-              Import book
+              {t.library.importBook}
             </Button>
             <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
               <Compass className="h-4 w-4" />
-              Discover Books
+              {t.library.discoverBooks}
             </Button>
             <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
-              {loading ? 'Please wait...' : 'Add sample book'}
+              {loading ? t.library.pleaseWait : t.library.addSampleBook}
             </Button>
             <Button type="button" variant="outline" onClick={onReload} disabled={loading}>
-              Reload
+              {t.library.reload}
             </Button>
           </div>
         </CardContent>
@@ -155,20 +160,18 @@ export function LibraryCard({
               <BookMarked className="h-8 w-8 text-muted-foreground" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">Build your reading hub</h2>
-              <p className="max-w-md text-sm text-muted-foreground">
-                Import your first PDF, EPUB, FB2, or TXT to unlock continue reading, progress tracking, and your full desktop library.
-              </p>
+              <h2 className="text-2xl font-semibold tracking-tight">{t.library.emptyTitle}</h2>
+              <p className="max-w-md text-sm text-muted-foreground">{t.library.emptyDescription}</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
               <Button type="button" onClick={onImport} disabled={loading}>
-                Import your first book
+                {t.library.importFirstBook}
               </Button>
               <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
-                Discover Books
+                {t.library.discoverBooks}
               </Button>
               <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
-                {loading ? 'Please wait...' : 'Add sample book'}
+                {loading ? t.library.pleaseWait : t.library.addSampleBook}
               </Button>
             </div>
           </CardContent>
@@ -178,24 +181,20 @@ export function LibraryCard({
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-semibold tracking-tight">Continue Reading</h2>
-                <p className="text-sm text-muted-foreground">
-                  Your most recently opened books, ready to jump back in.
-                </p>
+                <h2 className="text-xl font-semibold tracking-tight">{t.library.continueReadingTitle}</h2>
+                <p className="text-sm text-muted-foreground">{t.library.continueReadingSubtitle}</p>
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs text-muted-foreground">
                 <Clock3 className="h-3.5 w-3.5" />
-                Ordered by last opened
+                {t.library.orderedByLastOpened}
               </div>
             </div>
 
             {continueReadingBooks.length === 0 ? (
               <Card className="border-dashed bg-card/80">
                 <CardContent className="flex min-h-36 flex-col items-center justify-center gap-2 p-6 text-center">
-                  <p className="text-sm font-medium">Open a book to start your continue reading shelf.</p>
-                  <p className="text-sm text-muted-foreground">
-                    Recent reading sessions will appear here automatically.
-                  </p>
+                  <p className="text-sm font-medium">{t.library.continueReadingEmptyTitle}</p>
+                  <p className="text-sm text-muted-foreground">{t.library.continueReadingEmptyDescription}</p>
                 </CardContent>
               </Card>
             ) : (
@@ -223,17 +222,15 @@ export function LibraryCard({
             <div className="flex flex-col gap-4 rounded-3xl border border-white/40 bg-card/95 p-5 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold tracking-tight">Library</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Browse every book, refine by format, and open anything in one click.
-                  </p>
+                  <h2 className="text-xl font-semibold tracking-tight">{t.library.browseTitle}</h2>
+                  <p className="text-sm text-muted-foreground">{t.library.browseSubtitle}</p>
                 </div>
                 <div className="relative w-full lg:max-w-sm">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search by title, subtitle, or author..."
+                    placeholder={t.library.searchPlaceholder}
                     className="pl-9"
                   />
                 </div>
@@ -243,7 +240,7 @@ export function LibraryCard({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     <ArrowUpDown className="h-3.5 w-3.5" />
-                    Sort by
+                    {t.library.sortBy}
                   </span>
                   <Button
                     type="button"
@@ -252,7 +249,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(sortBy === 'recent-opened')}
                     onClick={() => setSortBy('recent-opened')}
                   >
-                    Recently opened
+                    {t.library.sortRecentOpened}
                   </Button>
                   <Button
                     type="button"
@@ -261,7 +258,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(sortBy === 'recent-added')}
                     onClick={() => setSortBy('recent-added')}
                   >
-                    Recently added
+                    {t.library.sortRecentAdded}
                   </Button>
                   <Button
                     type="button"
@@ -270,7 +267,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(sortBy === 'title')}
                     onClick={() => setSortBy('title')}
                   >
-                    Title A-Z
+                    {t.library.sortTitle}
                   </Button>
                   <Button
                     type="button"
@@ -279,12 +276,12 @@ export function LibraryCard({
                     className={getFilterButtonClassName(sortBy === 'format')}
                     onClick={() => setSortBy('format')}
                   >
-                    Format
+                    {t.library.sortFormat}
                   </Button>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Filter</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t.library.filter}</span>
                   <Button
                     type="button"
                     variant="outline"
@@ -292,7 +289,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(formatFilter === 'all')}
                     onClick={() => setFormatFilter('all')}
                   >
-                    All
+                    {t.library.filterAll}
                   </Button>
                   <Button
                     type="button"
@@ -337,8 +334,8 @@ export function LibraryCard({
             {filteredBooks.length === 0 ? (
               <Card className="border-dashed bg-card/80">
                 <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
-                  <p className="text-sm font-medium">No books match your current search.</p>
-                  <p className="text-sm text-muted-foreground">Try a different title, format filter, or sort mode.</p>
+                  <p className="text-sm font-medium">{t.library.noBooksFoundTitle}</p>
+                  <p className="text-sm text-muted-foreground">{t.library.noBooksFoundDescription}</p>
                 </CardContent>
               </Card>
             ) : (
@@ -365,14 +362,14 @@ export function LibraryCard({
 
       {notice ? (
         <Alert>
-          <AlertTitle>Library updated</AlertTitle>
+          <AlertTitle>{t.library.updatedTitle}</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
 
       {error ? (
         <Alert variant="destructive">
-          <AlertTitle>Request error</AlertTitle>
+          <AlertTitle>{t.library.requestErrorTitle}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
