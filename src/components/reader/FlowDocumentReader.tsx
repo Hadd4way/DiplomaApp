@@ -398,6 +398,7 @@ export function FlowDocumentReader({
   const latestScrollRatioRef = React.useRef(0);
   const restoreDoneRef = React.useRef(false);
   const initialLocationAppliedRef = React.useRef(false);
+  const initialLocationResolvedRef = React.useRef(false);
   const [documentData, setDocumentData] = React.useState<FlowReaderDocument | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
@@ -495,8 +496,56 @@ export function FlowDocumentReader({
     [bookId]
   );
 
+  const syncViewportState = React.useCallback(() => {
+    const container = scrollContainerRef.current;
+    const article = articleRef.current;
+    if (!container || !article || !documentData) {
+      return;
+    }
+
+    const chapterElements = chapterRefs.current;
+    let nextChapterIndex = 0;
+    const scrollMarker = container.scrollTop + 96;
+    for (let index = 0; index < chapterElements.length; index += 1) {
+      const element = chapterElements[index];
+      if (!element) {
+        continue;
+      }
+      if (element.offsetTop <= scrollMarker) {
+        nextChapterIndex = index;
+      } else {
+        break;
+      }
+    }
+
+    const blockElements = Array.from(article.querySelectorAll('[data-flow-block-id]')).filter(
+      (node): node is HTMLElement => node instanceof HTMLElement
+    );
+    let activeBlockId: string | null = null;
+    for (const block of blockElements) {
+      if (block.offsetTop <= scrollMarker) {
+        activeBlockId = block.dataset.flowBlockId ?? null;
+      } else {
+        break;
+      }
+    }
+
+    const chapterId = documentData.chapters[nextChapterIndex]?.id ?? `${namespace}-chapter-${nextChapterIndex}`;
+    setCurrentLocation(serializeFlowPointLocation(namespace, { chapterId, blockId: activeBlockId }));
+    setActiveChapterIndex(nextChapterIndex);
+    latestChapterIndexRef.current = nextChapterIndex;
+
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    const ratio = maxScroll > 0 ? container.scrollTop / maxScroll : 0;
+    latestScrollRatioRef.current = clampRatio(ratio);
+
+    if (restoreDoneRef.current && initialLocationResolvedRef.current) {
+      persistProgress(nextChapterIndex, ratio);
+    }
+  }, [documentData, namespace, persistProgress]);
+
   const flushProgressSave = React.useCallback(() => {
-    if (!window.api?.flowProgress) {
+    if (!window.api?.flowProgress || !restoreDoneRef.current || !initialLocationResolvedRef.current) {
       return;
     }
 
@@ -706,6 +755,7 @@ export function FlowDocumentReader({
       setCurrentLocation(null);
       restoreDoneRef.current = false;
       initialLocationAppliedRef.current = false;
+      initialLocationResolvedRef.current = !Boolean(initialCfi?.trim());
       setActiveSearchIndex(-1);
 
       try {
@@ -733,7 +783,7 @@ export function FlowDocumentReader({
     return () => {
       canceled = true;
     };
-  }, [bookId, loadDocument]);
+  }, [bookId, initialCfi, loadDocument]);
 
   React.useEffect(() => {
     if (!ready || !documentData || restoreDoneRef.current) {
@@ -757,10 +807,13 @@ export function FlowDocumentReader({
       }
       setActiveChapterIndex(chapterIndex);
       restoreDoneRef.current = true;
+      requestAnimationFrame(() => {
+        syncViewportState();
+      });
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [documentData, ready, savedProgress]);
+  }, [documentData, ready, savedProgress, syncViewportState]);
 
   React.useEffect(() => {
     if (!ready || !initialCfi || initialLocationAppliedRef.current) {
@@ -769,6 +822,7 @@ export function FlowDocumentReader({
 
     const frame = requestAnimationFrame(() => {
       const applied = scrollToLocation(initialCfi, settings.reduceMotion ? 'auto' : 'smooth');
+      initialLocationResolvedRef.current = true;
       if (applied) {
         initialLocationAppliedRef.current = true;
         onInitialCfiApplied?.();
@@ -787,41 +841,7 @@ export function FlowDocumentReader({
 
     const handleScroll = () => {
       registerActivity();
-      const chapterElements = chapterRefs.current;
-      let nextChapterIndex = 0;
-      const scrollMarker = container.scrollTop + 96;
-      for (let index = 0; index < chapterElements.length; index += 1) {
-        const element = chapterElements[index];
-        if (!element) {
-          continue;
-        }
-        if (element.offsetTop <= scrollMarker) {
-          nextChapterIndex = index;
-        } else {
-          break;
-        }
-      }
-
-      const blockElements = Array.from(article.querySelectorAll('[data-flow-block-id]')).filter(
-        (node): node is HTMLElement => node instanceof HTMLElement
-      );
-      let activeBlockId: string | null = null;
-      for (const block of blockElements) {
-        if (block.offsetTop <= scrollMarker) {
-          activeBlockId = block.dataset.flowBlockId ?? null;
-        } else {
-          break;
-        }
-      }
-
-      const chapterId = documentData.chapters[nextChapterIndex]?.id ?? `${namespace}-chapter-${nextChapterIndex}`;
-      setCurrentLocation(serializeFlowPointLocation(namespace, { chapterId, blockId: activeBlockId }));
-      setActiveChapterIndex(nextChapterIndex);
-      latestChapterIndexRef.current = nextChapterIndex;
-
-      const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-      const ratio = maxScroll > 0 ? container.scrollTop / maxScroll : 0;
-      persistProgress(nextChapterIndex, ratio);
+      syncViewportState();
     };
 
     handleScroll();
@@ -829,7 +849,7 @@ export function FlowDocumentReader({
     return () => {
       container.removeEventListener('scroll', handleScroll);
     };
-  }, [documentData, namespace, persistProgress, registerActivity]);
+  }, [documentData, registerActivity, syncViewportState]);
 
   React.useEffect(() => {
     if (!ready || !articleRef.current) {
