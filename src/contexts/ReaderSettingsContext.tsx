@@ -37,6 +37,7 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
 
   React.useEffect(() => {
     const root = document.documentElement;
+    const uiScale = getReaderTextScaleMultiplier(settings.textSizePreset);
     const variables = getAppThemeCssVariables(settings);
     for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
@@ -44,8 +45,9 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
     const palette = getReaderThemePalette(settings);
     root.dataset.readerMotion = settings.reduceMotion ? 'reduced' : 'default';
     root.dataset.readerContrast = settings.highContrastMode ? 'high' : 'normal';
-    root.style.setProperty('--reader-ui-scale', String(getReaderTextScaleMultiplier(settings.textSizePreset)));
+    root.style.setProperty('--reader-ui-scale', String(uiScale));
     root.style.setProperty('--reader-ui-font-family', getUiFontFamily(settings));
+    root.style.fontSize = `${16 * uiScale}px`;
     document.body.style.backgroundColor = palette.appBg;
     document.body.style.color = palette.appForeground;
   }, [settings]);
