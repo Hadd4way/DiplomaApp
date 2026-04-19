@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BookOpenText, Bookmark, FolderOpen, Highlighter, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Bookmark, FolderOpen, Highlighter, MoreHorizontal, Trash2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,6 +40,48 @@ const createdAtFormatter = new Intl.DateTimeFormat('ru-RU', {
   year: 'numeric'
 });
 
+function getInitials(title: string) {
+  return title
+    .split(/\s+/)
+    .map((part) => part.trim().charAt(0))
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+function getPlaceholderPalette(seed: string) {
+  const value = [...seed].reduce((total, char) => total + char.charCodeAt(0), 0);
+  const palettes = [
+    ['from-amber-200 via-orange-100 to-rose-100', 'bg-amber-950/80', 'text-amber-950'],
+    ['from-sky-200 via-cyan-100 to-blue-100', 'bg-sky-950/80', 'text-sky-950'],
+    ['from-emerald-200 via-lime-100 to-teal-100', 'bg-emerald-950/80', 'text-emerald-950'],
+    ['from-rose-200 via-pink-100 to-fuchsia-100', 'bg-rose-950/80', 'text-rose-950']
+  ] as const;
+
+  return palettes[value % palettes.length];
+}
+
+function PlaceholderCover({ title, author }: { title: string; author: string | null | undefined }) {
+  const [gradient, badgeBackground, textColor] = getPlaceholderPalette(`${title}:${author ?? ''}`);
+  const initials = getInitials(title);
+
+  return (
+    <div className={cn('relative h-full w-full overflow-hidden bg-gradient-to-br', gradient)}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.55),transparent_45%)]" />
+      <div className="relative flex h-full flex-col justify-between p-3">
+        <div className={cn('inline-flex h-8 w-8 items-center justify-center rounded-xl text-sm font-bold text-white shadow-sm', badgeBackground)}>
+          {initials || 'BK'}
+        </div>
+        <div className="space-y-1">
+          <p className={cn('line-clamp-3 text-xs font-semibold leading-4', textColor)}>{title}</p>
+          <p className="line-clamp-2 text-[11px] text-black/60">{author || 'Unknown author'}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BookCard({
   book,
   onOpen,
@@ -54,6 +96,7 @@ export function BookCard({
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const metadataLabel = lastOpenedAt ? `Opened ${createdAtFormatter.format(lastOpenedAt)}` : `Added ${createdAtFormatter.format(book.createdAt)}`;
   const isContinueCard = variant === 'continue';
+  const authorLine = [book.author, book.publishYear ? String(book.publishYear) : null].filter(Boolean).join(' • ');
 
   return (
     <Card
@@ -116,8 +159,17 @@ export function BookCard({
           aria-label={`Open ${book.title}`}
         >
           <div className="flex h-full w-full items-center justify-center px-6">
-            <div className="flex h-36 w-28 items-center justify-center rounded-2xl border border-white/50 bg-background/85 shadow-lg shadow-black/5 backdrop-blur">
-              <BookOpenText className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
+            <div className="h-36 w-28 overflow-hidden rounded-2xl border border-white/50 bg-background/85 shadow-lg shadow-black/5 backdrop-blur">
+              {book.coverUrl ? (
+                <img
+                  src={book.coverUrl}
+                  alt={`${book.title} cover`}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <PlaceholderCover title={book.title} author={book.author} />
+              )}
             </div>
           </div>
         </button>
@@ -147,6 +199,8 @@ export function BookCard({
             <p className={cn('line-clamp-2 font-medium leading-5', isContinueCard ? 'min-h-12 text-base' : 'min-h-10 text-sm')}>
               {book.title}
             </p>
+            {book.subtitle ? <p className="line-clamp-2 text-xs text-muted-foreground">{book.subtitle}</p> : null}
+            {authorLine ? <p className="line-clamp-2 text-xs text-muted-foreground">{authorLine}</p> : null}
             <div className="flex items-center justify-between gap-2">
               <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {book.format.toUpperCase()}

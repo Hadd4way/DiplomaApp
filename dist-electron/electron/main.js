@@ -70,7 +70,7 @@ electron_1.app.whenReady().then(() => {
             chrome: process.versions.chrome
         }
     }));
-    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverSearch, (_event, payload) => (0, discover_1.searchDiscoverBooks)(payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverSearch, (_event, payload) => (0, discover_1.searchDiscoverBooks)(db, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.discoverDownload, (event, payload) => (0, discover_1.downloadDiscoverBook)(db, libraryId, userDataPath, payload, event.sender));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksList, () => (0, books_1.listBooks)(db, libraryId));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.booksAddSample, () => (0, books_1.addSampleBook)(db, libraryId));

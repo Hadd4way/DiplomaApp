@@ -69,7 +69,14 @@ export function LibraryCard({
 
   const filteredBooks = books
     .filter((book) => formatFilter === 'all' || book.format === formatFilter)
-    .filter((book) => trimmedQuery.length === 0 || book.title.toLocaleLowerCase().includes(trimmedQuery))
+    .filter((book) => {
+      if (trimmedQuery.length === 0) {
+        return true;
+      }
+
+      return [book.title, book.subtitle ?? '', book.author ?? '']
+        .some((value) => value.toLocaleLowerCase().includes(trimmedQuery));
+    })
     .sort((left, right) => {
       if (sortBy === 'recent-added') {
         return right.createdAt - left.createdAt;
@@ -220,7 +227,7 @@ export function LibraryCard({
                   <Input
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search books by title..."
+                    placeholder="Search by title, subtitle, or author..."
                     className="pl-9"
                   />
                 </div>

@@ -17,6 +17,7 @@ const node_crypto_1 = require("node:crypto");
 const promises_1 = __importDefault(require("node:fs/promises"));
 const node_path_1 = __importDefault(require("node:path"));
 const electron_1 = require("electron");
+const openLibraryMetadata_1 = require("./openLibraryMetadata");
 function toBook(row) {
     return {
         id: row.id,
@@ -143,9 +144,11 @@ function listBooks(db, userId) {
        WHERE user_id = ?
        ORDER BY created_at DESC`)
         .all(userId);
+    const books = (0, openLibraryMetadata_1.hydrateBooksWithCachedMetadata)(db, rows.map(toBook));
+    (0, openLibraryMetadata_1.enrichBooksInBackground)(db, books);
     return {
         ok: true,
-        books: rows.map(toBook)
+        books
     };
 }
 function addSampleBook(db, userId) {
@@ -230,6 +233,7 @@ async function importBookFromPath(db, userId, userDataPath, sourcePath, metadata
     catch {
         return { ok: false, error: 'Failed to save imported book metadata.' };
     }
+    (0, openLibraryMetadata_1.enrichBookInBackground)(db, book);
     return { ok: true, book };
 }
 async function revealBook(db, userId, payload, userDataPath) {

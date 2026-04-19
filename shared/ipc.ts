@@ -60,7 +60,12 @@ export type DiscoverBookFormat = 'epub' | 'txt' | 'html' | 'other';
 export type Book = {
   id: string;
   title: string;
+  subtitle?: string | null;
   author?: string | null;
+  coverUrl?: string | null;
+  description?: string | null;
+  subjects?: string[];
+  publishYear?: number | null;
   format: BookFormat;
   filePath?: string | null;
   createdAt: number;
@@ -98,10 +103,13 @@ export type DiscoverBookResult = {
   id: string;
   source: DiscoverBookSource;
   title: string;
+  subtitle?: string | null;
   author: string | null;
   languages: string[];
   coverUrl: string | null;
   description?: string | null;
+  subjects?: string[];
+  publishYear?: number | null;
   downloadCount: number | null;
   formats: Array<{
     kind: DiscoverBookFormat;

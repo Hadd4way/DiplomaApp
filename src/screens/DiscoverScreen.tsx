@@ -500,7 +500,14 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                                 ))}
                               </div>
                               <h2 className="line-clamp-2 text-lg font-semibold tracking-tight">{result.title}</h2>
-                              <p className="line-clamp-2 text-sm text-muted-foreground">{result.author || 'Unknown author'}</p>
+                              {result.subtitle ? (
+                                <p className="line-clamp-2 text-sm text-muted-foreground">{result.subtitle}</p>
+                              ) : null}
+                              <p className="line-clamp-2 text-sm text-muted-foreground">
+                                {[result.author || 'Unknown author', result.publishYear ? String(result.publishYear) : null]
+                                  .filter(Boolean)
+                                  .join(' • ')}
+                              </p>
                             </div>
 
                             {result.description ? (
@@ -510,6 +517,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
                             <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
                               <p>Language: {result.languages.length > 0 ? result.languages.join(', ') : 'Unknown'}</p>
                               <p>Source: {getSourceLabel(result.source)}</p>
+                              <p>Year: {result.publishYear ?? 'Unknown'}</p>
                               <p>Format: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
                               <p>
                                 {result.source === 'standardebooks'

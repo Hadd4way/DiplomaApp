@@ -97,11 +97,27 @@ function runMigrations(db) {
       updated_at INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS open_library_metadata_cache (
+      cache_key TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      subtitle TEXT NULL,
+      author TEXT NULL,
+      cover_url TEXT NULL,
+      description TEXT NULL,
+      subjects_json TEXT NULL,
+      publish_year INTEGER NULL,
+      work_id TEXT NULL,
+      edition_id TEXT NULL,
+      isbn TEXT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_books_user_created_at ON books(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_reading_stats_last_opened_at ON reading_stats(last_opened_at DESC);
     CREATE INDEX IF NOT EXISTS idx_reading_stats_updated_at ON reading_stats(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_open_library_metadata_updated_at ON open_library_metadata_cache(updated_at DESC);
   `);
     if (!hasColumn(db, 'reader_settings', 'epub_margins')) {
         db.exec("ALTER TABLE reader_settings ADD COLUMN epub_margins TEXT NOT NULL DEFAULT 'medium';");

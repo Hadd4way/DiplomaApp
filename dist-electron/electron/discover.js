@@ -13,6 +13,7 @@ const ipc_1 = require("../shared/ipc");
 const books_1 = require("./books");
 const gutendexProvider_1 = require("./discover/providers/gutendexProvider");
 const standardEbooksProvider_1 = require("./discover/providers/standardEbooksProvider");
+const openLibraryMetadata_1 = require("./openLibraryMetadata");
 function decodeHtmlEntities(value) {
     return value
         .replace(/&quot;/g, '"')
@@ -246,7 +247,7 @@ async function createImportableTempFile(response, result, onProgress) {
     }
     throw new Error('This download format is not supported for local import yet.');
 }
-async function searchDiscoverBooks(payload) {
+async function searchDiscoverBooks(db, payload) {
     const query = payload.query?.trim() ?? '';
     if (!query) {
         return { ok: true, results: [] };
@@ -259,11 +260,11 @@ async function searchDiscoverBooks(payload) {
         };
         if (payload.source === 'gutenberg') {
             const results = await gutendexProvider_1.gutendexProvider.search(query, options);
-            return { ok: true, results: rankDiscoverResults(query, results) };
+            return { ok: true, results: rankDiscoverResults(query, await (0, openLibraryMetadata_1.enrichDiscoverResultsWithOpenLibrary)(db, results)) };
         }
         if (payload.source === 'standardebooks') {
             const results = await standardEbooksProvider_1.standardEbooksProvider.search(query, options);
-            return { ok: true, results: rankDiscoverResults(query, results) };
+            return { ok: true, results: rankDiscoverResults(query, await (0, openLibraryMetadata_1.enrichDiscoverResultsWithOpenLibrary)(db, results)) };
         }
         const [gutenbergResults, standardEbooksResults] = await Promise.allSettled([
             gutendexProvider_1.gutendexProvider.search(query, options),
@@ -274,9 +275,10 @@ async function searchDiscoverBooks(payload) {
             standardEbooksResults.status === 'fulfilled' ? standardEbooksResults.value : []
         ].flat();
         if (successfulResults.length > 0) {
+            const enrichedResults = await (0, openLibraryMetadata_1.enrichDiscoverResultsWithOpenLibrary)(db, successfulResults);
             return {
                 ok: true,
-                results: rankDiscoverResults(query, successfulResults)
+                results: rankDiscoverResults(query, enrichedResults)
             };
         }
         const failureMessages = [gutenbergResults, standardEbooksResults]

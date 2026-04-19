@@ -123,7 +123,7 @@ app.whenReady().then(() => {
     }
   }));
 
-  ipcMain.handle(IPC_CHANNELS.discoverSearch, (_event, payload: DiscoverSearchRequest) => searchDiscoverBooks(payload));
+  ipcMain.handle(IPC_CHANNELS.discoverSearch, (_event, payload: DiscoverSearchRequest) => searchDiscoverBooks(db, payload));
   ipcMain.handle(IPC_CHANNELS.discoverDownload, (event, payload: DiscoverDownloadRequest) =>
     downloadDiscoverBook(db, libraryId, userDataPath, payload, event.sender)
   );

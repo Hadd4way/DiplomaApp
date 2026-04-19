@@ -19,6 +19,7 @@ import { IPC_CHANNELS } from '../shared/ipc';
 import { importBookFromPath } from './books';
 import { gutendexProvider } from './discover/providers/gutendexProvider';
 import { standardEbooksProvider } from './discover/providers/standardEbooksProvider';
+import { enrichDiscoverResultsWithOpenLibrary } from './openLibraryMetadata';
 
 function decodeHtmlEntities(value: string): string {
   return value
@@ -329,7 +330,10 @@ async function createImportableTempFile(
   throw new Error('This download format is not supported for local import yet.');
 }
 
-export async function searchDiscoverBooks(payload: DiscoverSearchRequest): Promise<DiscoverSearchResult> {
+export async function searchDiscoverBooks(
+  db: Database.Database,
+  payload: DiscoverSearchRequest
+): Promise<DiscoverSearchResult> {
   const query = payload.query?.trim() ?? '';
   if (!query) {
     return { ok: true, results: [] };
@@ -344,12 +348,12 @@ export async function searchDiscoverBooks(payload: DiscoverSearchRequest): Promi
 
     if (payload.source === 'gutenberg') {
       const results = await gutendexProvider.search(query, options);
-      return { ok: true, results: rankDiscoverResults(query, results) };
+      return { ok: true, results: rankDiscoverResults(query, await enrichDiscoverResultsWithOpenLibrary(db, results)) };
     }
 
     if (payload.source === 'standardebooks') {
       const results = await standardEbooksProvider.search(query, options);
-      return { ok: true, results: rankDiscoverResults(query, results) };
+      return { ok: true, results: rankDiscoverResults(query, await enrichDiscoverResultsWithOpenLibrary(db, results)) };
     }
 
     const [gutenbergResults, standardEbooksResults] = await Promise.allSettled([
@@ -363,9 +367,10 @@ export async function searchDiscoverBooks(payload: DiscoverSearchRequest): Promi
     ].flat();
 
     if (successfulResults.length > 0) {
+      const enrichedResults = await enrichDiscoverResultsWithOpenLibrary(db, successfulResults);
       return {
         ok: true,
-        results: rankDiscoverResults(query, successfulResults)
+        results: rankDiscoverResults(query, enrichedResults)
       };
     }
 

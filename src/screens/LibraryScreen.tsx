@@ -31,14 +31,14 @@ export function LibraryScreen({
 
   if (mode === 'discover') {
     return (
-      <div className="h-full overflow-y-auto pr-1">
+      <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
         <DiscoverScreen
           books={books}
           onBack={() => setMode('library')}
           onOpenBook={onOpen}
           onLibraryChanged={async () => {
             await Promise.resolve(onReload());
-            setNotice('Your library now includes the downloaded Project Gutenberg book.');
+            setNotice('Your library now includes the downloaded book, and richer metadata will fill in automatically.');
           }}
         />
       </div>
@@ -46,7 +46,7 @@ export function LibraryScreen({
   }
 
   return (
-    <div className="h-full overflow-y-auto pr-1">
+    <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
       <LibraryCard
         books={books}
         loading={loading}

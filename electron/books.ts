@@ -22,6 +22,7 @@ import type {
   BooksRevealResult,
   BooksListResult
 } from '../shared/ipc';
+import { enrichBookInBackground, enrichBooksInBackground, hydrateBooksWithCachedMetadata } from './openLibraryMetadata';
 
 type BookRow = {
   id: string;
@@ -179,9 +180,12 @@ export function listBooks(db: Database.Database, userId: string): BooksListResul
     )
     .all(userId) as BookRow[];
 
+  const books = hydrateBooksWithCachedMetadata(db, rows.map(toBook));
+  enrichBooksInBackground(db, books);
+
   return {
     ok: true,
-    books: rows.map(toBook)
+    books
   };
 }
 
@@ -298,6 +302,8 @@ export async function importBookFromPath(
   } catch {
     return { ok: false, error: 'Failed to save imported book metadata.' };
   }
+
+  enrichBookInBackground(db, book);
 
   return { ok: true, book };
 }
