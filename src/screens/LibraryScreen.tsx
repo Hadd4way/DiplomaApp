@@ -9,6 +9,9 @@ type Props = {
   refreshKey?: number;
   loading: boolean;
   error: string | null;
+  discoverInitialQuery?: string | null;
+  discoverInitialSearchToken?: number;
+  onDiscoverLaunchHandled?: () => void;
   onOpen: (book: Book) => void;
   onReveal: (bookId: string) => void;
   onDelete: (bookId: string) => void;
@@ -22,6 +25,9 @@ export function LibraryScreen({
   refreshKey = 0,
   loading,
   error,
+  discoverInitialQuery = null,
+  discoverInitialSearchToken,
+  onDiscoverLaunchHandled,
   onOpen,
   onReveal,
   onDelete,
@@ -32,13 +38,32 @@ export function LibraryScreen({
   const { t } = useLanguage();
   const [mode, setMode] = React.useState<'library' | 'discover'>('library');
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [discoverLaunch, setDiscoverLaunch] = React.useState<{ query: string; token: number } | null>(null);
+
+  React.useEffect(() => {
+    const trimmedQuery = discoverInitialQuery?.trim();
+    if (trimmedQuery) {
+      setNotice(null);
+      setMode('discover');
+      setDiscoverLaunch({
+        query: trimmedQuery,
+        token: discoverInitialSearchToken ?? Date.now()
+      });
+      onDiscoverLaunchHandled?.();
+    }
+  }, [discoverInitialQuery, discoverInitialSearchToken, onDiscoverLaunchHandled]);
 
   if (mode === 'discover') {
     return (
       <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
         <DiscoverScreen
           books={books}
-          onBack={() => setMode('library')}
+          initialQuery={discoverLaunch?.query ?? null}
+          initialSearchToken={discoverLaunch?.token}
+          onBack={() => {
+            setDiscoverLaunch(null);
+            setMode('library');
+          }}
           onOpenBook={onOpen}
           onLibraryChanged={async () => {
             await Promise.resolve(onReload());
@@ -63,6 +88,7 @@ export function LibraryScreen({
         onImport={onImport}
         onDiscover={() => {
           setNotice(null);
+          setDiscoverLaunch(null);
           setMode('discover');
         }}
         onAddSample={onAddSample}

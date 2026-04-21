@@ -1,10 +1,10 @@
-import { BookOpen, Brain, Settings } from 'lucide-react';
+import { BookOpen, Brain, Settings, Sparkles } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 
-export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'settings';
+export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'book-advisor' | 'settings';
 
 type Props = {
   currentView: AppView;
@@ -13,11 +13,12 @@ type Props = {
 
 export function Sidebar({ currentView, onViewChange }: Props) {
   const { settings } = useReaderSettings();
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const palette = getReaderThemePalette(settings);
   const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
     { view: 'library', label: t.sidebar.library, icon: BookOpen },
     { view: 'knowledge-hub', label: t.sidebar.knowledgeHub, icon: Brain },
+    { view: 'book-advisor', label: language === 'ru' ? 'Книжный советник' : 'Book Advisor', icon: Sparkles },
     { view: 'settings', label: t.sidebar.settings, icon: Settings }
   ];
 

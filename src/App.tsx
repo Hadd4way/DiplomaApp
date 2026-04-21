@@ -20,6 +20,7 @@ import { NotesScreen } from '@/screens/NotesScreen';
 import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { BookAdvisorScreen } from '@/screens/BookAdvisorScreen';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
@@ -102,6 +103,8 @@ export default function App() {
   const [readerInitialPage, setReaderInitialPage] = React.useState<number | null>(null);
   const [readerInitialCfi, setReaderInitialCfi] = React.useState<string | null>(null);
   const [libraryRefreshKey, setLibraryRefreshKey] = React.useState(0);
+  const [discoverInitialQuery, setDiscoverInitialQuery] = React.useState<string | null>(null);
+  const [discoverInitialSearchToken, setDiscoverInitialSearchToken] = React.useState(0);
 
   const handleResult = React.useCallback(
     <
@@ -414,6 +417,9 @@ export default function App() {
           refreshKey={libraryRefreshKey}
           loading={loading}
           error={error}
+          discoverInitialQuery={discoverInitialQuery}
+          discoverInitialSearchToken={discoverInitialSearchToken}
+          onDiscoverLaunchHandled={() => setDiscoverInitialQuery(null)}
           onOpen={onOpenBook}
           onReveal={onRevealBook}
           onDelete={onDeleteBook}
@@ -443,6 +449,20 @@ export default function App() {
       return <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />;
     }
 
+    if (currentView === 'book-advisor') {
+      return (
+        <BookAdvisorScreen
+          books={books}
+          onFindInDiscover={({ query }) => {
+            setDiscoverInitialQuery(query);
+            setDiscoverInitialSearchToken((value) => value + 1);
+            resetReaderState();
+            setCurrentView('library');
+          }}
+        />
+      );
+    }
+
     return <SettingsScreen />;
   };
 
@@ -452,6 +472,9 @@ export default function App() {
       onViewChange={(view) => {
         setCurrentView(view);
         resetReaderState();
+        if (view !== 'library') {
+          setDiscoverInitialQuery(null);
+        }
       }}
       contentClassName={isPdfReaderView ? '' : 'p-6'}
     >

@@ -28,6 +28,8 @@ type Props = {
   onBack: () => void;
   onLibraryChanged: () => Promise<void> | void;
   onOpenBook: (book: Book) => Promise<void> | void;
+  initialQuery?: string | null;
+  initialSearchToken?: number;
 };
 
 type DownloadCardState = {
@@ -201,7 +203,14 @@ function createIdleState(): DownloadCardState {
   };
 }
 
-export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: Props) {
+export function DiscoverScreen({
+  books,
+  onBack,
+  onLibraryChanged,
+  onOpenBook,
+  initialQuery = null,
+  initialSearchToken
+}: Props) {
   const { t } = useLanguage();
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
@@ -212,6 +221,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
   const [hasSearched, setHasSearched] = React.useState(false);
   const [downloadStates, setDownloadStates] = React.useState<Record<string, DownloadCardState>>({});
   const [duplicatePrompt, setDuplicatePrompt] = React.useState<DuplicatePromptState>(null);
+  const lastInitialSearchKeyRef = React.useRef<string | null>(null);
 
   const duplicateMap = React.useMemo(() => {
     const map = new Map<string, Book>();
@@ -243,8 +253,10 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
     });
   }, [t]);
 
-  const runSearch = React.useCallback(async () => {
-    const trimmedQuery = query.trim();
+  const runSearch = React.useCallback(async (override?: { query?: string; language?: string }) => {
+    const searchQuery = override?.query ?? query;
+    const searchLanguage = override?.language ?? language;
+    const trimmedQuery = searchQuery.trim();
     setHasSearched(true);
     setError(null);
 
@@ -259,7 +271,7 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
       const response = await api.discover.search({
         query: trimmedQuery,
         source: sourceFilter,
-        language: language.trim() || undefined
+        language: searchLanguage.trim() || undefined
       });
       if (!response.ok) {
         setError(getFriendlyDiscoverError(response.error, t));
@@ -276,6 +288,23 @@ export function DiscoverScreen({ books, onBack, onLibraryChanged, onOpenBook }: 
       setLoading(false);
     }
   }, [language, query, sourceFilter, t]);
+
+  React.useEffect(() => {
+    const trimmedInitialQuery = initialQuery?.trim();
+    if (!trimmedInitialQuery) {
+      return;
+    }
+
+    const searchKey = `${initialSearchToken ?? 'default'}::${trimmedInitialQuery}`;
+    if (lastInitialSearchKeyRef.current === searchKey) {
+      return;
+    }
+
+    lastInitialSearchKeyRef.current = searchKey;
+
+    setQuery(trimmedInitialQuery);
+    void runSearch({ query: trimmedInitialQuery });
+  }, [initialQuery, initialSearchToken, runSearch]);
 
   const performDownload = React.useCallback(
     async (result: DiscoverBookResult) => {
