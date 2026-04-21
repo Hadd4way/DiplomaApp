@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Brain, Copy, FileText, RefreshCcw, X } from 'lucide-react';
+import { Brain, Copy, FileText, RefreshCcw, Save, X } from 'lucide-react';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import type { AiSummaryResult } from '@/services/summaryApi';
 type Props = {
   open: boolean;
   loading: boolean;
+  savingToHub?: boolean;
   result: AiSummaryResult | null;
   source: 'openrouter' | 'fallback' | null;
   error: string | null;
@@ -19,6 +20,7 @@ type Props = {
   onClose: () => void;
   onCopy: () => void;
   onSaveToNotes: () => void;
+  onSaveToHub: () => void;
   onRegenerate: () => void;
 };
 
@@ -29,21 +31,27 @@ function getCopy(language: 'ru' | 'en') {
         loading: 'Готовим конспект по выбранным заметкам и выделениям...',
         summary: 'Краткий конспект',
         keyIdeas: 'Ключевые идеи',
+        studyNotes: 'Учебные заметки',
+        flashcards: 'Флэшкарточки',
         copy: 'Копировать',
         save: 'Сохранить в заметки',
+        saveToHub: 'Сохранить в базу знаний',
         regenerate: 'Перегенерировать',
         close: 'Закрыть',
         empty: 'Пока пусто.',
         sourceAi: 'Источник: OpenRouter',
-        sourceFallback: 'Источник: локальный fallback'
+        sourceFallback: 'Источник: local fallback'
       }
     : {
         title: 'AI Summary',
         loading: 'Building a summary from the selected notes and highlights...',
         summary: 'Summary',
         keyIdeas: 'Key Ideas',
+        studyNotes: 'Study Notes',
+        flashcards: 'Flashcards',
         copy: 'Copy',
         save: 'Save to notes',
+        saveToHub: 'Save to Knowledge Hub',
         regenerate: 'Regenerate',
         close: 'Close',
         empty: 'Nothing here yet.',
@@ -68,9 +76,54 @@ function StringList({ items, empty }: { items: string[]; empty: string }) {
   );
 }
 
+function FlashcardList({
+  items,
+  empty,
+  language
+}: {
+  items: Array<{ question: string; answer: string }>;
+  empty: string;
+  language: 'ru' | 'en';
+}) {
+  const labels =
+    language === 'ru'
+      ? {
+          question: 'Вопрос',
+          answer: 'Ответ'
+        }
+      : {
+          question: 'Question',
+          answer: 'Answer'
+        };
+
+  if (items.length === 0) {
+    return <p className="text-sm text-slate-500">{empty}</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <Card key={`${index}:${item.question}`} className="border-slate-200">
+          <CardContent className="space-y-2 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.question}</p>
+              <p className="mt-1 text-sm text-slate-800">{item.question}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{labels.answer}</p>
+              <p className="mt-1 text-sm text-slate-700">{item.answer}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export function AiSummaryDialog({
   open,
   loading,
+  savingToHub = false,
   result,
   source,
   error,
@@ -81,6 +134,7 @@ export function AiSummaryDialog({
   onClose,
   onCopy,
   onSaveToNotes,
+  onSaveToHub,
   onRegenerate
 }: Props) {
   const copy = getCopy(language);
@@ -100,7 +154,8 @@ export function AiSummaryDialog({
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2 pr-12">
             <Brain className="h-5 w-5" />
-            {copy.title}{bookTitle ? ` - ${bookTitle}` : ''}
+            {copy.title}
+            {bookTitle ? ` - ${bookTitle}` : ''}
           </AlertDialogTitle>
         </AlertDialogHeader>
 
@@ -121,9 +176,11 @@ export function AiSummaryDialog({
             </div>
 
             <Tabs defaultValue="summary" className="w-full">
-              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-slate-100 p-1">
+              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-slate-100 p-1 md:grid-cols-4">
                 <TabsTrigger value="summary">{copy.summary}</TabsTrigger>
                 <TabsTrigger value="ideas">{copy.keyIdeas}</TabsTrigger>
+                <TabsTrigger value="study-notes">{copy.studyNotes}</TabsTrigger>
+                <TabsTrigger value="flashcards">{copy.flashcards}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="summary">
@@ -136,6 +193,14 @@ export function AiSummaryDialog({
 
               <TabsContent value="ideas">
                 <StringList items={result.keyIdeas} empty={copy.empty} />
+              </TabsContent>
+
+              <TabsContent value="study-notes">
+                <StringList items={result.studyNotes} empty={copy.empty} />
+              </TabsContent>
+
+              <TabsContent value="flashcards">
+                <FlashcardList items={result.flashcards} empty={copy.empty} language={language} />
               </TabsContent>
             </Tabs>
 
@@ -152,6 +217,10 @@ export function AiSummaryDialog({
           <Button type="button" variant="outline" onClick={onSaveToNotes} disabled={loading || !result}>
             <FileText className="mr-2 h-4 w-4" />
             {copy.save}
+          </Button>
+          <Button type="button" variant="outline" onClick={onSaveToHub} disabled={loading || !result || savingToHub}>
+            <Save className="mr-2 h-4 w-4" />
+            {copy.saveToHub}
           </Button>
           <Button type="button" onClick={onRegenerate} disabled={loading}>
             <RefreshCcw className="mr-2 h-4 w-4" />

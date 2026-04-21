@@ -1,6 +1,6 @@
 import * as React from 'react';
-import type { Book } from '../../shared/ipc';
-import { BookOpen, Brain, Clock3, Highlighter, MessageSquare, Search, Sparkles, Trash2 } from 'lucide-react';
+import type { AiSummaryEntry, Book } from '../../shared/ipc';
+import { BookOpen, Brain, Clock3, Copy, FileDown, Highlighter, MessageSquare, Search, Sparkles, Trash2 } from 'lucide-react';
 import { AiSummaryDialog } from '@/components/AiSummaryDialog';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import {
@@ -17,11 +17,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { aiSummaryToText } from '@/lib/ai-summary';
+import { aiSummaryToMarkdown, aiSummaryToText } from '@/lib/ai-summary';
 import { summarizeBookNotes, type AiSummaryResult } from '@/services/summaryApi';
 import { cn } from '@/lib/utils';
 
-export type KnowledgeHubItem = {
+type KnowledgeHubAnnotationItem = {
   id: string;
   bookId: string;
   bookTitle: string;
@@ -33,13 +33,21 @@ export type KnowledgeHubItem = {
   createdAt: number;
 };
 
+type KnowledgeHubAiSummaryItem = AiSummaryEntry & {
+  type: 'ai_summary';
+  text: string;
+  note: null;
+};
+
+export type KnowledgeHubItem = KnowledgeHubAnnotationItem | KnowledgeHubAiSummaryItem;
+
 type Props = {
   books: Book[];
   onOpenItem: (item: KnowledgeHubItem) => void;
 };
 
 type SortOption = 'newest' | 'oldest' | 'book-title';
-type TypeFilter = 'all' | 'highlight' | 'note';
+type TypeFilter = 'all' | 'highlight' | 'note' | 'ai_summary';
 type RecentFilter = 'all' | '7d' | '30d';
 
 function getRecentThreshold(filter: RecentFilter): number | null {
@@ -62,13 +70,82 @@ function normalizeText(value: string | null | undefined): string | null {
 }
 
 function badgeClasses(type: KnowledgeHubItem['type']): string {
-  return type === 'highlight'
-    ? 'border-amber-200 bg-amber-100 text-amber-900'
-    : 'border-sky-200 bg-sky-100 text-sky-900';
+  if (type === 'highlight') {
+    return 'border-amber-200 bg-amber-100 text-amber-900';
+  }
+  if (type === 'note') {
+    return 'border-sky-200 bg-sky-100 text-sky-900';
+  }
+  return 'border-violet-200 bg-violet-100 text-violet-900';
+}
+
+function getBadgeLabel(language: 'ru' | 'en', type: KnowledgeHubItem['type']): string {
+  if (type === 'highlight') {
+    return language === 'ru' ? 'Выделение' : 'Highlight';
+  }
+  if (type === 'note') {
+    return language === 'ru' ? 'Заметка' : 'Note';
+  }
+  return 'AI Summary';
+}
+
+function getAiSummaryLabels(language: 'ru' | 'en') {
+  return language === 'ru'
+    ? {
+        title: 'AI Summary',
+        summary: 'Краткий конспект',
+        keyIdeas: 'Ключевые идеи',
+        studyNotes: 'Учебные заметки',
+        flashcards: 'Флэшкарточки',
+        question: 'Вопрос',
+        answer: 'Ответ',
+        open: 'Открыть',
+        copy: 'Копировать',
+        exportMarkdown: 'Экспорт markdown',
+        exportMarkdownTitle: 'Экспорт Markdown',
+        loading: 'Загрузка AI-конспекта...',
+        notFound: 'AI-конспект не найден.',
+        copied: 'AI-конспект скопирован.',
+        exportFailed: 'Не удалось экспортировать AI-конспект.',
+        empty: 'Пока пусто.'
+      }
+    : {
+        title: 'AI Summary',
+        summary: 'Summary',
+        keyIdeas: 'Key Ideas',
+        studyNotes: 'Study Notes',
+        flashcards: 'Flashcards',
+        question: 'Question',
+        answer: 'Answer',
+        open: 'Open',
+        copy: 'Copy',
+        exportMarkdown: 'Export markdown',
+        exportMarkdownTitle: 'Export Markdown',
+        loading: 'Loading AI summary...',
+        notFound: 'AI summary not found.',
+        copied: 'AI summary copied.',
+        exportFailed: 'Failed to export AI summary.',
+        empty: 'Nothing here yet.'
+      };
+}
+
+function toSummaryResult(item: KnowledgeHubAiSummaryItem): AiSummaryResult {
+  return {
+    summary: item.summary,
+    keyIdeas: item.keyIdeas,
+    studyNotes: item.studyNotes,
+    flashcards: item.flashcards
+  };
+}
+
+function getAiSummaryPreview(text: string): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  return normalized.length > 0 ? normalized : '';
 }
 
 export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const { language, t } = useLanguage();
+  const aiSummaryLabels = React.useMemo(() => getAiSummaryLabels(language), [language]);
   const [items, setItems] = React.useState<KnowledgeHubItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -80,17 +157,23 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const [sortBy, setSortBy] = React.useState<SortOption>('newest');
   const [deleteTarget, setDeleteTarget] = React.useState<KnowledgeHubItem | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
-  const [editTarget, setEditTarget] = React.useState<KnowledgeHubItem | null>(null);
+  const [editTarget, setEditTarget] = React.useState<KnowledgeHubAnnotationItem | null>(null);
   const [editValue, setEditValue] = React.useState('');
   const [editError, setEditError] = React.useState<string | null>(null);
   const [editLoading, setEditLoading] = React.useState(false);
   const [summaryOpen, setSummaryOpen] = React.useState(false);
   const [summaryLoading, setSummaryLoading] = React.useState(false);
+  const [summarySavingToHub, setSummarySavingToHub] = React.useState(false);
   const [summaryError, setSummaryError] = React.useState<string | null>(null);
   const [summaryActionError, setSummaryActionError] = React.useState<string | null>(null);
   const [summaryActionMessage, setSummaryActionMessage] = React.useState<string | null>(null);
   const [summarySource, setSummarySource] = React.useState<'openrouter' | 'fallback' | null>(null);
   const [summaryResult, setSummaryResult] = React.useState<AiSummaryResult | null>(null);
+  const [detailTarget, setDetailTarget] = React.useState<KnowledgeHubAiSummaryItem | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const [detailActionError, setDetailActionError] = React.useState<string | null>(null);
+  const [detailActionMessage, setDetailActionMessage] = React.useState<string | null>(null);
   const dateFormatter = React.useMemo(
     () => new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }),
     [language]
@@ -106,7 +189,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     [dateFormatter]
   );
 
-  const loadAnnotations = React.useCallback(async () => {
+  const loadItems = React.useCallback(async () => {
     if (!window.api) {
       setError('Renderer API is unavailable. Open this app via Electron.');
       setItems([]);
@@ -117,6 +200,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     setError(null);
     try {
       const notesPromise = window.api.notes.list({ bookId: null, q: null });
+      const summariesPromise = window.api.aiSummaries.list();
       const highlightPromises = books.map(async (book) => {
         if (book.format === 'pdf') {
           const result = await window.api!.highlights.list({ bookId: book.id });
@@ -127,9 +211,16 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         return { book, result };
       });
 
-      const [notesResult, ...highlightResults] = await Promise.all([notesPromise, ...highlightPromises]);
+      const [notesResult, summariesResult, ...highlightResults] = await Promise.all([
+        notesPromise,
+        summariesPromise,
+        ...highlightPromises
+      ]);
+
       if (!notesResult.ok) {
         setError(notesResult.error);
+      } else if (!summariesResult.ok) {
+        setError(summariesResult.error);
       }
 
       const nextItems: KnowledgeHubItem[] = [];
@@ -169,6 +260,17 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         }
       }
 
+      if (summariesResult.ok) {
+        for (const entry of summariesResult.entries) {
+          nextItems.push({
+            ...entry,
+            type: 'ai_summary',
+            text: getAiSummaryPreview(entry.summary),
+            note: null
+          });
+        }
+      }
+
       setItems(nextItems);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -180,16 +282,23 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   }, [books, t.hub.unknownBook]);
 
   React.useEffect(() => {
-    void loadAnnotations();
-  }, [loadAnnotations]);
+    void loadItems();
+  }, [loadItems]);
 
   const recentThreshold = React.useMemo(() => getRecentThreshold(selectedRecent), [selectedRecent]);
 
   const filteredItems = React.useMemo(() => {
     const filtered = items.filter((item) => {
-      if (selectedBookId !== 'all' && item.bookId !== selectedBookId) {
-        return false;
+      if (selectedBookId !== 'all') {
+        if (item.type === 'ai_summary') {
+          if (item.bookId !== selectedBookId) {
+            return false;
+          }
+        } else if (item.bookId !== selectedBookId) {
+          return false;
+        }
       }
+
       if (selectedType !== 'all' && item.type !== selectedType) {
         return false;
       }
@@ -200,7 +309,11 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         return true;
       }
 
-      const haystack = [item.bookTitle, item.text ?? '', item.note ?? ''].join(' ').toLowerCase();
+      const haystack =
+        item.type === 'ai_summary'
+          ? [item.bookTitle, item.author ?? '', item.summary, item.keyIdeas.join(' '), item.studyNotes.join(' ')].join(' ').toLowerCase()
+          : [item.bookTitle, item.text ?? '', item.note ?? ''].join(' ').toLowerCase();
+
       return haystack.includes(deferredQuery);
     });
 
@@ -225,7 +338,12 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   );
 
   const summaryItems = React.useMemo(
-    () => (selectedBookId === 'all' ? [] : filteredItems.filter((item) => item.bookId === selectedBookId)),
+    () =>
+      selectedBookId === 'all'
+        ? []
+        : filteredItems.filter(
+            (item): item is KnowledgeHubAnnotationItem => item.type !== 'ai_summary' && item.bookId === selectedBookId
+          ),
     [filteredItems, selectedBookId]
   );
 
@@ -237,16 +355,24 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
     return aiSummaryToText(selectedBook.title, summaryResult, language);
   }, [language, selectedBook, summaryResult]);
-  const summaryMarkdown = summaryText;
+
+  const summaryMarkdown = React.useMemo(() => {
+    if (!selectedBook || !summaryResult) {
+      return '';
+    }
+    return aiSummaryToMarkdown(selectedBook.title, summaryResult, language);
+  }, [language, selectedBook, summaryResult]);
 
   const summary = React.useMemo(() => {
     const notesCount = items.filter((item) => item.type === 'note').length;
     const highlightsCount = items.filter((item) => item.type === 'highlight').length;
+    const aiSummariesCount = items.filter((item) => item.type === 'ai_summary').length;
     return {
       total: items.length,
       notes: notesCount,
       highlights: highlightsCount,
-      books: new Set(items.map((item) => item.bookId)).size
+      aiSummaries: aiSummariesCount,
+      books: new Set(items.map((item) => (item.type === 'ai_summary' ? item.bookId ?? `summary:${item.id}` : item.bookId))).size
     };
   }, [items]);
 
@@ -258,16 +384,26 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     setDeleteLoading(true);
     setError(null);
     try {
-      const result =
-        deleteTarget.type === 'note'
-          ? await window.api.notes.delete({ noteId: deleteTarget.id })
-          : await window.api.highlights.delete({ highlightId: deleteTarget.id });
+      let result:
+        | Awaited<ReturnType<typeof window.api.notes.delete>>
+        | Awaited<ReturnType<typeof window.api.highlights.delete>>
+        | Awaited<ReturnType<typeof window.api.aiSummaries.delete>>;
+
+      if (deleteTarget.type === 'note') {
+        result = await window.api.notes.delete({ noteId: deleteTarget.id });
+      } else if (deleteTarget.type === 'highlight') {
+        result = await window.api.highlights.delete({ highlightId: deleteTarget.id });
+      } else {
+        result = await window.api.aiSummaries.delete({ id: deleteTarget.id });
+      }
+
       if (!result.ok) {
         setError(result.error);
         return;
       }
       setItems((prev) => prev.filter((item) => item.id !== deleteTarget.id));
       setDeleteTarget(null);
+      setDetailTarget((current) => (current?.id === deleteTarget.id ? null : current));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
@@ -276,7 +412,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
   }, [deleteTarget]);
 
-  const openEditDialog = React.useCallback((item: KnowledgeHubItem) => {
+  const openEditDialog = React.useCallback((item: KnowledgeHubAnnotationItem) => {
     setEditTarget(item);
     setEditValue(item.note ?? '');
     setEditError(null);
@@ -304,7 +440,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         }
         setItems((prev) =>
           prev.map((item) =>
-            item.id === editTarget.id
+            item.id === editTarget.id && item.type === 'note'
               ? {
                   ...item,
                   note: normalizeText(result.note.content),
@@ -322,7 +458,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         }
         setItems((prev) =>
           prev.map((item) =>
-            item.id === editTarget.id
+            item.id === editTarget.id && item.type === 'highlight'
               ? {
                   ...item,
                   note: normalizeText(result.highlight.note),
@@ -396,7 +532,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     setSummaryActionMessage(null);
     try {
       await navigator.clipboard.writeText(summaryText);
-      setSummaryActionMessage(language === 'ru' ? 'Конспект скопирован.' : 'Summary copied.');
+      setSummaryActionMessage(language === 'ru' ? 'AI-конспект скопирован.' : 'AI summary copied.');
     } catch (err) {
       setSummaryActionError(err instanceof Error ? err.message : String(err));
     }
@@ -421,11 +557,52 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         return;
       }
 
-      setSummaryActionMessage(language === 'ru' ? 'Конспект сохранён в заметки.' : 'Summary saved to notes.');
+      setSummaryActionMessage(language === 'ru' ? 'AI-конспект сохранён в заметки.' : 'AI summary saved to notes.');
     } catch (err) {
       setSummaryActionError(err instanceof Error ? err.message : String(err));
     }
   }, [language, selectedBook, summaryText]);
+
+  const handleSaveSummaryToHub = React.useCallback(async () => {
+    if (!window.api?.aiSummaries || !selectedBook || !summaryResult) {
+      return;
+    }
+
+    setSummarySavingToHub(true);
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+    try {
+      const result = await window.api.aiSummaries.save({
+        bookId: selectedBook.id,
+        bookTitle: selectedBook.title,
+        author: selectedBook.author ?? null,
+        language,
+        summary: summaryResult.summary,
+        keyIdeas: summaryResult.keyIdeas,
+        studyNotes: summaryResult.studyNotes,
+        flashcards: summaryResult.flashcards
+      });
+
+      if (!result.ok) {
+        setSummaryActionError(result.error);
+        return;
+      }
+
+      const savedItem: KnowledgeHubAiSummaryItem = {
+        ...result.entry,
+        type: 'ai_summary',
+        text: getAiSummaryPreview(result.entry.summary),
+        note: null
+      };
+
+      setItems((prev) => [savedItem, ...prev.filter((item) => item.id !== savedItem.id)]);
+      setSummaryActionMessage(language === 'ru' ? 'AI-конспект сохранён' : 'AI summary saved');
+    } catch (err) {
+      setSummaryActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSummarySavingToHub(false);
+    }
+  }, [language, selectedBook, summaryResult]);
 
   const handleExportSummary = React.useCallback(async () => {
     if (!window.api?.export || !selectedBook || !summaryMarkdown) {
@@ -436,7 +613,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     setSummaryActionMessage(null);
     try {
       const result = await window.api.export.saveFile({
-        suggestedName: 'ai-summary.md',
+        suggestedName: `${selectedBook.title} ai-summary.md`,
         ext: 'md',
         content: summaryMarkdown
       });
@@ -455,6 +632,93 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
   }, [language, selectedBook, summaryMarkdown]);
 
+  const openAiSummaryDetail = React.useCallback(async (item: KnowledgeHubAiSummaryItem) => {
+    if (!window.api?.aiSummaries) {
+      return;
+    }
+
+    setDetailError(null);
+    setDetailActionError(null);
+    setDetailActionMessage(null);
+    setDetailLoading(true);
+    try {
+      const result = await window.api.aiSummaries.get({ id: item.id });
+      if (!result.ok) {
+        setDetailError(result.error);
+        setDetailTarget(item);
+        return;
+      }
+
+      if (!result.entry) {
+        setDetailError(aiSummaryLabels.notFound);
+        setDetailTarget(item);
+        return;
+      }
+
+      setDetailTarget({
+        ...result.entry,
+        type: 'ai_summary',
+        text: getAiSummaryPreview(result.entry.summary),
+        note: null
+      });
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : String(err));
+      setDetailTarget(item);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [aiSummaryLabels.notFound]);
+
+  const handleCopyDetail = React.useCallback(async () => {
+    if (!detailTarget) {
+      return;
+    }
+
+    setDetailActionError(null);
+    setDetailActionMessage(null);
+    try {
+      await navigator.clipboard.writeText(aiSummaryToText(detailTarget.bookTitle, toSummaryResult(detailTarget), detailTarget.language));
+      setDetailActionMessage(aiSummaryLabels.copied);
+    } catch (err) {
+      setDetailActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [aiSummaryLabels.copied, detailTarget]);
+
+  const handleExportDetail = React.useCallback(async () => {
+    if (!window.api?.export || !detailTarget) {
+      return;
+    }
+
+    setDetailActionError(null);
+    setDetailActionMessage(null);
+    try {
+      const result = await window.api.export.saveFile({
+        suggestedName: `${detailTarget.bookTitle} ai-summary.md`,
+        ext: 'md',
+        content: aiSummaryToMarkdown(detailTarget.bookTitle, toSummaryResult(detailTarget), detailTarget.language)
+      });
+
+      if (!result.ok) {
+        if ('cancelled' in result && result.cancelled) {
+          return;
+        }
+        setDetailActionError('error' in result ? result.error : aiSummaryLabels.exportFailed);
+        return;
+      }
+
+      setDetailActionMessage(language === 'ru' ? 'Markdown сохранён.' : 'Markdown exported.');
+    } catch (err) {
+      setDetailActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [aiSummaryLabels.exportFailed, detailTarget, language]);
+
+  const handleDeleteDetail = React.useCallback(() => {
+    if (!detailTarget) {
+      return;
+    }
+    setDeleteTarget(detailTarget);
+  }, [detailTarget]);
+
   React.useEffect(() => {
     setSummaryResult(null);
     setSummarySource(null);
@@ -468,7 +732,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     selectedBookId === 'all'
       ? language === 'ru'
         ? 'Сначала выберите книгу, чтобы отправить только её заметки и выделения.'
-        : 'Choose a book first so only that book’s notes and highlights are sent.'
+        : 'Choose a book first so only that book\'s notes and highlights are sent.'
       : summaryItems.length === 0
         ? language === 'ru'
           ? 'Для текущего выбора пока нет заметок или выделений.'
@@ -495,11 +759,12 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 {[
                   [t.hub.items, summary.total],
                   [t.hub.highlights, summary.highlights],
                   [t.hub.notes, summary.notes],
+                  [aiSummaryLabels.title, summary.aiSummaries],
                   [t.hub.books, summary.books]
                 ].map(([label, value]) => (
                   <Card key={label} className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
@@ -518,7 +783,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.7fr))]">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={t.hub.searchPlaceholder} className="pl-9" />
+                  <Input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={language === 'ru' ? 'Поиск по заметкам, выделениям и AI-конспектам...' : 'Search across highlights, notes, and AI summaries...'} className="pl-9" />
                 </div>
                 <select value={selectedBookId} onChange={(event) => setSelectedBookId(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
                   <option value="all">{t.hub.allBooks}</option>
@@ -532,6 +797,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                   <option value="all">{t.hub.allTypes}</option>
                   <option value="highlight">{t.hub.highlights}</option>
                   <option value="note">{t.hub.notes}</option>
+                  <option value="ai_summary">{aiSummaryLabels.title}</option>
                 </select>
                 <select value={selectedRecent} onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
                   <option value="all">{t.hub.allTime}</option>
@@ -543,7 +809,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                   <option value="oldest">{t.hub.oldest}</option>
                   <option value="book-title">{t.hub.bookTitleSort}</option>
                 </select>
-                <Button type="button" variant="outline" onClick={() => void loadAnnotations()} disabled={loading}>
+                <Button type="button" variant="outline" onClick={() => void loadItems()} disabled={loading}>
                   {t.hub.refresh}
                 </Button>
               </div>
@@ -555,9 +821,15 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                   </p>
                   <p className="text-sm text-slate-500">{summaryHint}</p>
                 </div>
-                <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
-                  {language === 'ru' ? 'Сделать AI-конспект' : 'Generate AI Summary'}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => void handleExportSummary()} disabled={!summaryMarkdown || summaryLoading}>
+                    <FileDown className="mr-2 h-4 w-4" />
+                    {aiSummaryLabels.exportMarkdownTitle}
+                  </Button>
+                  <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
+                    {language === 'ru' ? 'Сделать AI-конспект' : 'Generate AI Summary'}
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
@@ -589,54 +861,102 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             ) : null}
 
             {filteredItems.map((item) => (
-              <Card key={`${item.type}:${item.id}`} className="overflow-hidden rounded-[24px] border-slate-200 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+              <Card
+                key={`${item.type}:${item.id}`}
+                className={cn(
+                  'overflow-hidden rounded-[24px] border-slate-200 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.06)]',
+                  item.type === 'ai_summary' ? 'cursor-pointer transition hover:border-violet-200 hover:shadow-[0_20px_48px_rgba(76,29,149,0.10)]' : ''
+                )}
+                onClick={item.type === 'ai_summary' ? () => void openAiSummaryDetail(item) : undefined}
+              >
                 <CardContent className="p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 flex-1 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="text-base font-semibold text-slate-900">{item.bookTitle}</p>
                         <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide', badgeClasses(item.type))}>
-                          {item.type === 'highlight' ? t.hub.highlight : t.hub.note}
+                          {getBadgeLabel(language, item.type)}
                         </span>
+                        {item.type === 'ai_summary' && item.author ? <span className="text-sm text-slate-500">{item.author}</span> : null}
                         <span className="text-xs text-slate-400">{formatDate(item.createdAt)}</span>
                       </div>
 
-                      {item.text ? (
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4">
-                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
-                            <Highlighter className="h-3.5 w-3.5" />
-                            {t.hub.highlightedText}
+                      {item.type === 'ai_summary' ? (
+                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
+                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-900">
+                            <Brain className="h-3.5 w-3.5" />
+                            {aiSummaryLabels.title}
                           </div>
-                          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</p>
+                          <p
+                            className="overflow-hidden text-sm leading-6 text-slate-800"
+                            style={{
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical'
+                            }}
+                          >
+                            {item.summary}
+                          </p>
                         </div>
-                      ) : null}
+                      ) : (
+                        <>
+                          {item.text ? (
+                            <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4">
+                              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
+                                <Highlighter className="h-3.5 w-3.5" />
+                                {t.hub.highlightedText}
+                              </div>
+                              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</p>
+                            </div>
+                          ) : null}
 
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-4">
-                        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
-                          <MessageSquare className="h-3.5 w-3.5" />
-                          {t.hub.noteText}
-                        </div>
-                        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.note ?? t.hub.noNoteYet}</p>
-                      </div>
+                          <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-4">
+                            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              <MessageSquare className="h-3.5 w-3.5" />
+                              {t.hub.noteText}
+                            </div>
+                            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.note ?? t.hub.noNoteYet}</p>
+                          </div>
+                        </>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                        {typeof item.page === 'number' ? <span>{t.hub.page} {item.page}</span> : null}
-                        {item.cfiRange ? <span className="truncate">{t.hub.locationReady}</span> : null}
+                        {item.type !== 'ai_summary' && typeof item.page === 'number' ? <span>{t.hub.page} {item.page}</span> : null}
+                        {item.type !== 'ai_summary' && item.cfiRange ? <span className="truncate">{t.hub.locationReady}</span> : null}
+                        {item.type === 'ai_summary' ? <span>{item.language.toUpperCase()}</span> : null}
                       </div>
                     </div>
 
-                    <div className="flex shrink-0 flex-row gap-2 lg:w-[178px] lg:flex-col">
-                      <Button type="button" onClick={() => onOpenItem(item)} className="flex-1 lg:w-full">
-                        <BookOpen className="mr-2 h-4 w-4" />
-                        {t.hub.openInBook}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => openEditDialog(item)} className="flex-1 lg:w-full">
-                        {t.hub.editNote}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => setDeleteTarget(item)} className="flex-1 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 lg:w-full">
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        {t.hub.delete}
-                      </Button>
+                    <div
+                      className="flex shrink-0 flex-row gap-2 lg:w-[190px] lg:flex-col"
+                      onClick={item.type === 'ai_summary' ? (event) => event.stopPropagation() : undefined}
+                    >
+                      {item.type === 'ai_summary' ? (
+                        <>
+                          <Button type="button" onClick={() => void openAiSummaryDetail(item)} className="flex-1 lg:w-full">
+                            <Brain className="mr-2 h-4 w-4" />
+                            {aiSummaryLabels.open}
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => setDeleteTarget(item)} className="flex-1 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 lg:w-full">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {t.hub.delete}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button type="button" onClick={() => onOpenItem(item)} className="flex-1 lg:w-full">
+                            <BookOpen className="mr-2 h-4 w-4" />
+                            {t.hub.openInBook}
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => openEditDialog(item)} className="flex-1 lg:w-full">
+                            {t.hub.editNote}
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => setDeleteTarget(item)} className="flex-1 border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800 lg:w-full">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            {t.hub.delete}
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -651,7 +971,13 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>{t.hub.deleteTitle}</AlertDialogTitle>
             <AlertDialogDescription>
-              {deleteTarget?.type === 'highlight' ? t.hub.deleteHighlightDescription : t.hub.deleteNoteDescription}
+              {deleteTarget?.type === 'highlight'
+                ? t.hub.deleteHighlightDescription
+                : deleteTarget?.type === 'note'
+                  ? t.hub.deleteNoteDescription
+                  : language === 'ru'
+                    ? 'Этот AI-конспект будет удалён из базы знаний.'
+                    : 'This AI summary will be removed from the Knowledge Hub.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -682,6 +1008,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       <AiSummaryDialog
         open={summaryOpen}
         loading={summaryLoading}
+        savingToHub={summarySavingToHub}
         result={summaryResult}
         source={summarySource}
         error={summaryError}
@@ -692,8 +1019,125 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         onClose={() => setSummaryOpen(false)}
         onCopy={() => void handleCopySummary()}
         onSaveToNotes={() => void handleSaveSummaryToNotes()}
+        onSaveToHub={() => void handleSaveSummaryToHub()}
         onRegenerate={() => void handleGenerateSummary()}
       />
+
+      <AlertDialog
+        open={Boolean(detailTarget)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailTarget(null);
+            setDetailError(null);
+            setDetailActionError(null);
+            setDetailActionMessage(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="max-w-4xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {detailTarget?.bookTitle}
+              {detailTarget?.author ? ` - ${detailTarget.author}` : ''}
+            </AlertDialogTitle>
+          </AlertDialogHeader>
+
+          {detailLoading ? <p className="text-sm text-slate-500">{aiSummaryLabels.loading}</p> : null}
+          {detailError ? <p className="text-sm text-destructive">{detailError}</p> : null}
+
+          {detailTarget ? (
+            <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide', badgeClasses('ai_summary'))}>
+                  {aiSummaryLabels.title}
+                </span>
+                <span>{formatDate(detailTarget.createdAt)}</span>
+              </div>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.summary}</h3>
+                <Card className="border-slate-200">
+                  <CardContent className="p-4">
+                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{detailTarget.summary}</p>
+                  </CardContent>
+                </Card>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.keyIdeas}</h3>
+                <div className="space-y-2">
+                  {detailTarget.keyIdeas.length === 0 ? (
+                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
+                  ) : (
+                    detailTarget.keyIdeas.map((item, index) => (
+                      <div key={`${index}:${item}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {item}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.studyNotes}</h3>
+                <div className="space-y-2">
+                  {detailTarget.studyNotes.length === 0 ? (
+                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
+                  ) : (
+                    detailTarget.studyNotes.map((item, index) => (
+                      <div key={`${index}:${item}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {item}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.flashcards}</h3>
+                <div className="space-y-3">
+                  {detailTarget.flashcards.length === 0 ? (
+                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
+                  ) : (
+                    detailTarget.flashcards.map((card, index) => (
+                      <Card key={`${index}:${card.question}`} className="border-slate-200">
+                        <CardContent className="space-y-2 p-4">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{aiSummaryLabels.question}</p>
+                            <p className="mt-1 text-sm text-slate-800">{card.question}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{aiSummaryLabels.answer}</p>
+                            <p className="mt-1 text-sm text-slate-700">{card.answer}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              {detailActionError ? <p className="text-sm text-destructive">{detailActionError}</p> : null}
+              {detailActionMessage ? <p className="text-sm text-emerald-700">{detailActionMessage}</p> : null}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => void handleCopyDetail()} disabled={!detailTarget}>
+              <Copy className="mr-2 h-4 w-4" />
+              {aiSummaryLabels.copy}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => void handleExportDetail()} disabled={!detailTarget}>
+              <FileDown className="mr-2 h-4 w-4" />
+              {aiSummaryLabels.exportMarkdown}
+            </Button>
+            <Button type="button" variant="outline" onClick={handleDeleteDetail} disabled={!detailTarget} className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800">
+              <Trash2 className="mr-2 h-4 w-4" />
+              {t.hub.delete}
+            </Button>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

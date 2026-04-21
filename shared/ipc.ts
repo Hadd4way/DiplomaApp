@@ -45,7 +45,11 @@ export const IPC_CHANNELS = {
   progressGetLastPage: 'progress:get-last-page',
   progressSetLastPage: 'progress:set-last-page',
   statsMarkOpened: 'stats:mark-opened',
-  statsGetRecentBooks: 'stats:get-recent-books'
+  statsGetRecentBooks: 'stats:get-recent-books',
+  aiSummariesSave: 'ai-summaries:save',
+  aiSummariesList: 'ai-summaries:list',
+  aiSummariesGet: 'ai-summaries:get',
+  aiSummariesDelete: 'ai-summaries:delete'
 } as const;
 
 export type PingResponse = {
@@ -240,6 +244,25 @@ export type WishlistItem = {
   readLater: boolean;
 };
 
+export type AiSummaryFlashcard = {
+  question: string;
+  answer: string;
+};
+
+export type AiSummaryEntry = {
+  id: string;
+  bookId: string | null;
+  bookTitle: string;
+  author: string | null;
+  language: 'ru' | 'en';
+  summary: string;
+  keyIdeas: string[];
+  studyNotes: string[];
+  flashcards: AiSummaryFlashcard[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
@@ -321,6 +344,10 @@ export type WishlistListResult = { ok: true; items: WishlistItem[] } | ErrorResu
 export type WishlistSaveResult = { ok: true; item: WishlistItem; alreadySaved: boolean } | ErrorResult;
 export type WishlistRemoveResult = { ok: true } | ErrorResult;
 export type WishlistUpdateResult = { ok: true; item: WishlistItem } | ErrorResult;
+export type AiSummariesSaveResult = { ok: true; entry: AiSummaryEntry } | ErrorResult;
+export type AiSummariesListResult = { ok: true; entries: AiSummaryEntry[] } | ErrorResult;
+export type AiSummariesGetResult = { ok: true; entry: AiSummaryEntry | null } | ErrorResult;
+export type AiSummariesDeleteResult = { ok: true } | ErrorResult;
 
 export type BooksRevealRequest = {
   bookId: string;
@@ -514,6 +541,26 @@ export type WishlistUpdateRequest = {
   readLater: boolean;
 };
 
+export type AiSummariesSaveRequest = {
+  id?: string;
+  bookId: string | null;
+  bookTitle: string;
+  author: string | null;
+  language: 'ru' | 'en';
+  summary: string;
+  keyIdeas: string[];
+  studyNotes: string[];
+  flashcards: AiSummaryFlashcard[];
+};
+
+export type AiSummariesGetRequest = {
+  id: string;
+};
+
+export type AiSummariesDeleteRequest = {
+  id: string;
+};
+
 export interface RendererBooksApi {
   list: () => Promise<BooksListResult>;
   addSample: () => Promise<BooksAddSampleResult>;
@@ -600,6 +647,13 @@ export interface RendererWishlistApi {
   update: (payload: WishlistUpdateRequest) => Promise<WishlistUpdateResult>;
 }
 
+export interface RendererAiSummariesApi {
+  save: (payload: AiSummariesSaveRequest) => Promise<AiSummariesSaveResult>;
+  list: () => Promise<AiSummariesListResult>;
+  get: (payload: AiSummariesGetRequest) => Promise<AiSummariesGetResult>;
+  delete: (payload: AiSummariesDeleteRequest) => Promise<AiSummariesDeleteResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   discover: RendererDiscoverApi;
@@ -616,6 +670,7 @@ export interface RendererApi {
   flowProgress: RendererFlowProgressApi;
   readerSettings: RendererReaderSettingsApi;
   stats: RendererStatsApi;
+  aiSummaries: RendererAiSummariesApi;
   getLastPage: (payload: ProgressGetLastPageRequest) => Promise<number | null>;
   setLastPage: (payload: ProgressSetLastPageRequest) => Promise<void>;
 }

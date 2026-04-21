@@ -84,6 +84,12 @@ const api = {
         markOpened: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.statsMarkOpened, payload),
         getRecentBooks: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.statsGetRecentBooks)
     },
+    aiSummaries: {
+        save: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.aiSummariesSave, payload),
+        list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.aiSummariesList),
+        get: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.aiSummariesGet, payload),
+        delete: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.aiSummariesDelete, payload)
+    },
     getLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressGetLastPage, payload),
     setLastPage: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.progressSetLastPage, payload)
 };

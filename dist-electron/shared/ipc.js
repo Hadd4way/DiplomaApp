@@ -48,7 +48,11 @@ exports.IPC_CHANNELS = {
     progressGetLastPage: 'progress:get-last-page',
     progressSetLastPage: 'progress:set-last-page',
     statsMarkOpened: 'stats:mark-opened',
-    statsGetRecentBooks: 'stats:get-recent-books'
+    statsGetRecentBooks: 'stats:get-recent-books',
+    aiSummariesSave: 'ai-summaries:save',
+    aiSummariesList: 'ai-summaries:list',
+    aiSummariesGet: 'ai-summaries:get',
+    aiSummariesDelete: 'ai-summaries:delete'
 };
 exports.READER_SETTINGS_DEFAULTS = {
     theme: 'light',

@@ -84,6 +84,12 @@ const api: RendererApi = {
     markOpened: (payload) => ipcRenderer.invoke(IPC_CHANNELS.statsMarkOpened, payload),
     getRecentBooks: () => ipcRenderer.invoke(IPC_CHANNELS.statsGetRecentBooks)
   },
+  aiSummaries: {
+    save: (payload) => ipcRenderer.invoke(IPC_CHANNELS.aiSummariesSave, payload),
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.aiSummariesList),
+    get: (payload) => ipcRenderer.invoke(IPC_CHANNELS.aiSummariesGet, payload),
+    delete: (payload) => ipcRenderer.invoke(IPC_CHANNELS.aiSummariesDelete, payload)
+  },
   getLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressGetLastPage, payload),
   setLastPage: (payload) => ipcRenderer.invoke(IPC_CHANNELS.progressSetLastPage, payload)
 };

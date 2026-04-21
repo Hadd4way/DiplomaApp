@@ -123,6 +123,20 @@ function runMigrations(db) {
       read_later INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS ai_summaries (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NULL,
+      book_title TEXT NOT NULL,
+      author TEXT NULL,
+      language TEXT NOT NULL CHECK(language IN ('ru', 'en')),
+      summary TEXT NOT NULL,
+      key_ideas_json TEXT NOT NULL,
+      study_notes_json TEXT NOT NULL,
+      flashcards_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
     CREATE INDEX IF NOT EXISTS idx_books_user_created_at ON books(user_id, created_at DESC);
@@ -130,6 +144,7 @@ function runMigrations(db) {
     CREATE INDEX IF NOT EXISTS idx_reading_stats_updated_at ON reading_stats(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_open_library_metadata_updated_at ON open_library_metadata_cache(updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_wishlist_items_user_created_at ON wishlist_items(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_summaries_created_at ON ai_summaries(created_at DESC);
   `);
     if (!hasColumn(db, 'reader_settings', 'epub_margins')) {
         db.exec("ALTER TABLE reader_settings ADD COLUMN epub_margins TEXT NOT NULL DEFAULT 'medium';");

@@ -7,6 +7,7 @@ const electron_1 = require("electron");
 const node_path_1 = __importDefault(require("node:path"));
 const ipc_1 = require("../shared/ipc");
 const db_1 = require("./db");
+const ai_summaries_1 = require("./ai-summaries");
 const books_1 = require("./books");
 const discover_1 = require("./discover");
 const notes_1 = require("./notes");
@@ -131,6 +132,10 @@ electron_1.app.whenReady().then(() => {
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.progressSetLastPage, (_event, payload) => progressDb.setLastPage(libraryId, payload.bookId, payload.lastPage));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.statsMarkOpened, (_event, payload) => (0, reading_stats_1.markBookOpened)(db, libraryId, payload));
     electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.statsGetRecentBooks, () => (0, reading_stats_1.getRecentBooks)(db, libraryId));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.aiSummariesSave, (_event, payload) => (0, ai_summaries_1.saveAiSummary)(db, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.aiSummariesList, () => (0, ai_summaries_1.listAiSummaries)(db));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.aiSummariesGet, (_event, payload) => (0, ai_summaries_1.getAiSummary)(db, payload));
+    electron_1.ipcMain.handle(ipc_1.IPC_CHANNELS.aiSummariesDelete, (_event, payload) => (0, ai_summaries_1.deleteAiSummary)(db, payload));
     createWindow();
     electron_1.app.on('activate', () => {
         if (electron_1.BrowserWindow.getAllWindows().length === 0) {

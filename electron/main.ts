@@ -41,9 +41,13 @@ import {
   type RecommendationsForBookRequest,
   type WishlistRemoveRequest,
   type WishlistSaveRequest,
-  type WishlistUpdateRequest
+  type WishlistUpdateRequest,
+  type AiSummariesDeleteRequest,
+  type AiSummariesGetRequest,
+  type AiSummariesSaveRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
+import { deleteAiSummary, getAiSummary, listAiSummaries, saveAiSummary } from './ai-summaries';
 import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, getTxtData, importBook, listBooks, revealBook } from './books';
 import { downloadDiscoverBook, searchDiscoverBooks } from './discover';
 import { createNote, deleteNote, listNotes, updateNote } from './notes';
@@ -259,6 +263,12 @@ app.whenReady().then(() => {
     markBookOpened(db, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.statsGetRecentBooks, () => getRecentBooks(db, libraryId));
+  ipcMain.handle(IPC_CHANNELS.aiSummariesSave, (_event, payload: AiSummariesSaveRequest) => saveAiSummary(db, payload));
+  ipcMain.handle(IPC_CHANNELS.aiSummariesList, () => listAiSummaries(db));
+  ipcMain.handle(IPC_CHANNELS.aiSummariesGet, (_event, payload: AiSummariesGetRequest) => getAiSummary(db, payload));
+  ipcMain.handle(IPC_CHANNELS.aiSummariesDelete, (_event, payload: AiSummariesDeleteRequest) =>
+    deleteAiSummary(db, payload)
+  );
 
   createWindow();
 

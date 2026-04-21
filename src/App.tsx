@@ -271,6 +271,10 @@ export default function App() {
   };
 
   const onOpenKnowledgeHubItem = async (item: KnowledgeHubItem) => {
+    if (item.type === 'ai_summary' || !item.bookId) {
+      return;
+    }
+
     const book = books.find((entry) => entry.id === item.bookId);
     if (!book) {
       setError(t.app.annotationBookNotFound);
