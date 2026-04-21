@@ -27,11 +27,13 @@ export const recommendBooks = (
     .then((recommendations) => {
       console.log("[recommend-books] source=openrouter");
 
-      return {
+      const response: RecommendBooksResponse = {
         ok: true,
         source: "openrouter",
         recommendations
       };
+
+      return response;
     })
     .catch((error: unknown) => {
       const warning =

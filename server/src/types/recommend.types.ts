@@ -1,5 +1,16 @@
 export type ReadingLength = "short" | "medium" | "long";
 
+export interface LibraryBookContextEntry {
+  title: string;
+  author: string | null;
+}
+
+export interface RecommendLibraryContext {
+  books: LibraryBookContextEntry[];
+  recentlyOpenedBooks?: LibraryBookContextEntry[];
+  commonAuthors?: string[];
+}
+
 export interface RecommendBooksRequestBody {
   genres: string[];
   moods: string[];
@@ -7,6 +18,8 @@ export interface RecommendBooksRequestBody {
   fiction: boolean;
   classic: boolean;
   freeText: string;
+  languagePreference?: "ru" | "en" | "any";
+  libraryContext?: RecommendLibraryContext;
 }
 
 export interface BookRecommendation {

@@ -1,6 +1,17 @@
 export type AdvisorLength = 'short' | 'medium' | 'long';
 export type AdvisorLanguagePreference = 'ru' | 'en' | 'any';
 
+export type AdvisorLibraryBook = {
+  title: string;
+  author: string | null;
+};
+
+export type AdvisorLibraryContext = {
+  books: AdvisorLibraryBook[];
+  recentlyOpenedBooks?: AdvisorLibraryBook[];
+  commonAuthors?: string[];
+};
+
 export type AdvisorRequestPayload = {
   genres: string[];
   moods: string[];
@@ -9,6 +20,7 @@ export type AdvisorRequestPayload = {
   classic: boolean;
   freeText: string;
   languagePreference?: AdvisorLanguagePreference;
+  libraryContext?: AdvisorLibraryContext;
 };
 
 export type AdvisorRecommendation = {

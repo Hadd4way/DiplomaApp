@@ -1,6 +1,7 @@
 import { env } from "../config/env";
 import {
   BookRecommendation,
+  LibraryBookContextEntry,
   RecommendBooksRequestBody
 } from "../types/recommend.types";
 
@@ -30,23 +31,75 @@ const systemPrompt = [
   "You are a book recommendation assistant.",
   `Recommend no more than ${MAX_RECOMMENDATIONS} real books that best match the user's preferences.`,
   "Prefer accurate, well-known book metadata.",
+  "Use the user's existing library as a taste signal when available, and avoid recommending books they already own or read.",
   "Return ONLY valid JSON.",
   'The JSON must have this shape: {"recommendations":[{"title":"string","author":"string","reason":"string","confidence":0.0}]}'
 ].join(" ");
 
+const formatLibraryBooks = (books: LibraryBookContextEntry[]): string[] => {
+  return books
+    .slice(0, 30)
+    .map((book) => {
+      const title = book.title.trim();
+      const author = book.author?.trim();
+      return author ? `${title} by ${author}` : title;
+    })
+    .filter((entry) => entry.length > 0);
+};
+
 const buildUserPrompt = (payload: RecommendBooksRequestBody): string => {
-  return JSON.stringify(
-    {
-      genres: payload.genres,
-      moods: payload.moods,
-      length: payload.length,
-      fiction: payload.fiction,
-      classic: payload.classic,
-      freeText: payload.freeText
-    },
-    null,
-    2
-  );
+  const sections = [
+    "User preferences:",
+    JSON.stringify(
+      {
+        genres: payload.genres,
+        moods: payload.moods,
+        length: payload.length,
+        fiction: payload.fiction,
+        classic: payload.classic,
+        freeText: payload.freeText,
+        languagePreference: payload.languagePreference ?? "any"
+      },
+      null,
+      2
+    )
+  ];
+
+  const ownedBooks = payload.libraryContext?.books
+    ? formatLibraryBooks(payload.libraryContext.books)
+    : [];
+  const recentlyOpenedBooks = payload.libraryContext?.recentlyOpenedBooks
+    ? formatLibraryBooks(payload.libraryContext.recentlyOpenedBooks)
+    : [];
+  const commonAuthors =
+    payload.libraryContext?.commonAuthors
+      ?.map((author) => author.trim())
+      .filter((author) => author.length > 0)
+      .slice(0, 5) ?? [];
+
+  if (ownedBooks.length > 0) {
+    sections.push(
+      "User already owns/reads:",
+      ...ownedBooks.map((book) => `- ${book}`),
+      "Use this to improve recommendations."
+    );
+  }
+
+  if (recentlyOpenedBooks.length > 0) {
+    sections.push(
+      "Recently opened books:",
+      ...recentlyOpenedBooks.map((book) => `- ${book}`)
+    );
+  }
+
+  if (commonAuthors.length > 0) {
+    sections.push(
+      "Most common authors in the user's library:",
+      ...commonAuthors.map((author) => `- ${author}`)
+    );
+  }
+
+  return sections.join("\n");
 };
 
 const clampConfidence = (value: number): number => {

@@ -4,11 +4,13 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useRecentBooks } from '@/lib/library-metrics';
 import { useWishlist } from '@/lib/useWishlist';
 import { cn } from '@/lib/utils';
 import {
   recommendBooks,
   type AdvisorLanguagePreference,
+  type AdvisorLibraryBook,
   type AdvisorLength,
   type AdvisorRecommendation
 } from '@/services/advisorApi';
@@ -55,8 +57,9 @@ const screenCopy = {
     preferredLanguage: 'Preferred language',
     freeTextLabel: 'Free text',
     freeTextPlaceholder: 'Describe what kind of book you want',
-    libraryContext: 'Use my library context',
-    libraryContextHint: 'Coming soon: send a lightweight local library summary to the AI backend.',
+    libraryContext: 'Учитывать мою библиотеку',
+    libraryContextHint: 'Отправим только названия и авторов из локальной библиотеки, без заметок, подсветок, экспортов и аннотаций.',
+    personalizedNote: 'Рекомендации персонализированы с учетом вашей библиотеки.',
     currentLibrary: 'Local library',
     booksInLibrary: 'books in library',
     short: 'Short',
@@ -104,7 +107,8 @@ const screenCopy = {
     freeTextLabel: 'Free text',
     freeTextPlaceholder: 'Describe what kind of book you want',
     libraryContext: 'Use my library context',
-    libraryContextHint: 'Coming soon: send a lightweight local library summary to the AI backend.',
+    libraryContextHint: 'We only send titles and authors from your local library, never notes, highlights, exports, or annotations.',
+    personalizedNote: 'Recommendations personalized using your library.',
     currentLibrary: 'Local library',
     booksInLibrary: 'books in library',
     short: 'Short',
@@ -156,6 +160,113 @@ function getConfidenceLabel(value: number | undefined, label: string) {
 
 function getRecommendationKey(recommendation: { title: string; author?: string | null }) {
   return `${recommendation.title.trim().toLocaleLowerCase()}::${(recommendation.author ?? '').trim().toLocaleLowerCase()}`;
+}
+
+function toLibraryBook(book: Pick<Book, 'title' | 'author'>): AdvisorLibraryBook | null {
+  const title = book.title.trim();
+  const author = book.author?.trim() ?? null;
+
+  if (!title) {
+    return null;
+  }
+
+  return {
+    title,
+    author: author || null
+  };
+}
+
+function getLibraryBookKey(book: Pick<Book, 'title' | 'author'>) {
+  return `${book.title.trim().toLocaleLowerCase()}::${(book.author ?? '').trim().toLocaleLowerCase()}`;
+}
+
+function buildLibraryContext(books: Book[], recentBookIds: string[]) {
+  const recentBooksById = new Map(recentBookIds.map((bookId, index) => [bookId, index]));
+  const booksById = new Map(books.map((book) => [book.id, book]));
+  const sortedBooks = [...books].sort((left, right) => {
+    const leftRecentIndex = recentBooksById.get(left.id);
+    const rightRecentIndex = recentBooksById.get(right.id);
+
+    if (leftRecentIndex !== undefined || rightRecentIndex !== undefined) {
+      if (leftRecentIndex === undefined) {
+        return 1;
+      }
+      if (rightRecentIndex === undefined) {
+        return -1;
+      }
+      return leftRecentIndex - rightRecentIndex;
+    }
+
+    return right.createdAt - left.createdAt;
+  });
+
+  const seen = new Set<string>();
+  const libraryBooks: AdvisorLibraryBook[] = [];
+
+  for (const book of sortedBooks) {
+    const entry = toLibraryBook(book);
+    if (!entry) {
+      continue;
+    }
+
+    const key = getLibraryBookKey(entry);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    libraryBooks.push(entry);
+
+    if (libraryBooks.length >= 30) {
+      break;
+    }
+  }
+
+  const recentlyOpenedBooks: AdvisorLibraryBook[] = [];
+
+  for (const bookId of recentBookIds) {
+    const book = booksById.get(bookId);
+    if (!book) {
+      continue;
+    }
+
+    const entry = toLibraryBook(book);
+    if (!entry) {
+      continue;
+    }
+
+    const key = getLibraryBookKey(entry);
+    if (recentlyOpenedBooks.some((candidate) => getLibraryBookKey(candidate) === key)) {
+      continue;
+    }
+
+    recentlyOpenedBooks.push(entry);
+
+    if (recentlyOpenedBooks.length >= 5) {
+      break;
+    }
+  }
+
+  const authorCounts = new Map<string, number>();
+  for (const book of libraryBooks) {
+    const author = book.author?.trim();
+    if (!author) {
+      continue;
+    }
+
+    authorCounts.set(author, (authorCounts.get(author) ?? 0) + 1);
+  }
+
+  const commonAuthors = [...authorCounts.entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 5)
+    .map(([author]) => author);
+
+  return {
+    books: libraryBooks,
+    recentlyOpenedBooks,
+    commonAuthors
+  };
 }
 
 function ChipGroup({
@@ -225,6 +336,7 @@ function SegmentedControl<TValue extends string>({
 export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const { language } = useLanguage();
   const copy = screenCopy[language];
+  const { recentBooks } = useRecentBooks('book-advisor');
   const [genres, setGenres] = React.useState<string[]>([]);
   const [moods, setMoods] = React.useState<string[]>([]);
   const [length, setLength] = React.useState<AdvisorLength>('medium');
@@ -232,7 +344,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const [eraPreference, setEraPreference] = React.useState<EraPreference>('any');
   const [languagePreference, setLanguagePreference] = React.useState<AdvisorLanguagePreference>(getLanguageDefault(language));
   const [freeText, setFreeText] = React.useState('');
-  const [useLibraryContext, setUseLibraryContext] = React.useState(false);
+  const [useLibraryContext, setUseLibraryContext] = React.useState(true);
   const [recommendations, setRecommendations] = React.useState<AdvisorRecommendation[]>([]);
   const [responseSource, setResponseSource] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
@@ -246,6 +358,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   React.useEffect(() => {
     setLanguagePreference((current) => (current === 'any' ? current : getLanguageDefault(language)));
   }, [language]);
+
+  const libraryContext = React.useMemo(
+    () => buildLibraryContext(books, recentBooks.map((book) => book.bookId)),
+    [books, recentBooks]
+  );
 
   const toggleSelection = (value: string, setter: React.Dispatch<React.SetStateAction<string[]>>) => {
     setter((current) => (current.includes(value) ? current.filter((item) => item !== value) : [...current, value]));
@@ -266,7 +383,8 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
         fiction: typePreference === 'fiction',
         classic: eraPreference === 'classic',
         freeText: freeText.trim(),
-        languagePreference
+        languagePreference,
+        libraryContext: useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined
       });
 
       setRecommendations(result.recommendations);
@@ -287,6 +405,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const sourceLabel = responseSource === 'fallback' ? copy.sourceFallback : copy.sourceOpenrouter;
   const wishlistKeys = new Set(wishlistItems.map(getRecommendationKey));
   const visibleRecommendations = recommendations.filter((recommendation) => !dismissedKeys.includes(getRecommendationKey(recommendation)));
+  const showPersonalizedNote = useLibraryContext && libraryContext.books.length > 0;
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
@@ -305,7 +424,9 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
             <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground shadow-sm">
               <p className="font-medium text-foreground">{copy.currentLibrary}</p>
-              <p>{books.length} {copy.booksInLibrary}</p>
+              <p>
+                {books.length} {copy.booksInLibrary}
+              </p>
               <p className="mt-1 text-xs">{copy.helperLine}</p>
             </div>
           </div>
@@ -403,7 +524,6 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                       type="checkbox"
                       checked={useLibraryContext}
                       onChange={(event) => setUseLibraryContext(event.target.checked)}
-                      disabled
                       className="mt-0.5 h-4 w-4 rounded border border-input"
                     />
                     <span className="space-y-1">
@@ -411,6 +531,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                       <span className="block text-muted-foreground">{copy.libraryContextHint}</span>
                     </span>
                   </label>
+                  {showPersonalizedNote ? <p className="text-xs font-medium text-emerald-700">{copy.personalizedNote}</p> : null}
                 </section>
 
                 <Button type="submit" disabled={loading} className="w-full">
@@ -472,6 +593,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">{copy.recommendationsTitle}</h2>
                       <p className="text-sm text-muted-foreground">{copy.recommendationsDescription}</p>
+                      {showPersonalizedNote ? <p className="mt-2 text-xs font-medium text-emerald-700">{copy.personalizedNote}</p> : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
