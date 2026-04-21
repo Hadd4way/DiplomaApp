@@ -4,6 +4,10 @@ import {
   LibraryBookContextEntry,
   RecommendBooksRequestBody
 } from "../types/recommend.types";
+import {
+  BookNotesSummary,
+  SummarizeBookNotesRequestBody
+} from "../types/summary.types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_RECOMMENDATIONS = 5;
@@ -25,6 +29,11 @@ interface OpenRouterResponse {
 
 interface ParsedRecommendationPayload {
   recommendations?: unknown;
+}
+
+interface ParsedSummaryPayload {
+  summary?: unknown;
+  keyIdeas?: unknown;
 }
 
 const systemPrompt = [
@@ -176,11 +185,17 @@ const buildHeaders = (): Record<string, string> => {
   };
 };
 
-export const requestBookRecommendations = async (
-  payload: RecommendBooksRequestBody
-): Promise<BookRecommendation[]> => {
+const requestOpenRouterJsonCompletion = async ({
+  systemPrompt,
+  userPrompt,
+  temperature
+}: {
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+}): Promise<string> => {
   if (!env.OPENROUTER_API_KEY) {
-    throw new Error("OPENROUTER_API_KEY is missing. Using fallback recommendations.");
+    throw new Error("OPENROUTER_API_KEY is missing.");
   }
 
   const controller = new AbortController();
@@ -195,7 +210,7 @@ export const requestBookRecommendations = async (
     },
     {
       role: "user",
-      content: buildUserPrompt(payload)
+      content: userPrompt
     }
   ];
 
@@ -207,7 +222,7 @@ export const requestBookRecommendations = async (
         model: env.OPENROUTER_MODEL,
         messages,
         response_format: { type: "json_object" },
-        temperature: 0.7
+        temperature
       }),
       signal: controller.signal
     });
@@ -225,7 +240,7 @@ export const requestBookRecommendations = async (
       throw new Error("OpenRouter response did not include message content.");
     }
 
-    return parseRecommendations(content);
+    return content;
   } catch (error: unknown) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error("OpenRouter request timed out after 20 seconds.");
@@ -239,4 +254,95 @@ export const requestBookRecommendations = async (
   } finally {
     clearTimeout(timeoutId);
   }
+};
+
+const cleanString = (value: unknown): string => {
+  return typeof value === "string" ? value.trim() : "";
+};
+
+const toStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => cleanString(item))
+    .filter((item) => item.length > 0);
+};
+
+const parseSummary = (content: string): BookNotesSummary => {
+  let parsed: ParsedSummaryPayload;
+
+  try {
+    parsed = JSON.parse(content) as ParsedSummaryPayload;
+  } catch {
+    throw new Error("OpenRouter returned invalid JSON content.");
+  }
+
+  const summary = cleanString(parsed.summary);
+  const keyIdeas = toStringArray(parsed.keyIdeas);
+
+  if (!summary && keyIdeas.length === 0) {
+    throw new Error("OpenRouter response did not contain a usable summary.");
+  }
+
+  return {
+    summary,
+    keyIdeas
+  };
+};
+
+const summarizeSystemPrompt = [
+  "You are a study assistant for a reading app.",
+  "Summarize ONLY the user's provided highlights and notes.",
+  "Do NOT invent facts or add knowledge that is not explicitly present in the provided text.",
+  "Focus on ideas directly supported by the supplied highlights and notes.",
+  "Keep the output concise but useful.",
+  "Respect the requested output language exactly: ru means Russian, en means English.",
+  "If the input is small, still return a useful concise result.",
+  "Return ONLY valid JSON.",
+  'Use this exact JSON shape: {"summary":"string","keyIdeas":["string"]}'
+].join(" ");
+
+const buildSummarizeUserPrompt = (
+  payload: SummarizeBookNotesRequestBody
+): string => {
+  return JSON.stringify(
+    {
+      task: "summarize-book-notes",
+      language: payload.language,
+      book: {
+        title: payload.bookTitle,
+        author: payload.author ?? null
+      },
+      highlights: payload.highlights,
+      notes: payload.notes
+    },
+    null,
+    2
+  );
+};
+
+export const requestBookRecommendations = async (
+  payload: RecommendBooksRequestBody
+): Promise<BookRecommendation[]> => {
+  const content = await requestOpenRouterJsonCompletion({
+    systemPrompt,
+    userPrompt: buildUserPrompt(payload),
+    temperature: 0.7
+  });
+
+  return parseRecommendations(content);
+};
+
+export const requestBookNotesSummary = async (
+  payload: SummarizeBookNotesRequestBody
+): Promise<BookNotesSummary> => {
+  const content = await requestOpenRouterJsonCompletion({
+    systemPrompt: summarizeSystemPrompt,
+    userPrompt: buildSummarizeUserPrompt(payload),
+    temperature: 0.3
+  });
+
+  return parseSummary(content);
 };

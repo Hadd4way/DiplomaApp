@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 
 import { recommendRouter } from "./routes/recommend.routes";
+import { summaryRouter } from "./routes/summary.routes";
 import { notFoundMiddleware } from "./middleware/notfound.middleware";
 import { errorMiddleware } from "./middleware/error.middleware";
 
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", recommendRouter);
+app.use("/api", summaryRouter);
 
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);

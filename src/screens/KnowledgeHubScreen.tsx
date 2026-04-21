@@ -1,6 +1,7 @@
 import * as React from 'react';
 import type { Book } from '../../shared/ipc';
 import { BookOpen, Brain, Clock3, Highlighter, MessageSquare, Search, Sparkles, Trash2 } from 'lucide-react';
+import { AiSummaryDialog } from '@/components/AiSummaryDialog';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import {
   AlertDialog,
@@ -16,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { aiSummaryToText } from '@/lib/ai-summary';
+import { summarizeBookNotes, type AiSummaryResult } from '@/services/summaryApi';
 import { cn } from '@/lib/utils';
 
 export type KnowledgeHubItem = {
@@ -81,6 +84,13 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const [editValue, setEditValue] = React.useState('');
   const [editError, setEditError] = React.useState<string | null>(null);
   const [editLoading, setEditLoading] = React.useState(false);
+  const [summaryOpen, setSummaryOpen] = React.useState(false);
+  const [summaryLoading, setSummaryLoading] = React.useState(false);
+  const [summaryError, setSummaryError] = React.useState<string | null>(null);
+  const [summaryActionError, setSummaryActionError] = React.useState<string | null>(null);
+  const [summaryActionMessage, setSummaryActionMessage] = React.useState<string | null>(null);
+  const [summarySource, setSummarySource] = React.useState<'openrouter' | 'fallback' | null>(null);
+  const [summaryResult, setSummaryResult] = React.useState<AiSummaryResult | null>(null);
   const dateFormatter = React.useMemo(
     () => new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }),
     [language]
@@ -209,6 +219,26 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     });
   }, [deferredQuery, items, language, recentThreshold, selectedBookId, selectedType, sortBy]);
 
+  const selectedBook = React.useMemo(
+    () => books.find((book) => book.id === selectedBookId) ?? null,
+    [books, selectedBookId]
+  );
+
+  const summaryItems = React.useMemo(
+    () => (selectedBookId === 'all' ? [] : filteredItems.filter((item) => item.bookId === selectedBookId)),
+    [filteredItems, selectedBookId]
+  );
+
+  const canGenerateSummary = selectedBook !== null && summaryItems.length > 0;
+
+  const summaryText = React.useMemo(() => {
+    if (!selectedBook || !summaryResult) {
+      return '';
+    }
+    return aiSummaryToText(selectedBook.title, summaryResult, language);
+  }, [language, selectedBook, summaryResult]);
+  const summaryMarkdown = summaryText;
+
   const summary = React.useMemo(() => {
     const notesCount = items.filter((item) => item.type === 'note').length;
     const highlightsCount = items.filter((item) => item.type === 'highlight').length;
@@ -316,6 +346,137 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
   }, [editTarget, editValue, t.hub.noteRequired, t.hub.noteTextRequired]);
 
+  const handleGenerateSummary = React.useCallback(async () => {
+    if (!selectedBook) {
+      return;
+    }
+
+    setSummaryOpen(true);
+    setSummaryLoading(true);
+    setSummaryError(null);
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+
+    try {
+      const response = await summarizeBookNotes({
+        bookTitle: selectedBook.title,
+        author: selectedBook.author ?? null,
+        highlights: summaryItems
+          .filter((item) => item.type === 'highlight')
+          .map((item) => ({
+            text: item.text,
+            note: item.note
+          })),
+        notes: summaryItems
+          .filter((item) => item.type === 'note')
+          .map((item) => ({
+            content: item.note ?? ''
+          })),
+        language
+      });
+
+      setSummarySource(response.source);
+      setSummaryResult(response.result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSummaryError(message);
+      setSummaryResult(null);
+      setSummarySource(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [language, selectedBook, summaryItems]);
+
+  const handleCopySummary = React.useCallback(async () => {
+    if (!summaryText) {
+      return;
+    }
+
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+    try {
+      await navigator.clipboard.writeText(summaryText);
+      setSummaryActionMessage(language === 'ru' ? 'Конспект скопирован.' : 'Summary copied.');
+    } catch (err) {
+      setSummaryActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [language, summaryText]);
+
+  const handleSaveSummaryToNotes = React.useCallback(async () => {
+    if (!window.api || !selectedBook || !summaryText) {
+      return;
+    }
+
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+    try {
+      const result = await window.api.notes.create({
+        bookId: selectedBook.id,
+        page: 1,
+        content: summaryText
+      });
+
+      if (!result.ok) {
+        setSummaryActionError(result.error);
+        return;
+      }
+
+      setSummaryActionMessage(language === 'ru' ? 'Конспект сохранён в заметки.' : 'Summary saved to notes.');
+    } catch (err) {
+      setSummaryActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [language, selectedBook, summaryText]);
+
+  const handleExportSummary = React.useCallback(async () => {
+    if (!window.api?.export || !selectedBook || !summaryMarkdown) {
+      return;
+    }
+
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+    try {
+      const result = await window.api.export.saveFile({
+        suggestedName: 'ai-summary.md',
+        ext: 'md',
+        content: summaryMarkdown
+      });
+
+      if (!result.ok) {
+        if ('cancelled' in result && result.cancelled) {
+          return;
+        }
+        setSummaryActionError('error' in result ? result.error : language === 'ru' ? 'Не удалось экспортировать конспект.' : 'Failed to export summary.');
+        return;
+      }
+
+      setSummaryActionMessage(language === 'ru' ? 'Markdown сохранён.' : 'Markdown exported.');
+    } catch (err) {
+      setSummaryActionError(err instanceof Error ? err.message : String(err));
+    }
+  }, [language, selectedBook, summaryMarkdown]);
+
+  React.useEffect(() => {
+    setSummaryResult(null);
+    setSummarySource(null);
+    setSummaryError(null);
+    setSummaryActionError(null);
+    setSummaryActionMessage(null);
+    setSummaryOpen(false);
+  }, [selectedBookId, selectedType, selectedRecent, deferredQuery, sortBy]);
+
+  const summaryHint =
+    selectedBookId === 'all'
+      ? language === 'ru'
+        ? 'Сначала выберите книгу, чтобы отправить только её заметки и выделения.'
+        : 'Choose a book first so only that book’s notes and highlights are sent.'
+      : summaryItems.length === 0
+        ? language === 'ru'
+          ? 'Для текущего выбора пока нет заметок или выделений.'
+          : 'There are no notes or highlights in the current selection yet.'
+        : language === 'ru'
+          ? `Будут использованы ${summaryItems.length} элементов из текущего выбора.`
+          : `${summaryItems.length} items from the current selection will be used.`;
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto pr-2">
@@ -384,6 +545,18 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </select>
                 <Button type="button" variant="outline" onClick={() => void loadAnnotations()} disabled={loading}>
                   {t.hub.refresh}
+                </Button>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-900">
+                    {language === 'ru' ? 'AI-конспект по текущему выбору' : 'AI summary for the current selection'}
+                  </p>
+                  <p className="text-sm text-slate-500">{summaryHint}</p>
+                </div>
+                <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
+                  {language === 'ru' ? 'Сделать AI-конспект' : 'Generate AI Summary'}
                 </Button>
               </div>
 
@@ -504,6 +677,22 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
           setEditError(null);
         }}
         onSave={() => void handleSaveEdit()}
+      />
+
+      <AiSummaryDialog
+        open={summaryOpen}
+        loading={summaryLoading}
+        result={summaryResult}
+        source={summarySource}
+        error={summaryError}
+        language={language}
+        bookTitle={selectedBook?.title ?? null}
+        actionMessage={summaryActionMessage}
+        actionError={summaryActionError}
+        onClose={() => setSummaryOpen(false)}
+        onCopy={() => void handleCopySummary()}
+        onSaveToNotes={() => void handleSaveSummaryToNotes()}
+        onRegenerate={() => void handleGenerateSummary()}
       />
     </div>
   );
