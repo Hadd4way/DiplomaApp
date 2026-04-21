@@ -20,6 +20,7 @@ export type AdvisorRequestPayload = {
   classic: boolean;
   freeText: string;
   languagePreference?: AdvisorLanguagePreference;
+  responseLanguage?: 'ru' | 'en';
   libraryContext?: AdvisorLibraryContext;
 };
 
@@ -34,6 +35,7 @@ export type AdvisorResponse = {
   ok: true;
   source?: 'openrouter' | 'fallback' | string;
   warning?: string;
+  advisorComment: string;
   recommendations: AdvisorRecommendation[];
 };
 
@@ -62,7 +64,13 @@ export async function recommendBooks(payload: AdvisorRequestPayload): Promise<Ad
       throw new Error((data && 'error' in data && data.error) || `Request failed with status ${response.status}`);
     }
 
-    if (!data || !('ok' in data) || data.ok !== true || !Array.isArray(data.recommendations)) {
+    if (
+      !data ||
+      !('ok' in data) ||
+      data.ok !== true ||
+      typeof data.advisorComment !== 'string' ||
+      !Array.isArray(data.recommendations)
+    ) {
       throw new Error('The recommendation service returned an unexpected response.');
     }
 

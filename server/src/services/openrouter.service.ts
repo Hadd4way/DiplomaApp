@@ -28,7 +28,13 @@ interface OpenRouterResponse {
 }
 
 interface ParsedRecommendationPayload {
+  advisorComment?: unknown;
   recommendations?: unknown;
+}
+
+interface BookRecommendationResult {
+  advisorComment: string;
+  recommendations: BookRecommendation[];
 }
 
 interface ParsedSummaryPayload {
@@ -41,8 +47,21 @@ const systemPrompt = [
   `Recommend no more than ${MAX_RECOMMENDATIONS} real books that best match the user's preferences.`,
   "Prefer accurate, well-known book metadata.",
   "Use the user's existing library as a taste signal when available, and avoid recommending books they already own or read.",
+  "There are two different language fields in the request.",
+  "bookLanguagePreference controls which books should be recommended.",
+  "responseLanguage controls only the language of advisorComment and reason text.",
+  "Never use responseLanguage as the desired language of the books themselves.",
+  "If bookLanguagePreference is en, strongly prefer books originally written in English or primarily known as English-language books.",
+  "If bookLanguagePreference is ru, strongly prefer books originally written in Russian or primarily known as Russian-language books.",
+  "If bookLanguagePreference is any, choose the best books regardless of original language.",
+  "Write every recommendation reason in the requested responseLanguage only.",
+  "Write the advisorComment in the requested responseLanguage only.",
+  "advisorComment must be short, natural, and helpful.",
+  "advisorComment must be 2 to 4 sentences maximum.",
+  "advisorComment must explain the overall pattern behind the recommendation set using the user's preferences, not random facts.",
+  "Avoid filler and avoid mentioning that you are an AI.",
   "Return ONLY valid JSON.",
-  'The JSON must have this shape: {"recommendations":[{"title":"string","author":"string","reason":"string","confidence":0.0}]}'
+  'The JSON must have this shape: {"advisorComment":"string","recommendations":[{"title":"string","author":"string","reason":"string","confidence":0.0}]}'
 ].join(" ");
 
 const formatLibraryBooks = (books: LibraryBookContextEntry[]): string[] => {
@@ -67,12 +86,22 @@ const buildUserPrompt = (payload: RecommendBooksRequestBody): string => {
         fiction: payload.fiction,
         classic: payload.classic,
         freeText: payload.freeText,
-        languagePreference: payload.languagePreference ?? "any"
+        bookLanguagePreference: payload.languagePreference ?? "any",
+        responseLanguage: payload.responseLanguage ?? "en"
       },
       null,
       2
     )
   ];
+
+  sections.push(
+    "Important language rules:",
+    `- Recommended books language preference: ${payload.languagePreference ?? "any"}`,
+    `- Response text language: ${payload.responseLanguage ?? "en"}`,
+    "- The response text language is only for advisorComment and reason fields.",
+    "- Do not switch the recommended books to Russian just because the response text language is Russian.",
+    "- Do not switch the recommended books to English just because the response text language is English."
+  );
 
   const ownedBooks = payload.libraryContext?.books
     ? formatLibraryBooks(payload.libraryContext.books)
@@ -151,7 +180,10 @@ const toRecommendation = (item: unknown): BookRecommendation | null => {
   };
 };
 
-const parseRecommendations = (content: string): BookRecommendation[] => {
+const parseRecommendations = (
+  content: string,
+  fallbackComment: string
+): BookRecommendationResult => {
   let parsed: ParsedRecommendationPayload;
 
   try {
@@ -173,7 +205,12 @@ const parseRecommendations = (content: string): BookRecommendation[] => {
     throw new Error("OpenRouter response did not contain valid recommendations.");
   }
 
-  return recommendations;
+  const advisorComment = cleanString(parsed.advisorComment) || fallbackComment;
+
+  return {
+    advisorComment,
+    recommendations
+  };
 };
 
 const buildHeaders = (): Record<string, string> => {
@@ -325,14 +362,19 @@ const buildSummarizeUserPrompt = (
 
 export const requestBookRecommendations = async (
   payload: RecommendBooksRequestBody
-): Promise<BookRecommendation[]> => {
+): Promise<BookRecommendationResult> => {
   const content = await requestOpenRouterJsonCompletion({
     systemPrompt,
     userPrompt: buildUserPrompt(payload),
     temperature: 0.7
   });
 
-  return parseRecommendations(content);
+  const fallbackComment =
+    payload.responseLanguage === "ru"
+      ? "Подборка собрана вокруг ваших текущих предпочтений, чтобы сохранить единое настроение и тип чтения."
+      : "This selection is built around your current preferences so the books feel consistent in tone and reading style.";
+
+  return parseRecommendations(content, fallbackComment);
 };
 
 export const requestBookNotesSummary = async (

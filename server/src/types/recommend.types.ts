@@ -19,6 +19,7 @@ export interface RecommendBooksRequestBody {
   classic: boolean;
   freeText: string;
   languagePreference?: "ru" | "en" | "any";
+  responseLanguage?: "ru" | "en";
   libraryContext?: RecommendLibraryContext;
 }
 
@@ -34,6 +35,7 @@ export type RecommendationSource = "openrouter" | "fallback";
 export interface RecommendBooksResponse {
   ok: true;
   source: RecommendationSource;
+  advisorComment: string;
   recommendations: BookRecommendation[];
   warning?: string;
 }

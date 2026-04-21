@@ -81,6 +81,8 @@ const screenCopy = {
     errorTitle: 'Failed to get recommendations',
     recommendationsTitle: 'AI recommendations',
     recommendationsDescription: 'Books that best match the preferences you selected.',
+    advisorNoteTitle: 'Комментарий советника',
+    advisorNoteBadge: 'Заметка советника',
     confidence: 'Confidence',
     save: 'Save',
     saved: 'Saved',
@@ -130,6 +132,8 @@ const screenCopy = {
     errorTitle: 'Failed to get recommendations',
     recommendationsTitle: 'AI recommendations',
     recommendationsDescription: 'Books that best match the preferences you selected.',
+    advisorNoteTitle: "Advisor's Note",
+    advisorNoteBadge: 'Advisor Note',
     confidence: 'Confidence',
     save: 'Save',
     saved: 'Saved',
@@ -346,6 +350,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const [freeText, setFreeText] = React.useState('');
   const [useLibraryContext, setUseLibraryContext] = React.useState(true);
   const [recommendations, setRecommendations] = React.useState<AdvisorRecommendation[]>([]);
+  const [advisorComment, setAdvisorComment] = React.useState('');
   const [responseSource, setResponseSource] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -374,6 +379,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
     setLoading(true);
     setError(null);
     setWarning(null);
+    setAdvisorComment('');
 
     try {
       const result = await recommendBooks({
@@ -384,14 +390,17 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
         classic: eraPreference === 'classic',
         freeText: freeText.trim(),
         languagePreference,
+        responseLanguage: language,
         libraryContext: useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined
       });
 
+      setAdvisorComment(result.advisorComment);
       setRecommendations(result.recommendations);
       setDismissedKeys([]);
       setResponseSource(result.source ?? null);
       setWarning(result.warning ?? null);
     } catch (requestError) {
+      setAdvisorComment('');
       setRecommendations([]);
       setDismissedKeys([]);
       setResponseSource(null);
@@ -588,6 +597,27 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
               </Card>
             ) : (
               <>
+                {advisorComment ? (
+                  <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)] shadow-sm">
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white/90 text-amber-700 shadow-sm">
+                          <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div className="space-y-2">
+                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                            {copy.advisorNoteBadge}
+                          </span>
+                          <div className="space-y-1">
+                            <h3 className="text-lg font-semibold tracking-tight text-foreground">{copy.advisorNoteTitle}</h3>
+                            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{advisorComment}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
+
                 <Card className="border-white/60 bg-card/90 shadow-sm">
                   <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
                     <div>
