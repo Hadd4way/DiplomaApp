@@ -21,6 +21,12 @@ const api = {
         getHome: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.recommendationsHome),
         getForBook: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.recommendationsForBook, payload)
     },
+    wishlist: {
+        list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.wishlistList),
+        save: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.wishlistSave, payload),
+        remove: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.wishlistRemove, payload),
+        update: (payload) => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.wishlistUpdate, payload)
+    },
     books: {
         list: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksList),
         addSample: () => electron_1.ipcRenderer.invoke(ipc_1.IPC_CHANNELS.booksAddSample),

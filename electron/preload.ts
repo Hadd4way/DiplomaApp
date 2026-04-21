@@ -21,6 +21,12 @@ const api: RendererApi = {
     getHome: () => ipcRenderer.invoke(IPC_CHANNELS.recommendationsHome),
     getForBook: (payload) => ipcRenderer.invoke(IPC_CHANNELS.recommendationsForBook, payload)
   },
+  wishlist: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.wishlistList),
+    save: (payload) => ipcRenderer.invoke(IPC_CHANNELS.wishlistSave, payload),
+    remove: (payload) => ipcRenderer.invoke(IPC_CHANNELS.wishlistRemove, payload),
+    update: (payload) => ipcRenderer.invoke(IPC_CHANNELS.wishlistUpdate, payload)
+  },
   books: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.booksList),
     addSample: () => ipcRenderer.invoke(IPC_CHANNELS.booksAddSample),

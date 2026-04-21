@@ -5,6 +5,10 @@ export const IPC_CHANNELS = {
   discoverDownloadProgress: 'discover:download-progress',
   recommendationsHome: 'recommendations:home',
   recommendationsForBook: 'recommendations:for-book',
+  wishlistList: 'wishlist:list',
+  wishlistSave: 'wishlist:save',
+  wishlistRemove: 'wishlist:remove',
+  wishlistUpdate: 'wishlist:update',
   booksList: 'books:list',
   booksAddSample: 'books:add-sample',
   booksImport: 'books:import',
@@ -226,6 +230,16 @@ export type RecommendationProfileSummary = {
   recentBookIds: string[];
 };
 
+export type WishlistItem = {
+  id: string;
+  title: string;
+  author: string | null;
+  reason: string;
+  confidence: number | null;
+  createdAt: number;
+  readLater: boolean;
+};
+
 export type ErrorResult = { ok: false; error: string };
 export type BooksListResult = { ok: true; books: Book[] } | ErrorResult;
 export type BooksAddSampleResult = { ok: true; book: Book } | ErrorResult;
@@ -303,6 +317,10 @@ export type RecommendationsForBookResult =
       moreByAuthor: RecommendationEntry[];
     }
   | ErrorResult;
+export type WishlistListResult = { ok: true; items: WishlistItem[] } | ErrorResult;
+export type WishlistSaveResult = { ok: true; item: WishlistItem; alreadySaved: boolean } | ErrorResult;
+export type WishlistRemoveResult = { ok: true } | ErrorResult;
+export type WishlistUpdateResult = { ok: true; item: WishlistItem } | ErrorResult;
 
 export type BooksRevealRequest = {
   bookId: string;
@@ -480,6 +498,22 @@ export type RecommendationsForBookRequest = {
   bookId: string;
 };
 
+export type WishlistSaveRequest = {
+  title: string;
+  author?: string | null;
+  reason: string;
+  confidence?: number | null;
+};
+
+export type WishlistRemoveRequest = {
+  itemId: string;
+};
+
+export type WishlistUpdateRequest = {
+  itemId: string;
+  readLater: boolean;
+};
+
 export interface RendererBooksApi {
   list: () => Promise<BooksListResult>;
   addSample: () => Promise<BooksAddSampleResult>;
@@ -559,10 +593,18 @@ export interface RendererRecommendationsApi {
   getForBook: (payload: RecommendationsForBookRequest) => Promise<RecommendationsForBookResult>;
 }
 
+export interface RendererWishlistApi {
+  list: () => Promise<WishlistListResult>;
+  save: (payload: WishlistSaveRequest) => Promise<WishlistSaveResult>;
+  remove: (payload: WishlistRemoveRequest) => Promise<WishlistRemoveResult>;
+  update: (payload: WishlistUpdateRequest) => Promise<WishlistUpdateResult>;
+}
+
 export interface RendererApi {
   ping: () => Promise<PingResponse>;
   discover: RendererDiscoverApi;
   recommendations: RendererRecommendationsApi;
+  wishlist: RendererWishlistApi;
   books: RendererBooksApi;
   notes: RendererNotesApi;
   highlights: RendererHighlightsApi;

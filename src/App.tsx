@@ -21,6 +21,7 @@ import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHu
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
 import { BookAdvisorScreen } from '@/screens/BookAdvisorScreen';
+import { WishlistScreen } from '@/screens/WishlistScreen';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
@@ -454,6 +455,19 @@ export default function App() {
         <BookAdvisorScreen
           books={books}
           onFindInDiscover={({ query }) => {
+            setDiscoverInitialQuery(query);
+            setDiscoverInitialSearchToken((value) => value + 1);
+            resetReaderState();
+            setCurrentView('library');
+          }}
+        />
+      );
+    }
+
+    if (currentView === 'wishlist') {
+      return (
+        <WishlistScreen
+          onSearchInDiscover={(query) => {
             setDiscoverInitialQuery(query);
             setDiscoverInitialSearchToken((value) => value + 1);
             resetReaderState();

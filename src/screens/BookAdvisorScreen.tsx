@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { AlertCircle, ArrowRight, BookOpenText, LoaderCircle, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowRight, BookOpenText, BookmarkPlus, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useWishlist } from '@/lib/useWishlist';
 import { cn } from '@/lib/utils';
 import {
   recommendBooks,
@@ -43,48 +44,51 @@ const moodOptions = ['Dark', 'Intellectual', 'Inspiring', 'Cozy', 'Serious', 'Em
 const screenCopy = {
   ru: {
     title: 'Книжный советник',
-    subtitle: 'Настройте жанры, настроение и формат, а AI подберет книги под ваш запрос.',
-    formTitle: 'Ваши предпочтения',
-    formDescription: 'Выберите несколько фильтров или просто опишите желаемую книгу своими словами.',
-    genres: 'Жанры',
-    moods: 'Настроение / тон',
-    length: 'Длина книги',
-    type: 'Тип',
-    era: 'Эпоха',
-    preferredLanguage: 'Предпочтительный язык',
-    freeTextLabel: 'Свободный запрос',
-    freeTextPlaceholder: 'Опишите, какую книгу вы хотите',
-    libraryContext: 'Учитывать мою библиотеку',
-    libraryContextHint: 'Скоро: передача локальной библиотеки в AI-контекст.',
-    currentLibrary: 'Локальная библиотека',
-    booksInLibrary: 'книг в библиотеке',
-    short: 'Короткая',
-    medium: 'Средняя',
-    long: 'Длинная',
-    fiction: 'Художественная',
-    nonFiction: 'Нон-фикшн',
-    any: 'Любой',
-    classic: 'Классика',
-    modern: 'Современная',
-    russian: 'Русский',
-    english: 'Английский',
-    submit: 'Получить рекомендации',
-    loading: 'Подбираем книги...',
-    emptyTitle: 'Выберите предпочтения и получите рекомендации',
-    emptyDescription: 'Комбинируйте жанры и настроение или добавьте свободный запрос, чтобы сузить подборку.',
-    noRecommendations: 'Рекомендации не найдены',
-    noRecommendationsDescription: 'Попробуйте смягчить фильтры или добавить больше деталей в описание.',
-    errorTitle: 'Не удалось получить рекомендации',
-    recommendationsTitle: 'Рекомендации AI',
-    recommendationsDescription: 'Книги, которые лучше всего подходят под выбранные параметры.',
-    confidence: 'Уверенность',
-    findInDiscover: 'Найти в Discover',
+    subtitle: 'Set genres, mood, and format preferences, then let AI suggest books that fit.',
+    formTitle: 'Your preferences',
+    formDescription: 'Pick a few filters or describe the kind of book you want in your own words.',
+    genres: 'Genres',
+    moods: 'Mood / tone',
+    length: 'Book length',
+    type: 'Type',
+    era: 'Era',
+    preferredLanguage: 'Preferred language',
+    freeTextLabel: 'Free text',
+    freeTextPlaceholder: 'Describe what kind of book you want',
+    libraryContext: 'Use my library context',
+    libraryContextHint: 'Coming soon: send a lightweight local library summary to the AI backend.',
+    currentLibrary: 'Local library',
+    booksInLibrary: 'books in library',
+    short: 'Short',
+    medium: 'Medium',
+    long: 'Long',
+    fiction: 'Fiction',
+    nonFiction: 'Non-fiction',
+    any: 'Any',
+    classic: 'Classic',
+    modern: 'Modern',
+    russian: 'Russian',
+    english: 'English',
+    submit: 'Get recommendations',
+    loading: 'Finding books...',
+    emptyTitle: 'Choose your preferences and get recommendations',
+    emptyDescription: 'Mix genres, mood, and a free-text prompt to shape the suggestions.',
+    noRecommendations: 'No recommendations found',
+    noRecommendationsDescription: 'Try broader filters or add more detail to your description.',
+    errorTitle: 'Failed to get recommendations',
+    recommendationsTitle: 'AI recommendations',
+    recommendationsDescription: 'Books that best match the preferences you selected.',
+    confidence: 'Confidence',
+    save: 'Save',
+    saved: 'Saved',
+    dismiss: 'Dismiss',
+    findInDiscover: 'Find in Discover',
     aiRecommendation: 'AI recommendation',
-    sourceFallback: 'Резервная выдача',
+    sourceFallback: 'Fallback set',
     sourceOpenrouter: 'AI recommendation',
-    warningTitle: 'Внимание',
-    recommendationCount: 'рекомендаций',
-    helperLine: 'Запрос отправляется только в локальный backend.'
+    warningTitle: 'Notice',
+    recommendationCount: 'recommendations',
+    helperLine: 'Requests are sent only to the local backend.'
   },
   en: {
     title: 'Book Advisor',
@@ -123,6 +127,9 @@ const screenCopy = {
     recommendationsTitle: 'AI recommendations',
     recommendationsDescription: 'Books that best match the preferences you selected.',
     confidence: 'Confidence',
+    save: 'Save',
+    saved: 'Saved',
+    dismiss: 'Dismiss',
     findInDiscover: 'Find in Discover',
     aiRecommendation: 'AI recommendation',
     sourceFallback: 'Fallback set',
@@ -145,6 +152,10 @@ function getConfidenceLabel(value: number | undefined, label: string) {
   const normalized = value > 1 ? value / 100 : value;
   const percent = Math.max(0, Math.min(100, Math.round(normalized * 100)));
   return `${label}: ${percent}%`;
+}
+
+function getRecommendationKey(recommendation: { title: string; author?: string | null }) {
+  return `${recommendation.title.trim().toLocaleLowerCase()}::${(recommendation.author ?? '').trim().toLocaleLowerCase()}`;
 }
 
 function ChipGroup({
@@ -228,6 +239,9 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [hasRequested, setHasRequested] = React.useState(false);
+  const [dismissedKeys, setDismissedKeys] = React.useState<string[]>([]);
+  const [savingKeys, setSavingKeys] = React.useState<string[]>([]);
+  const { items: wishlistItems, saveItem } = useWishlist();
 
   React.useEffect(() => {
     setLanguagePreference((current) => (current === 'any' ? current : getLanguageDefault(language)));
@@ -256,10 +270,12 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
       });
 
       setRecommendations(result.recommendations);
+      setDismissedKeys([]);
       setResponseSource(result.source ?? null);
       setWarning(result.warning ?? null);
     } catch (requestError) {
       setRecommendations([]);
+      setDismissedKeys([]);
       setResponseSource(null);
       setWarning(null);
       setError(requestError instanceof Error ? requestError.message : String(requestError));
@@ -269,6 +285,8 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   };
 
   const sourceLabel = responseSource === 'fallback' ? copy.sourceFallback : copy.sourceOpenrouter;
+  const wishlistKeys = new Set(wishlistItems.map(getRecommendationKey));
+  const visibleRecommendations = recommendations.filter((recommendation) => !dismissedKeys.includes(getRecommendationKey(recommendation)));
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
@@ -440,7 +458,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                   <p className="text-sm text-muted-foreground">{copy.loading}</p>
                 </CardContent>
               </Card>
-            ) : recommendations.length === 0 ? (
+            ) : visibleRecommendations.length === 0 ? (
               <Card className="border-dashed bg-card/80">
                 <CardContent className="flex min-h-72 flex-col items-center justify-center gap-3 p-8 text-center">
                   <p className="text-sm font-medium">{copy.noRecommendations}</p>
@@ -457,7 +475,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
-                        {recommendations.length} {copy.recommendationCount}
+                        {visibleRecommendations.length} {copy.recommendationCount}
                       </span>
                       <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
                         {sourceLabel}
@@ -467,12 +485,15 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                 </Card>
 
                 <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-                  {recommendations.map((recommendation) => {
+                  {visibleRecommendations.map((recommendation) => {
                     const query = `${recommendation.title} ${recommendation.author}`.trim();
                     const confidenceLabel = getConfidenceLabel(recommendation.confidence, copy.confidence);
+                    const recommendationKey = getRecommendationKey(recommendation);
+                    const isSaved = wishlistKeys.has(recommendationKey);
+                    const isSaving = savingKeys.includes(recommendationKey);
 
                     return (
-                      <li key={`${recommendation.title}:${recommendation.author}`}>
+                      <li key={recommendationKey}>
                         <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
                           <CardContent className="flex h-full flex-col gap-4 p-6">
                             <div className="flex flex-wrap items-center gap-2">
@@ -482,6 +503,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                               {confidenceLabel ? (
                                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">
                                   {confidenceLabel}
+                                </span>
+                              ) : null}
+                              {isSaved ? (
+                                <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+                                  {copy.saved}
                                 </span>
                               ) : null}
                             </div>
@@ -494,13 +520,39 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
                             <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2">
                               <span className="text-xs text-muted-foreground">{sourceLabel}</span>
-                              <Button
-                                type="button"
-                                onClick={() => onFindInDiscover({ query })}
-                              >
-                                {copy.findInDiscover}
-                                <ArrowRight className="h-4 w-4" />
-                              </Button>
+                              <div className="flex flex-wrap gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  disabled={isSaved || isSaving}
+                                  onClick={() => {
+                                    setSavingKeys((current) => [...current, recommendationKey]);
+                                    void saveItem({
+                                      title: recommendation.title,
+                                      author: recommendation.author,
+                                      reason: recommendation.reason,
+                                      confidence: recommendation.confidence ?? null
+                                    }).finally(() => {
+                                      setSavingKeys((current) => current.filter((value) => value !== recommendationKey));
+                                    });
+                                  }}
+                                >
+                                  <BookmarkPlus className="h-4 w-4" />
+                                  {isSaved ? copy.saved : copy.save}
+                                </Button>
+                                <Button type="button" variant="outline" onClick={() => onFindInDiscover({ query })}>
+                                  {copy.findInDiscover}
+                                  <ArrowRight className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setDismissedKeys((current) => [...current, recommendationKey])}
+                                >
+                                  <X className="h-4 w-4" />
+                                  {copy.dismiss}
+                                </Button>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>

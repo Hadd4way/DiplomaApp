@@ -1,10 +1,10 @@
-import { BookOpen, Brain, Settings, Sparkles } from 'lucide-react';
+import { BookOpen, Brain, Bookmark, Settings, Sparkles } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 
-export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'book-advisor' | 'settings';
+export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'book-advisor' | 'wishlist' | 'settings';
 
 type Props = {
   currentView: AppView;
@@ -19,6 +19,7 @@ export function Sidebar({ currentView, onViewChange }: Props) {
     { view: 'library', label: t.sidebar.library, icon: BookOpen },
     { view: 'knowledge-hub', label: t.sidebar.knowledgeHub, icon: Brain },
     { view: 'book-advisor', label: language === 'ru' ? 'Книжный советник' : 'Book Advisor', icon: Sparkles },
+    { view: 'wishlist', label: 'Wishlist', icon: Bookmark },
     { view: 'settings', label: t.sidebar.settings, icon: Settings }
   ];
 

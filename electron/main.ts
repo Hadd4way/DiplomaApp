@@ -38,7 +38,10 @@ import {
   type ProgressGetLastPageRequest,
   type ProgressSetLastPageRequest,
   type StatsMarkOpenedRequest,
-  type RecommendationsForBookRequest
+  type RecommendationsForBookRequest,
+  type WishlistRemoveRequest,
+  type WishlistSaveRequest,
+  type WishlistUpdateRequest
 } from '../shared/ipc';
 import { getDatabase, LOCAL_DB_ID } from './db';
 import { addSampleBook, deleteBook, getEpubData, getFb2Data, getPdfData, getTxtData, importBook, listBooks, revealBook } from './books';
@@ -62,6 +65,7 @@ import { getReaderProgressDb } from './reader-progress-db';
 import { getReaderSettings, updateReaderSettings } from './reader-settings';
 import { getRecentBooks, markBookOpened } from './reading-stats';
 import { getHomeRecommendations, getRecommendationsForBook } from './recommendations';
+import { listWishlistItems, removeWishlistItem, saveWishlistItem, updateWishlistItem } from './wishlist';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -132,6 +136,16 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.recommendationsHome, () => getHomeRecommendations(db, libraryId));
   ipcMain.handle(IPC_CHANNELS.recommendationsForBook, (_event, payload: RecommendationsForBookRequest) =>
     getRecommendationsForBook(db, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.wishlistList, () => listWishlistItems(db, libraryId));
+  ipcMain.handle(IPC_CHANNELS.wishlistSave, (_event, payload: WishlistSaveRequest) =>
+    saveWishlistItem(db, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.wishlistRemove, (_event, payload: WishlistRemoveRequest) =>
+    removeWishlistItem(db, libraryId, payload)
+  );
+  ipcMain.handle(IPC_CHANNELS.wishlistUpdate, (_event, payload: WishlistUpdateRequest) =>
+    updateWishlistItem(db, libraryId, payload)
   );
   ipcMain.handle(IPC_CHANNELS.booksList, () => listBooks(db, libraryId));
   ipcMain.handle(IPC_CHANNELS.booksAddSample, () => addSampleBook(db, libraryId));
