@@ -217,7 +217,6 @@ const buildHeaders = (): Record<string, string> => {
   return {
     Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
     "Content-Type": "application/json",
-    "HTTP-Referer": "http://localhost:3001",
     "X-Title": "Reading AI Backend"
   };
 };
@@ -265,12 +264,25 @@ const requestOpenRouterJsonCompletion = async ({
     });
 
     if (!response.ok) {
+      const responseText = await response.text();
+      const trimmedResponseText = responseText.trim();
+      const detail = trimmedResponseText
+        ? ` ${trimmedResponseText.slice(0, 200)}`
+        : "";
+
       throw new Error(
-        `OpenRouter request failed with status ${response.status}.`
+        `OpenRouter request failed with status ${response.status}.${detail}`
       );
     }
 
-    const data = (await response.json()) as OpenRouterResponse;
+    let data: OpenRouterResponse;
+
+    try {
+      data = (await response.json()) as OpenRouterResponse;
+    } catch {
+      throw new Error("OpenRouter returned invalid JSON.");
+    }
+
     const content = data.choices?.[0]?.message?.content;
 
     if (!content || typeof content !== "string") {
