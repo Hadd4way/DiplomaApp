@@ -39,7 +39,7 @@ export type AdvisorResponse = {
   recommendations: AdvisorRecommendation[];
 };
 
-const DEFAULT_BACKEND_URL = 'http://localhost:3001';
+const DEFAULT_BACKEND_URL = 'https://diplomaapp-production.up.railway.app';
 const REQUEST_TIMEOUT_MS = 15000;
 
 export const AI_BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL?.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
