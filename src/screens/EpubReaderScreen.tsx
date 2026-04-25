@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { ExportDialog } from '@/components/ExportDialog';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { READER_PANEL_WIDTH } from '@/lib/constants';
 import { markCachedBookMetricDirty } from '@/lib/library-metrics-cache';
 import {
   getEffectiveEpubFontFamily,
@@ -1756,7 +1757,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             onRegisterActivity={registerActivity}
             inputRef={searchInputRef}
             placeholder="Search in this EPUB..."
-            rightOffset={settingsPanelOpen ? 344 : 12}
+            rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
             emptyQueryMessage="Type a query to search the whole book."
             noResultsMessage="No matches found."
           />
@@ -1766,7 +1767,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             settings={settings}
             onClose={() => setBookmarksPanelOpen(false)}
             icon={<Bookmark className="h-4 w-4" />}
-            rightOffset={settingsPanelOpen ? 344 : 12}
+            rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
           >
             <div className="space-y-2">
               {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
@@ -1851,7 +1852,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
             }}
             onEditNote={openHighlightEditorFromPanel}
             settings={settings}
-            rightOffset={settingsPanelOpen ? 344 : 12}
+            rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
           />
           <ReaderSettingsPanel
             open={settingsPanelOpen}

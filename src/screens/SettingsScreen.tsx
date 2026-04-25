@@ -21,7 +21,7 @@ type ToggleRowProps = {
   onChange: (checked: boolean) => void;
 };
 
-function SettingCard({
+const SettingCard = React.memo(function SettingCard({
   title,
   description,
   children
@@ -39,9 +39,9 @@ function SettingCard({
       <CardContent className="space-y-5">{children}</CardContent>
     </Card>
   );
-}
+});
 
-function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
+const ToggleRow = React.memo(function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
   return (
     <label className="flex items-start justify-between gap-4 rounded-lg border border-border bg-background/60 px-4 py-3">
       <div className="space-y-1">
@@ -52,11 +52,12 @@ function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
         type="checkbox"
         className="mt-1 h-4 w-4 rounded border-input"
         checked={checked}
+        aria-label={title}
         onChange={(event) => onChange(event.target.checked)}
       />
     </label>
   );
-}
+});
 
 export function SettingsScreen() {
   const { settings, loading, error, updateSettings } = useReaderSettings();

@@ -21,6 +21,7 @@ type UsePdfSearchState = {
 const PAGE_BATCH_SIZE = 7;
 const MAX_RESULTS = 200;
 const SNIPPET_RADIUS = 40;
+const pageTextCacheByBook = new Map<string, Map<number, string>>();
 
 function nextTick(): Promise<void> {
   return new Promise((resolve) => {
@@ -59,7 +60,7 @@ export function usePdfSearch(pdfDoc: PDFDocumentProxy | null, bookId: string): U
   const [results, setResults] = React.useState<PdfSearchResult[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
   const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS.search);
-  const pageTextCacheRef = React.useRef<Map<number, string>>(new Map());
+  const pageTextCacheRef = React.useRef<Map<number, string>>(pageTextCacheByBook.get(bookId) ?? new Map());
   const pageTextPromiseCacheRef = React.useRef<Map<number, Promise<string>>>(new Map());
   const searchTokenRef = React.useRef(0);
 
@@ -101,10 +102,15 @@ export function usePdfSearch(pdfDoc: PDFDocumentProxy | null, bookId: string): U
   );
 
   React.useEffect(() => {
+    let cache = pageTextCacheByBook.get(bookId);
+    if (!cache) {
+      cache = new Map();
+      pageTextCacheByBook.set(bookId, cache);
+    }
+    pageTextCacheRef.current = cache;
     setQuery('');
     setResults([]);
     setIsSearching(false);
-    pageTextCacheRef.current.clear();
     pageTextPromiseCacheRef.current.clear();
     searchTokenRef.current += 1;
   }, [bookId]);

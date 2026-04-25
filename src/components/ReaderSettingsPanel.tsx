@@ -9,6 +9,7 @@ import type {
   TextSizePreset
 } from '../../shared/ipc';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { READER_PANEL_WIDTH_CLASSNAME } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import type { ReaderThemePalette } from '@/lib/reader-theme';
 import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
@@ -154,7 +155,7 @@ export function ReaderSettingsPanel({
       open={open}
       onClose={onClose}
       icon={<SlidersHorizontal className="h-4 w-4" />}
-      widthClassName="w-[332px]"
+      widthClassName={READER_PANEL_WIDTH_CLASSNAME.settings}
       className={cn('backdrop-blur-xl', className)}
     >
       <div className="space-y-4 p-1">

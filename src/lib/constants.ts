@@ -18,6 +18,11 @@ export const READER_PANEL_WIDTH = {
   stackedOffset: 344
 } as const;
 
+export const READER_PANEL_WIDTH_CLASSNAME = {
+  default: 'w-[320px]',
+  settings: 'w-[320px]'
+} as const;
+
 export const LIST_BATCH_SIZE = {
   library: 24,
   discover: 18,

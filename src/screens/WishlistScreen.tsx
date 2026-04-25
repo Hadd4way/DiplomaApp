@@ -15,6 +15,15 @@ type Props = {
   onSearchInDiscover: (query: string) => void;
 };
 
+type WishlistCardProps = {
+  item: ReturnType<typeof useWishlist>['items'][number];
+  copy: (typeof screenCopy)['en'] | (typeof screenCopy)['ru'];
+  isPending: boolean;
+  onSearchInDiscover: (query: string) => void;
+  onToggleReadLater: (itemId: string, nextReadLater: boolean) => void;
+  onRemove: (itemId: string) => void;
+};
+
 const screenCopy = {
   en: {
     title: 'Wishlist',
@@ -59,12 +68,68 @@ function formatConfidence(value: number | null | undefined, label: string) {
   return `${label}: ${Math.max(0, Math.min(100, Math.round(normalized * 100)))}%`;
 }
 
+const WishlistCard = React.memo(function WishlistCard({
+  item,
+  copy,
+  isPending,
+  onSearchInDiscover,
+  onToggleReadLater,
+  onRemove
+}: WishlistCardProps) {
+  const query = `${item.title} ${item.author ?? ''}`.trim();
+  const confidence = formatConfidence(item.confidence, copy.confidence);
+
+  return (
+    <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <CardContent className="flex h-full flex-col gap-4 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {copy.saved}
+          </span>
+          {item.readLater ? (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+              {copy.readLater}
+            </span>
+          ) : null}
+          {confidence ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">
+              {confidence}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold tracking-tight">{item.title}</h2>
+          <p className="text-sm text-muted-foreground">{item.author || copy.unknownAuthor}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{item.reason}</p>
+        </div>
+
+        <div className="mt-auto flex flex-wrap gap-2 pt-2">
+          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={() => onToggleReadLater(item.id, !item.readLater)}>
+            <Clock3 className="h-4 w-4" />
+            {item.readLater ? copy.unmarkReadLater : copy.markReadLater}
+          </Button>
+          <Button type="button" size="sm" onClick={() => onSearchInDiscover(query)}>
+            {copy.searchInDiscover}
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={() => onRemove(item.id)}>
+            <Trash2 className="h-4 w-4" />
+            {copy.remove}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
 export function WishlistScreen({ onSearchInDiscover }: Props) {
   const { language } = useLanguage();
   const { settings } = useReaderSettings();
   const copy = screenCopy[language];
-  const { loading, error, items, removeItem, updateItem } = useWishlist();
+  const { loading, error, items, refresh, removeItem, updateItem } = useWishlist();
   const [pendingIds, setPendingIds] = React.useState<string[]>([]);
+  const pendingIdSet = React.useMemo(() => new Set(pendingIds), [pendingIds]);
   const { visibleItems, hasMore, showMore } = useIncrementalList(items, LIST_BATCH_SIZE.wishlist);
 
   const withPending = React.useCallback(async (itemId: string, action: () => Promise<void>) => {
@@ -94,7 +159,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         <div className="space-y-4">
-          {error ? <ScreenErrorState title={copy.requestErrorTitle} description={error} /> : null}
+          {error ? <ScreenErrorState title={copy.requestErrorTitle} description={error} onRetry={() => void refresh()} /> : null}
 
           {loading ? (
             <div className="space-y-4">
@@ -111,72 +176,24 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
             <>
               <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
               {visibleItems.map((item) => {
-                const isPending = pendingIds.includes(item.id);
-                const query = `${item.title} ${item.author ?? ''}`.trim();
-                const confidence = formatConfidence(item.confidence, copy.confidence);
-
                 return (
                   <li key={item.id}>
-                    <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-                      <CardContent className="flex h-full flex-col gap-4 p-6">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            {copy.saved}
-                          </span>
-                          {item.readLater ? (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                              {copy.readLater}
-                            </span>
-                          ) : null}
-                          {confidence ? (
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">
-                              {confidence}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <div className="space-y-2">
-                          <h2 className="text-xl font-semibold tracking-tight">{item.title}</h2>
-                          <p className="text-sm text-muted-foreground">{item.author || copy.unknownAuthor}</p>
-                          <p className="text-sm leading-6 text-muted-foreground">{item.reason}</p>
-                        </div>
-
-                        <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isPending}
-                            onClick={() =>
-                              void withPending(item.id, async () => {
-                                await updateItem(item.id, !item.readLater);
-                              })
-                            }
-                          >
-                            <Clock3 className="h-4 w-4" />
-                            {item.readLater ? copy.unmarkReadLater : copy.markReadLater}
-                          </Button>
-                          <Button type="button" size="sm" onClick={() => onSearchInDiscover(query)}>
-                            {copy.searchInDiscover}
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            disabled={isPending}
-                            onClick={() =>
-                              void withPending(item.id, async () => {
-                                await removeItem(item.id);
-                              })
-                            }
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            {copy.remove}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <WishlistCard
+                      item={item}
+                      copy={copy}
+                      isPending={pendingIdSet.has(item.id)}
+                      onSearchInDiscover={onSearchInDiscover}
+                      onToggleReadLater={(itemId, nextReadLater) =>
+                        void withPending(itemId, async () => {
+                          await updateItem(itemId, nextReadLater);
+                        })
+                      }
+                      onRemove={(itemId) =>
+                        void withPending(itemId, async () => {
+                          await removeItem(itemId);
+                        })
+                      }
+                    />
                   </li>
                 );
               })}

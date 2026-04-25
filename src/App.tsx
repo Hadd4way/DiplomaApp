@@ -402,46 +402,70 @@ export default function App() {
 
       if (activeBook && activeBook.format === 'epub') {
         return (
-          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
-            <EpubReaderScreen
-              title={activeBook.title}
-              bookId={activeBook.id}
-              initialCfi={readerInitialCfi}
-              onInitialCfiApplied={() => setReaderInitialCfi(null)}
-              loading={loading}
-              onBack={onBackToLibrary}
-            />
-          </React.Suspense>
+          <ReaderRuntimeBoundary
+            key={`epub:${activeBook.id}`}
+            onBack={onBackToLibrary}
+            title={t.app.readerCrashedTitle}
+            backLabel={t.app.backToLibrary}
+            fallbackMessage={t.app.unknownReaderError}
+          >
+            <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+              <EpubReaderScreen
+                title={activeBook.title}
+                bookId={activeBook.id}
+                initialCfi={readerInitialCfi}
+                onInitialCfiApplied={() => setReaderInitialCfi(null)}
+                loading={loading}
+                onBack={onBackToLibrary}
+              />
+            </React.Suspense>
+          </ReaderRuntimeBoundary>
         );
       }
 
       if (activeBook && activeBook.format === 'fb2') {
         return (
-          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
-            <Fb2ReaderScreen
-              title={activeBook.title}
-              bookId={activeBook.id}
-              initialCfi={readerInitialCfi}
-              onInitialCfiApplied={() => setReaderInitialCfi(null)}
-              loading={loading}
-              onBack={onBackToLibrary}
-            />
-          </React.Suspense>
+          <ReaderRuntimeBoundary
+            key={`fb2:${activeBook.id}`}
+            onBack={onBackToLibrary}
+            title={t.app.readerCrashedTitle}
+            backLabel={t.app.backToLibrary}
+            fallbackMessage={t.app.unknownReaderError}
+          >
+            <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+              <Fb2ReaderScreen
+                title={activeBook.title}
+                bookId={activeBook.id}
+                initialCfi={readerInitialCfi}
+                onInitialCfiApplied={() => setReaderInitialCfi(null)}
+                loading={loading}
+                onBack={onBackToLibrary}
+              />
+            </React.Suspense>
+          </ReaderRuntimeBoundary>
         );
       }
 
       if (activeBook && activeBook.format === 'txt') {
         return (
-          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
-            <TxtReaderScreen
-              title={activeBook.title}
-              bookId={activeBook.id}
-              initialCfi={readerInitialCfi}
-              onInitialCfiApplied={() => setReaderInitialCfi(null)}
-              loading={loading}
-              onBack={onBackToLibrary}
-            />
-          </React.Suspense>
+          <ReaderRuntimeBoundary
+            key={`txt:${activeBook.id}`}
+            onBack={onBackToLibrary}
+            title={t.app.readerCrashedTitle}
+            backLabel={t.app.backToLibrary}
+            fallbackMessage={t.app.unknownReaderError}
+          >
+            <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+              <TxtReaderScreen
+                title={activeBook.title}
+                bookId={activeBook.id}
+                initialCfi={readerInitialCfi}
+                onInitialCfiApplied={() => setReaderInitialCfi(null)}
+                loading={loading}
+                onBack={onBackToLibrary}
+              />
+            </React.Suspense>
+          </ReaderRuntimeBoundary>
         );
       }
 

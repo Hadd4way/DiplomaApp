@@ -1,8 +1,8 @@
 import { LibraryCard } from '@/components/library-card';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { DiscoverScreen } from '@/screens/DiscoverScreen';
 import * as React from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { ScreenLoadingState } from '@/components/ScreenState';
 import type { Book } from '../../shared/ipc';
 
 type Props = {
@@ -20,6 +20,10 @@ type Props = {
   onAddSample: () => void;
   onReload: () => void;
 };
+
+const DiscoverScreen = React.lazy(async () =>
+  import('@/screens/DiscoverScreen').then((module) => ({ default: module.DiscoverScreen }))
+);
 
 export function LibraryScreen({
   books,
@@ -58,20 +62,22 @@ export function LibraryScreen({
     return (
       <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
         <AppErrorBoundary area="Discover">
-          <DiscoverScreen
-            books={books}
-            initialQuery={discoverLaunch?.query ?? null}
-            initialSearchToken={discoverLaunch?.token}
-            onBack={() => {
-              setDiscoverLaunch(null);
-              setMode('library');
-            }}
-            onOpenBook={onOpen}
-            onLibraryChanged={async () => {
-              await Promise.resolve(onReload());
-              setNotice(t.library.importedNotice);
-            }}
-          />
+          <React.Suspense fallback={<ScreenLoadingState label={t.library.discoverBooks} />}>
+            <DiscoverScreen
+              books={books}
+              initialQuery={discoverLaunch?.query ?? null}
+              initialSearchToken={discoverLaunch?.token}
+              onBack={() => {
+                setDiscoverLaunch(null);
+                setMode('library');
+              }}
+              onOpenBook={onOpen}
+              onLibraryChanged={async () => {
+                await Promise.resolve(onReload());
+                setNotice(t.library.importedNotice);
+              }}
+            />
+          </React.Suspense>
         </AppErrorBoundary>
       </div>
     );

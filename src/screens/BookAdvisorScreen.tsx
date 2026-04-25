@@ -34,6 +34,8 @@ type Props = {
   onFindInDiscover: (payload: DiscoverLaunchPayload) => void;
 };
 
+type AdvisorCopy = (typeof screenCopy)['en'] | (typeof screenCopy)['ru'];
+
 const genreOptions = [
   { id: 'dystopia', label: { ru: 'Антиутопия', en: 'Dystopia' } },
   { id: 'philosophy', label: { ru: 'Философия', en: 'Philosophy' } },
@@ -290,7 +292,7 @@ function buildLibraryContext(books: Book[], recentBookIds: string[]) {
   };
 }
 
-function ChipGroup({
+const ChipGroup = React.memo(function ChipGroup({
   options,
   selected,
   language,
@@ -322,9 +324,9 @@ function ChipGroup({
       })}
     </div>
   );
-}
+});
 
-function SegmentedControl<TValue extends string>({
+function SegmentedControlInner<TValue extends string>({
   value,
   options,
   onChange
@@ -355,6 +357,80 @@ function SegmentedControl<TValue extends string>({
     </div>
   );
 }
+
+const SegmentedControl = React.memo(SegmentedControlInner) as typeof SegmentedControlInner;
+
+type AdvisorRecommendationCardProps = {
+  recommendation: AdvisorRecommendation;
+  copy: AdvisorCopy;
+  sourceLabel: string;
+  isSaved: boolean;
+  isSaving: boolean;
+  onSave: (recommendation: AdvisorRecommendation, recommendationKey: string) => void;
+  onFindInDiscover: (query: string) => void;
+  onDismiss: (recommendationKey: string) => void;
+};
+
+const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard({
+  recommendation,
+  copy,
+  sourceLabel,
+  isSaved,
+  isSaving,
+  onSave,
+  onFindInDiscover,
+  onDismiss
+}: AdvisorRecommendationCardProps) {
+  const query = `${recommendation.title} ${recommendation.author}`.trim();
+  const confidenceLabel = getConfidenceLabel(recommendation.confidence, copy.confidence);
+  const recommendationKey = getRecommendationKey(recommendation);
+
+  return (
+    <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <CardContent className="flex h-full flex-col gap-4 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {copy.aiRecommendation}
+          </span>
+          {confidenceLabel ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">
+              {confidenceLabel}
+            </span>
+          ) : null}
+          {isSaved ? (
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
+              {copy.saved}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="text-xl font-semibold tracking-tight">{recommendation.title}</h3>
+          <p className="text-sm text-muted-foreground">{recommendation.author}</p>
+          <p className="text-sm leading-6 text-muted-foreground">{recommendation.reason}</p>
+        </div>
+
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2">
+          <span className="text-xs text-muted-foreground">{sourceLabel}</span>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" disabled={isSaved || isSaving} onClick={() => onSave(recommendation, recommendationKey)}>
+              <BookmarkPlus className="h-4 w-4" />
+              {isSaved ? copy.saved : copy.save}
+            </Button>
+            <Button type="button" variant="outline" onClick={() => onFindInDiscover(query)}>
+              {copy.findInDiscover}
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button type="button" variant="outline" onClick={() => onDismiss(recommendationKey)}>
+              <X className="h-4 w-4" />
+              {copy.dismiss}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
 
 export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const { language } = useLanguage();
@@ -433,13 +509,37 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   };
 
   const sourceLabel = responseSource === 'fallback' ? copy.sourceFallback : copy.sourceOpenrouter;
-  const wishlistKeys = new Set(wishlistItems.map(getRecommendationKey));
-  const visibleRecommendations = recommendations.filter((recommendation) => !dismissedKeys.includes(getRecommendationKey(recommendation)));
+  const wishlistKeySet = React.useMemo(() => new Set(wishlistItems.map(getRecommendationKey)), [wishlistItems]);
+  const dismissedKeySet = React.useMemo(() => new Set(dismissedKeys), [dismissedKeys]);
+  const savingKeySet = React.useMemo(() => new Set(savingKeys), [savingKeys]);
+  const visibleRecommendations = React.useMemo(
+    () => recommendations.filter((recommendation) => !dismissedKeySet.has(getRecommendationKey(recommendation))),
+    [dismissedKeySet, recommendations]
+  );
   const { visibleItems: visibleRecommendationItems, hasMore, showMore } = useIncrementalList(
     visibleRecommendations,
     LIST_BATCH_SIZE.advisor
   );
   const showPersonalizedNote = useLibraryContext && libraryContext.books.length > 0;
+
+  const retrySubmit = React.useCallback(() => {
+    const form = document.querySelector('form');
+    if (form instanceof HTMLFormElement) {
+      form.requestSubmit();
+    }
+  }, []);
+
+  const handleSaveRecommendation = React.useCallback((recommendation: AdvisorRecommendation, recommendationKey: string) => {
+    setSavingKeys((current) => [...current, recommendationKey]);
+    void saveItem({
+      title: recommendation.title,
+      author: recommendation.author,
+      reason: recommendation.reason,
+      confidence: recommendation.confidence ?? null
+    }).finally(() => {
+      setSavingKeys((current) => current.filter((value) => value !== recommendationKey));
+    });
+  }, [saveItem]);
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
@@ -572,7 +672,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
         <div className="min-h-0 overflow-y-auto pb-2">
           <div className="space-y-6">
-            {error ? <ScreenErrorState title={copy.errorTitle} description={error} onRetry={() => undefined} /> : null}
+            {error ? <ScreenErrorState title={copy.errorTitle} description={error} onRetry={retrySubmit} /> : null}
 
             {warning ? (
               <Alert>
@@ -637,76 +737,22 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
                 <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
                   {visibleRecommendationItems.map((recommendation) => {
-                    const query = `${recommendation.title} ${recommendation.author}`.trim();
-                    const confidenceLabel = getConfidenceLabel(recommendation.confidence, copy.confidence);
                     const recommendationKey = getRecommendationKey(recommendation);
-                    const isSaved = wishlistKeys.has(recommendationKey);
-                    const isSaving = savingKeys.includes(recommendationKey);
+                    const isSaved = wishlistKeySet.has(recommendationKey);
+                    const isSaving = savingKeySet.has(recommendationKey);
 
                     return (
                       <li key={recommendationKey}>
-                        <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-                          <CardContent className="flex h-full flex-col gap-4 p-6">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                {copy.aiRecommendation}
-                              </span>
-                              {confidenceLabel ? (
-                                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-800">
-                                  {confidenceLabel}
-                                </span>
-                              ) : null}
-                              {isSaved ? (
-                                <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sky-800">
-                                  {copy.saved}
-                                </span>
-                              ) : null}
-                            </div>
-
-                            <div className="space-y-2">
-                              <h3 className="text-xl font-semibold tracking-tight">{recommendation.title}</h3>
-                              <p className="text-sm text-muted-foreground">{recommendation.author}</p>
-                              <p className="text-sm leading-6 text-muted-foreground">{recommendation.reason}</p>
-                            </div>
-
-                            <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2">
-                              <span className="text-xs text-muted-foreground">{sourceLabel}</span>
-                              <div className="flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  disabled={isSaved || isSaving}
-                                  onClick={() => {
-                                    setSavingKeys((current) => [...current, recommendationKey]);
-                                    void saveItem({
-                                      title: recommendation.title,
-                                      author: recommendation.author,
-                                      reason: recommendation.reason,
-                                      confidence: recommendation.confidence ?? null
-                                    }).finally(() => {
-                                      setSavingKeys((current) => current.filter((value) => value !== recommendationKey));
-                                    });
-                                  }}
-                                >
-                                  <BookmarkPlus className="h-4 w-4" />
-                                  {isSaved ? copy.saved : copy.save}
-                                </Button>
-                                <Button type="button" variant="outline" onClick={() => onFindInDiscover({ query })}>
-                                  {copy.findInDiscover}
-                                  <ArrowRight className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => setDismissedKeys((current) => [...current, recommendationKey])}
-                                >
-                                  <X className="h-4 w-4" />
-                                  {copy.dismiss}
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <AdvisorRecommendationCard
+                          recommendation={recommendation}
+                          copy={copy}
+                          sourceLabel={sourceLabel}
+                          isSaved={isSaved}
+                          isSaving={isSaving}
+                          onSave={handleSaveRecommendation}
+                          onFindInDiscover={(query) => onFindInDiscover({ query })}
+                          onDismiss={(key) => setDismissedKeys((current) => [...current, key])}
+                        />
                       </li>
                     );
                   })}
