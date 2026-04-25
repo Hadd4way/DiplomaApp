@@ -1,3 +1,6 @@
+import { AI_BACKEND_DEFAULT_URL, REQUEST_TIMEOUT_MS } from '@/lib/constants';
+import { SimpleCache } from '@/lib/simple-cache';
+
 export type AdvisorLength = 'short' | 'medium' | 'long';
 export type AdvisorLanguagePreference = 'ru' | 'en' | 'any';
 
@@ -39,14 +42,23 @@ export type AdvisorResponse = {
   recommendations: AdvisorRecommendation[];
 };
 
-const DEFAULT_BACKEND_URL = 'https://diplomaapp-production.up.railway.app';
-const REQUEST_TIMEOUT_MS = 15000;
+const advisorResponseCache = new SimpleCache<string, AdvisorResponse>(5 * 60 * 1000, 20);
 
-export const AI_BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL?.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
+export const AI_BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL?.trim() || AI_BACKEND_DEFAULT_URL).replace(/\/+$/, '');
+
+function getCacheKey(payload: AdvisorRequestPayload): string {
+  return JSON.stringify(payload);
+}
 
 export async function recommendBooks(payload: AdvisorRequestPayload): Promise<AdvisorResponse> {
+  const cacheKey = getCacheKey(payload);
+  const cached = advisorResponseCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS.advisor);
 
   try {
     const response = await fetch(`${AI_BACKEND_URL}/api/recommend-books`, {
@@ -74,7 +86,7 @@ export async function recommendBooks(payload: AdvisorRequestPayload): Promise<Ad
       throw new Error('The recommendation service returned an unexpected response.');
     }
 
-    return data;
+    return advisorResponseCache.set(cacheKey, data);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('The recommendation request timed out.');

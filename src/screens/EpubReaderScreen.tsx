@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { ReaderSettingsPanel } from '@/components/ReaderSettingsPanel';
 import { ExportDialog } from '@/components/ExportDialog';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { markCachedBookMetricDirty } from '@/lib/library-metrics-cache';
 import {
   getEffectiveEpubFontFamily,
   getEpubThemeBodyStyles,
@@ -886,6 +887,7 @@ export function EpubReaderScreen({ title, bookId, initialCfi = null, onInitialCf
         return;
       }
       await window.api.epubProgress.set({ bookId, cfi: safeCfi });
+      markCachedBookMetricDirty(bookId);
     },
     [bookId]
   );

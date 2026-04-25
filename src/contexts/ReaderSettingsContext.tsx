@@ -7,6 +7,7 @@ import {
   getUiFontFamily,
   getReaderThemePalette
 } from '@/lib/reader-theme';
+import { DEBOUNCE_MS } from '@/lib/constants';
 
 type ReaderSettingsContextValue = {
   settings: ReaderSettings;
@@ -17,7 +18,6 @@ type ReaderSettingsContextValue = {
 
 const ReaderSettingsContext = React.createContext<ReaderSettingsContextValue | null>(null);
 
-const SETTINGS_WRITE_DEBOUNCE_MS = 300;
 const DESKTOP_FALLBACK_TOKEN = '';
 
 function normalizeReaderSettings(settings: Partial<ReaderSettings> | null | undefined): ReaderSettings {
@@ -158,7 +158,7 @@ export function ReaderSettingsProvider({ children }: { children: React.ReactNode
     saveTimerRef.current = setTimeout(() => {
       saveTimerRef.current = null;
       void flushPendingPatch();
-    }, SETTINGS_WRITE_DEBOUNCE_MS);
+    }, DEBOUNCE_MS.settingsWrite);
   }, [flushPendingPatch]);
 
   const value = React.useMemo<ReaderSettingsContextValue>(

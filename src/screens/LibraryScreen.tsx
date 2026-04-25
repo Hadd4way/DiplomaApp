@@ -1,4 +1,5 @@
 import { LibraryCard } from '@/components/library-card';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
 import { DiscoverScreen } from '@/screens/DiscoverScreen';
 import * as React from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -56,20 +57,22 @@ export function LibraryScreen({
   if (mode === 'discover') {
     return (
       <div className="h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
-        <DiscoverScreen
-          books={books}
-          initialQuery={discoverLaunch?.query ?? null}
-          initialSearchToken={discoverLaunch?.token}
-          onBack={() => {
-            setDiscoverLaunch(null);
-            setMode('library');
-          }}
-          onOpenBook={onOpen}
-          onLibraryChanged={async () => {
-            await Promise.resolve(onReload());
-            setNotice(t.library.importedNotice);
-          }}
-        />
+        <AppErrorBoundary area="Discover">
+          <DiscoverScreen
+            books={books}
+            initialQuery={discoverLaunch?.query ?? null}
+            initialSearchToken={discoverLaunch?.token}
+            onBack={() => {
+              setDiscoverLaunch(null);
+              setMode('library');
+            }}
+            onOpenBook={onOpen}
+            onLibraryChanged={async () => {
+              await Promise.resolve(onReload());
+              setNotice(t.library.importedNotice);
+            }}
+          />
+        </AppErrorBoundary>
       </div>
     );
   }

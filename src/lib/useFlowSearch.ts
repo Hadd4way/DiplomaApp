@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { DEBOUNCE_MS } from '@/lib/constants';
 
 export type FlowSearchResult = {
   id: string;
@@ -25,7 +26,6 @@ type UseFlowSearchState = {
   clearQuery: () => void;
 };
 
-const SEARCH_DEBOUNCE_MS = 180;
 const MAX_RESULTS = 200;
 
 function buildExcerpt(text: string, query: string): Pick<FlowSearchResult, 'excerpt' | 'start' | 'end'> {
@@ -49,6 +49,7 @@ export function useFlowSearch(blocks: SearchBlock[], bookId: string): UseFlowSea
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<FlowSearchResult[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
+  const queryCacheRef = React.useRef<Map<string, FlowSearchResult[]>>(new Map());
 
   const clearQuery = React.useCallback(() => {
     setQuery('');
@@ -58,6 +59,7 @@ export function useFlowSearch(blocks: SearchBlock[], bookId: string): UseFlowSea
     setQuery('');
     setResults([]);
     setIsSearching(false);
+    queryCacheRef.current.clear();
   }, [bookId]);
 
   React.useEffect(() => {
@@ -69,6 +71,13 @@ export function useFlowSearch(blocks: SearchBlock[], bookId: string): UseFlowSea
     }
 
     let canceled = false;
+    const cacheKey = `${bookId}:${trimmedQuery.toLowerCase()}`;
+    const cachedResults = queryCacheRef.current.get(cacheKey);
+    if (cachedResults) {
+      setResults(cachedResults);
+      setIsSearching(false);
+      return;
+    }
     const timer = setTimeout(() => {
       setIsSearching(true);
       const nextResults: FlowSearchResult[] = [];
@@ -93,16 +102,17 @@ export function useFlowSearch(blocks: SearchBlock[], bookId: string): UseFlowSea
       }
 
       if (!canceled) {
+        queryCacheRef.current.set(cacheKey, nextResults);
         setResults(nextResults);
         setIsSearching(false);
       }
-    }, SEARCH_DEBOUNCE_MS);
+    }, DEBOUNCE_MS.search);
 
     return () => {
       canceled = true;
       clearTimeout(timer);
     };
-  }, [blocks, query]);
+  }, [blocks, bookId, query]);
 
   return {
     query,

@@ -1,9 +1,12 @@
 import * as React from 'react';
 import { AlertCircle, ArrowRight, Bookmark, Clock3, LoaderCircle, Trash2 } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
+import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { LIST_BATCH_SIZE } from '@/lib/constants';
+import { useIncrementalList } from '@/lib/useIncrementalList';
 import { useWishlist } from '@/lib/useWishlist';
 
 type Props = {
@@ -55,6 +58,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
   const copy = screenCopy[language];
   const { loading, error, items, removeItem, updateItem } = useWishlist();
   const [pendingIds, setPendingIds] = React.useState<string[]>([]);
+  const { visibleItems, hasMore, showMore } = useIncrementalList(items, LIST_BATCH_SIZE.wishlist);
 
   const withPending = React.useCallback(async (itemId: string, action: () => Promise<void>) => {
     setPendingIds((current) => [...current, itemId]);
@@ -83,35 +87,23 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         <div className="space-y-4">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>{copy.requestErrorTitle}</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+          {error ? <ScreenErrorState title={copy.requestErrorTitle} description={error} /> : null}
 
           {loading ? (
-            <Card className="border-dashed bg-card/80">
-              <CardContent className="flex min-h-72 flex-col items-center justify-center gap-3 p-8 text-center">
-                <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
-              </CardContent>
-            </Card>
+            <div className="space-y-4">
+              <ScreenLoadingState label={copy.saved} />
+              <SkeletonGrid count={4} />
+            </div>
           ) : items.length === 0 ? (
-            <Card className="border-dashed bg-card/80">
-              <CardContent className="flex min-h-72 flex-col items-center justify-center gap-4 p-8 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
-                  <Bookmark className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-xl font-semibold tracking-tight">{copy.emptyTitle}</h2>
-                  <p className="max-w-md text-sm text-muted-foreground">{copy.emptyDescription}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <ScreenEmptyState
+              title={copy.emptyTitle}
+              description={copy.emptyDescription}
+              icon={<Bookmark className="h-6 w-6 text-muted-foreground" />}
+            />
           ) : (
-            <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-              {items.map((item) => {
+            <>
+              <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+              {visibleItems.map((item) => {
                 const isPending = pendingIds.includes(item.id);
                 const query = `${item.title} ${item.author ?? ''}`.trim();
                 const confidence = formatConfidence(item.confidence, copy.confidence);
@@ -181,7 +173,15 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
                   </li>
                 );
               })}
-            </ul>
+              </ul>
+              {hasMore ? (
+                <div className="flex justify-center pt-2">
+                  <Button type="button" variant="outline" onClick={showMore}>
+                    Show more
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>

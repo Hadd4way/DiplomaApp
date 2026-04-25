@@ -3,11 +3,16 @@ import { ArrowUpDown, BookMarked, Clock3, Compass, Plus, Search } from 'lucide-r
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ScreenEmptyState, ScreenErrorState } from '@/components/ScreenState';
+import { SkeletonGrid } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
 import { BookCard } from '@/components/book-card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { DEBOUNCE_MS, FORMAT_BADGE_LABELS, LIST_BATCH_SIZE } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import { useLibraryBookActivity, useLibraryBookMetrics, useRecentBooks } from '@/lib/library-metrics';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useIncrementalList } from '@/lib/useIncrementalList';
 import type { Book } from '../../shared/ipc';
 
 type Props = {
@@ -52,6 +57,7 @@ export function LibraryCard({
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortKey>('recent-opened');
   const [formatFilter, setFormatFilter] = React.useState<FormatFilter>('all');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, DEBOUNCE_MS.librarySearch);
   const refreshToken = React.useMemo(
     () => `${refreshKey}|${books.map((book) => `${book.id}:${book.createdAt}`).join('|')}`,
     [books, refreshKey]
@@ -61,7 +67,7 @@ export function LibraryCard({
   const { recentBooks } = useRecentBooks(refreshToken);
   const recentOrder = new Map(recentBooks.map((entry, index) => [entry.bookId, index]));
   const lastOpenedAtByBookId = new Map(recentBooks.map((entry) => [entry.bookId, entry.lastOpenedAt]));
-  const trimmedQuery = searchQuery.trim().toLocaleLowerCase();
+  const trimmedQuery = debouncedSearchQuery.trim().toLocaleLowerCase();
   const headerDateFormatter = React.useMemo(
     () =>
       new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'en-US', {
@@ -78,45 +84,51 @@ export function LibraryCard({
     .filter((book): book is Book => Boolean(book))
     .slice(0, 6);
 
-  const filteredBooks = books
-    .filter((book) => formatFilter === 'all' || book.format === formatFilter)
-    .filter((book) => {
-      if (trimmedQuery.length === 0) {
-        return true;
-      }
+  const filteredBooks = React.useMemo(
+    () =>
+      books
+        .filter((book) => formatFilter === 'all' || book.format === formatFilter)
+        .filter((book) => {
+          if (trimmedQuery.length === 0) {
+            return true;
+          }
 
-      return [book.title, book.subtitle ?? '', book.author ?? '']
-        .some((value) => value.toLocaleLowerCase().includes(trimmedQuery));
-    })
-    .sort((left, right) => {
-      if (sortBy === 'recent-added') {
-        return right.createdAt - left.createdAt;
-      }
+          return [book.title, book.subtitle ?? '', book.author ?? ''].some((value) =>
+            value.toLocaleLowerCase().includes(trimmedQuery)
+          );
+        })
+        .sort((left, right) => {
+          if (sortBy === 'recent-added') {
+            return right.createdAt - left.createdAt;
+          }
 
-      if (sortBy === 'title') {
-        return left.title.localeCompare(right.title, 'ru-RU', { sensitivity: 'base' });
-      }
+          if (sortBy === 'title') {
+            return left.title.localeCompare(right.title, 'ru-RU', { sensitivity: 'base' });
+          }
 
-      if (sortBy === 'format') {
-        const byFormat = left.format.localeCompare(right.format, 'en', { sensitivity: 'base' });
-        return byFormat !== 0 ? byFormat : left.title.localeCompare(right.title, 'ru-RU', { sensitivity: 'base' });
-      }
+          if (sortBy === 'format') {
+            const byFormat = left.format.localeCompare(right.format, 'en', { sensitivity: 'base' });
+            return byFormat !== 0 ? byFormat : left.title.localeCompare(right.title, 'ru-RU', { sensitivity: 'base' });
+          }
 
-      const leftRecentIndex = recentOrder.get(left.id);
-      const rightRecentIndex = recentOrder.get(right.id);
+          const leftRecentIndex = recentOrder.get(left.id);
+          const rightRecentIndex = recentOrder.get(right.id);
 
-      if (leftRecentIndex !== undefined && rightRecentIndex !== undefined) {
-        return leftRecentIndex - rightRecentIndex;
-      }
-      if (leftRecentIndex !== undefined) {
-        return -1;
-      }
-      if (rightRecentIndex !== undefined) {
-        return 1;
-      }
+          if (leftRecentIndex !== undefined && rightRecentIndex !== undefined) {
+            return leftRecentIndex - rightRecentIndex;
+          }
+          if (leftRecentIndex !== undefined) {
+            return -1;
+          }
+          if (rightRecentIndex !== undefined) {
+            return 1;
+          }
 
-      return right.createdAt - left.createdAt;
-    });
+          return right.createdAt - left.createdAt;
+        }),
+    [books, formatFilter, recentOrder, sortBy, trimmedQuery]
+  );
+  const { visibleItems: visibleBooks, hasMore, showMore } = useIncrementalList(filteredBooks, LIST_BATCH_SIZE.library);
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
@@ -154,28 +166,13 @@ export function LibraryCard({
       </Card>
 
       {books.length === 0 ? (
-        <Card className="overflow-hidden border-white/50 bg-card/95 shadow-sm">
-          <CardContent className="flex min-h-[420px] flex-col items-center justify-center gap-5 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_36%)] p-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border/70 bg-background/80 shadow-sm">
-              <BookMarked className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <div className="space-y-2">
-              <h2 className="text-2xl font-semibold tracking-tight">{t.library.emptyTitle}</h2>
-              <p className="max-w-md text-sm text-muted-foreground">{t.library.emptyDescription}</p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button type="button" onClick={onImport} disabled={loading}>
-                {t.library.importFirstBook}
-              </Button>
-              <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
-                {t.library.discoverBooks}
-              </Button>
-              <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
-                {loading ? t.library.pleaseWait : t.library.addSampleBook}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <ScreenEmptyState
+          title={t.library.emptyTitle}
+          description={t.library.emptyDescription}
+          actionLabel={t.library.importFirstBook}
+          onAction={onImport}
+          icon={<BookMarked className="h-6 w-6 text-muted-foreground" />}
+        />
       ) : (
         <>
           <section className="space-y-4">
@@ -242,7 +239,7 @@ export function LibraryCard({
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     {t.library.sortBy}
                   </span>
-                  <Button
+                    <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -251,7 +248,7 @@ export function LibraryCard({
                   >
                     {t.library.sortRecentOpened}
                   </Button>
-                  <Button
+                    <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -260,7 +257,7 @@ export function LibraryCard({
                   >
                     {t.library.sortRecentAdded}
                   </Button>
-                  <Button
+                    <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -269,7 +266,7 @@ export function LibraryCard({
                   >
                     {t.library.sortTitle}
                   </Button>
-                  <Button
+                    <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -291,14 +288,14 @@ export function LibraryCard({
                   >
                     {t.library.filterAll}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className={getFilterButtonClassName(formatFilter === 'pdf')}
-                    onClick={() => setFormatFilter('pdf')}
-                  >
-                    PDF
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className={getFilterButtonClassName(formatFilter === 'pdf')}
+                      onClick={() => setFormatFilter('pdf')}
+                    >
+                    {FORMAT_BADGE_LABELS.pdf}
                   </Button>
                   <Button
                     type="button"
@@ -307,7 +304,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(formatFilter === 'epub')}
                     onClick={() => setFormatFilter('epub')}
                   >
-                    EPUB
+                    {FORMAT_BADGE_LABELS.epub}
                   </Button>
                   <Button
                     type="button"
@@ -316,7 +313,7 @@ export function LibraryCard({
                     className={getFilterButtonClassName(formatFilter === 'fb2')}
                     onClick={() => setFormatFilter('fb2')}
                   >
-                    FB2
+                    {FORMAT_BADGE_LABELS.fb2}
                   </Button>
                   <Button
                     type="button"
@@ -325,22 +322,24 @@ export function LibraryCard({
                     className={getFilterButtonClassName(formatFilter === 'txt')}
                     onClick={() => setFormatFilter('txt')}
                   >
-                    TXT
+                    {FORMAT_BADGE_LABELS.txt}
                   </Button>
                 </div>
               </div>
             </div>
 
             {filteredBooks.length === 0 ? (
-              <Card className="border-dashed bg-card/80">
-                <CardContent className="flex min-h-40 flex-col items-center justify-center gap-2 p-6 text-center">
-                  <p className="text-sm font-medium">{t.library.noBooksFoundTitle}</p>
-                  <p className="text-sm text-muted-foreground">{t.library.noBooksFoundDescription}</p>
-                </CardContent>
-              </Card>
+              <ScreenEmptyState
+                title={t.library.noBooksFoundTitle}
+                description={t.library.noBooksFoundDescription}
+                icon={<Search className="h-6 w-6 text-muted-foreground" />}
+              />
+            ) : loading ? (
+              <SkeletonGrid count={6} variant="library" />
             ) : (
-              <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {filteredBooks.map((book) => (
+              <>
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {visibleBooks.map((book) => (
                   <li key={book.id} className="h-full">
                     <BookCard
                       book={book}
@@ -354,7 +353,15 @@ export function LibraryCard({
                     />
                   </li>
                 ))}
-              </ul>
+                </ul>
+                {hasMore ? (
+                  <div className="flex justify-center pt-2">
+                    <Button type="button" variant="outline" onClick={showMore}>
+                      Show more
+                    </Button>
+                  </div>
+                ) : null}
+              </>
             )}
           </section>
         </>
@@ -368,10 +375,7 @@ export function LibraryCard({
       ) : null}
 
       {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>{t.library.requestErrorTitle}</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ScreenErrorState title={t.library.requestErrorTitle} description={error} onRetry={onReload} />
       ) : null}
     </div>
   );

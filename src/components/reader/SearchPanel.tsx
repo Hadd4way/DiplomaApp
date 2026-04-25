@@ -36,7 +36,7 @@ type SearchPanelProps = {
   noResultsMessage?: string;
 };
 
-export function SearchPanel({
+function SearchPanelComponent({
   open,
   settings,
   query,
@@ -178,3 +178,5 @@ export function SearchPanel({
     </ReaderSidePanel>
   );
 }
+
+export const SearchPanel = React.memo(SearchPanelComponent);

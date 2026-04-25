@@ -16,8 +16,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
+import { ScreenEmptyState, ScreenErrorState } from '@/components/ScreenState';
+import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { aiSummaryToMarkdown, aiSummaryToText } from '@/lib/ai-summary';
+import { LIST_BATCH_SIZE } from '@/lib/constants';
+import { useIncrementalList } from '@/lib/useIncrementalList';
 import { summarizeBookNotes, type AiSummaryResult } from '@/services/summaryApi';
 import { cn } from '@/lib/utils';
 
@@ -331,6 +335,10 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       return b.createdAt - a.createdAt;
     });
   }, [deferredQuery, items, language, recentThreshold, selectedBookId, selectedType, sortBy]);
+  const { visibleItems: visibleFilteredItems, hasMore, showMore } = useIncrementalList(
+    filteredItems,
+    LIST_BATCH_SIZE.knowledgeHub
+  );
 
   const selectedBook = React.useMemo(
     () => books.find((book) => book.id === selectedBookId) ?? null,
@@ -845,22 +853,22 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             </div>
           </section>
 
-          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {error ? <ScreenErrorState title={language === 'ru' ? 'Ошибка' : 'Error'} description={error} onRetry={() => void loadItems()} /> : null}
 
           <section className="grid gap-4">
-            {!loading && filteredItems.length === 0 ? (
-              <Card className="rounded-[24px] border-dashed border-slate-300 bg-slate-50/70 shadow-none">
-                <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-                  <Brain className="h-10 w-10 text-slate-400" />
-                  <div className="space-y-1">
-                    <p className="text-base font-medium text-slate-800">{t.hub.quietTitle}</p>
-                    <p className="text-sm text-slate-500">{t.hub.quietDescription}</p>
-                  </div>
-                </CardContent>
-              </Card>
+            {loading ? (
+              <SkeletonGrid count={4} />
             ) : null}
 
-            {filteredItems.map((item) => (
+            {!loading && filteredItems.length === 0 ? (
+              <ScreenEmptyState
+                title={t.hub.quietTitle}
+                description={t.hub.quietDescription}
+                icon={<Brain className="h-6 w-6 text-muted-foreground" />}
+              />
+            ) : null}
+
+            {visibleFilteredItems.map((item) => (
               <Card
                 key={`${item.type}:${item.id}`}
                 className={cn(
@@ -962,6 +970,13 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </CardContent>
               </Card>
             ))}
+            {!loading && hasMore ? (
+              <div className="flex justify-center pt-2">
+                <Button type="button" variant="outline" onClick={showMore}>
+                  Show more
+                </Button>
+              </div>
+            ) : null}
           </section>
         </div>
       </div>

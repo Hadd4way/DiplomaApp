@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { FORMAT_BADGE_LABELS } from '@/lib/constants';
 import type { Book } from '../../shared/ipc';
 import type { BookActivitySummary, BookMetric } from '@/lib/library-metrics';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ import { cn } from '@/lib/utils';
 type Props = {
   book: Book;
   onOpen: (book: Book) => void;
+  onInspect?: (book: Book) => void;
   onReveal: (bookId: string) => void;
   onDelete: (bookId: string) => void;
   loading: boolean;
@@ -93,9 +95,10 @@ function MetaLine({ children }: { children?: React.ReactNode }) {
   );
 }
 
-export function BookCard({
+function BookCardComponent({
   book,
   onOpen,
+  onInspect: _onInspect,
   onReveal,
   onDelete,
   loading,
@@ -233,7 +236,7 @@ export function BookCard({
             </div>
             <div className="mt-auto flex items-center justify-between gap-2 pt-2">
               <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {book.format.toUpperCase()}
+                {FORMAT_BADGE_LABELS[book.format]}
               </span>
               <span className="truncate text-[11px] text-muted-foreground">{metadataLabel}</span>
             </div>
@@ -307,3 +310,5 @@ export function BookCard({
     </Card>
   );
 }
+
+export const BookCard = React.memo(BookCardComponent);

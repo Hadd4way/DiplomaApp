@@ -1,5 +1,7 @@
 import * as React from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { DEBOUNCE_MS } from '@/lib/constants';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 
 export type PdfSearchResult = {
   page: number;
@@ -56,6 +58,7 @@ export function usePdfSearch(pdfDoc: PDFDocumentProxy | null, bookId: string): U
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<PdfSearchResult[]>([]);
   const [isSearching, setIsSearching] = React.useState(false);
+  const debouncedQuery = useDebouncedValue(query, DEBOUNCE_MS.search);
   const pageTextCacheRef = React.useRef<Map<number, string>>(new Map());
   const pageTextPromiseCacheRef = React.useRef<Map<number, Promise<string>>>(new Map());
   const searchTokenRef = React.useRef(0);
@@ -110,7 +113,7 @@ export function usePdfSearch(pdfDoc: PDFDocumentProxy | null, bookId: string): U
     const activeToken = searchTokenRef.current + 1;
     searchTokenRef.current = activeToken;
 
-    const trimmedQuery = query.trim();
+    const trimmedQuery = debouncedQuery.trim();
     if (!pdfDoc || !trimmedQuery) {
       setResults([]);
       setIsSearching(false);
@@ -182,7 +185,7 @@ export function usePdfSearch(pdfDoc: PDFDocumentProxy | null, bookId: string): U
     return () => {
       canceled = true;
     };
-  }, [getPageText, pdfDoc, query]);
+  }, [debouncedQuery, getPageText, pdfDoc]);
 
   return {
     query,

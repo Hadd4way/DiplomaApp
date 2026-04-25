@@ -20,7 +20,7 @@ type Props = {
   headerActions?: ReactNode;
 };
 
-export function ReaderSidePanel({
+function ReaderSidePanelComponent({
   title,
   settings,
   children,
@@ -61,7 +61,7 @@ export function ReaderSidePanel({
         </div>
         <div className="flex items-center gap-2">
           {headerActions}
-          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings)} aria-label={t.notes.cancel}>
+          <Button type="button" size="sm" variant="outline" onClick={onClose} style={getReaderButtonStyles(settings)} aria-label={t.notes.cancel} title={t.notes.cancel}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -71,3 +71,5 @@ export function ReaderSidePanel({
     </aside>
   );
 }
+
+export const ReaderSidePanel = React.memo(ReaderSidePanelComponent);

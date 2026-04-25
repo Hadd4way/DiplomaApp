@@ -1,3 +1,6 @@
+import { AI_BACKEND_DEFAULT_URL, REQUEST_TIMEOUT_MS } from '@/lib/constants';
+import { SimpleCache } from '@/lib/simple-cache';
+
 export type SummaryLanguage = 'ru' | 'en';
 
 export type SummarizeBookNotesPayload = {
@@ -26,14 +29,22 @@ export type SummarizeBookNotesResponse = {
   result: AiSummaryResult;
 };
 
-const DEFAULT_BACKEND_URL = 'https://diplomaapp-production.up.railway.app';
-const REQUEST_TIMEOUT_MS = 20000;
+const summaryResponseCache = new SimpleCache<string, SummarizeBookNotesResponse>(5 * 60 * 1000, 20);
+const AI_BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL?.trim() || AI_BACKEND_DEFAULT_URL).replace(/\/+$/, '');
 
-const AI_BACKEND_URL = (import.meta.env.VITE_AI_BACKEND_URL?.trim() || DEFAULT_BACKEND_URL).replace(/\/+$/, '');
+function getCacheKey(payload: SummarizeBookNotesPayload): string {
+  return JSON.stringify(payload);
+}
 
 export async function summarizeBookNotes(payload: SummarizeBookNotesPayload): Promise<SummarizeBookNotesResponse> {
+  const cacheKey = getCacheKey(payload);
+  const cached = summaryResponseCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS.summary);
 
   try {
     const response = await fetch(`${AI_BACKEND_URL}/api/summarize-book-notes`, {
@@ -55,7 +66,7 @@ export async function summarizeBookNotes(payload: SummarizeBookNotesPayload): Pr
       throw new Error('The AI summary service returned an unexpected response.');
     }
 
-    return {
+    return summaryResponseCache.set(cacheKey, {
       ...data,
       result: {
         summary: data.result.summary,
@@ -71,7 +82,7 @@ export async function summarizeBookNotes(payload: SummarizeBookNotesPayload): Pr
             )
           : []
       }
-    };
+    });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('The AI summary request timed out.');

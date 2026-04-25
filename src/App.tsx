@@ -10,23 +10,30 @@ import type {
   Note
 } from '../shared/ipc';
 import { AppShell } from '@/components/AppShell';
+import { AppErrorBoundary } from '@/components/AppErrorBoundary';
+import { ScreenLoadingState } from '@/components/ScreenState';
 import type { AppView } from '@/components/Sidebar';
 import { LibraryScreen } from '@/screens/LibraryScreen';
-import { EpubReaderScreen } from '@/screens/EpubReaderScreen';
-import { Fb2ReaderScreen } from '@/screens/Fb2ReaderScreen';
-import { PdfReaderScreen } from '@/screens/PdfReaderScreen';
-import { TxtReaderScreen } from '@/screens/TxtReaderScreen';
 import { NotesScreen } from '@/screens/NotesScreen';
-import { KnowledgeHubScreen, type KnowledgeHubItem } from '@/screens/KnowledgeHubScreen';
 import { PlaceholderScreen } from '@/screens/PlaceholderScreen';
-import { SettingsScreen } from '@/screens/SettingsScreen';
-import { BookAdvisorScreen } from '@/screens/BookAdvisorScreen';
-import { WishlistScreen } from '@/screens/WishlistScreen';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+
+const EpubReaderScreen = React.lazy(async () => import('@/screens/EpubReaderScreen').then((module) => ({ default: module.EpubReaderScreen })));
+const Fb2ReaderScreen = React.lazy(async () => import('@/screens/Fb2ReaderScreen').then((module) => ({ default: module.Fb2ReaderScreen })));
+const PdfReaderScreen = React.lazy(async () => import('@/screens/PdfReaderScreen').then((module) => ({ default: module.PdfReaderScreen })));
+const TxtReaderScreen = React.lazy(async () => import('@/screens/TxtReaderScreen').then((module) => ({ default: module.TxtReaderScreen })));
+const KnowledgeHubScreen = React.lazy(async () =>
+  import('@/screens/KnowledgeHubScreen').then((module) => ({ default: module.KnowledgeHubScreen }))
+);
+const BookAdvisorScreen = React.lazy(async () => import('@/screens/BookAdvisorScreen').then((module) => ({ default: module.BookAdvisorScreen })));
+const WishlistScreen = React.lazy(async () => import('@/screens/WishlistScreen').then((module) => ({ default: module.WishlistScreen })));
+const SettingsScreen = React.lazy(async () => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
+
+type KnowledgeHubItem = import('@/screens/KnowledgeHubScreen').KnowledgeHubItem;
 
 type ReaderRuntimeBoundaryProps = {
   children: React.ReactNode;
@@ -88,6 +95,20 @@ function getRendererApi() {
   }
 
   return window.api;
+}
+
+function LazyScreenFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full w-full min-w-0 flex-1 items-start">
+      <div className="w-full">
+        <ScreenLoadingState label={label} />
+      </div>
+    </div>
+  );
+}
+
+function SectionBoundary({ area, children }: { area: string; children: React.ReactNode }) {
+  return <AppErrorBoundary area={area}>{children}</AppErrorBoundary>;
 }
 
 export default function App() {
@@ -364,55 +385,63 @@ export default function App() {
             backLabel={t.app.backToLibrary}
             fallbackMessage={t.app.unknownReaderError}
           >
-            <PdfReaderScreen
-              title={activePdfData.title || activeBook.title}
-              base64={activePdfData.base64}
-              bookId={activeBook.id}
-              initialPage={readerInitialPage}
-              onInitialPageApplied={() => setReaderInitialPage(null)}
-              loading={loading}
-              onBack={onBackToLibrary}
-            />
+            <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingPdf} />}>
+              <PdfReaderScreen
+                title={activePdfData.title || activeBook.title}
+                base64={activePdfData.base64}
+                bookId={activeBook.id}
+                initialPage={readerInitialPage}
+                onInitialPageApplied={() => setReaderInitialPage(null)}
+                loading={loading}
+                onBack={onBackToLibrary}
+              />
+            </React.Suspense>
           </ReaderRuntimeBoundary>
         );
       }
 
       if (activeBook && activeBook.format === 'epub') {
         return (
-          <EpubReaderScreen
-            title={activeBook.title}
-            bookId={activeBook.id}
-            initialCfi={readerInitialCfi}
-            onInitialCfiApplied={() => setReaderInitialCfi(null)}
-            loading={loading}
-            onBack={onBackToLibrary}
-          />
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <EpubReaderScreen
+              title={activeBook.title}
+              bookId={activeBook.id}
+              initialCfi={readerInitialCfi}
+              onInitialCfiApplied={() => setReaderInitialCfi(null)}
+              loading={loading}
+              onBack={onBackToLibrary}
+            />
+          </React.Suspense>
         );
       }
 
       if (activeBook && activeBook.format === 'fb2') {
         return (
-          <Fb2ReaderScreen
-            title={activeBook.title}
-            bookId={activeBook.id}
-            initialCfi={readerInitialCfi}
-            onInitialCfiApplied={() => setReaderInitialCfi(null)}
-            loading={loading}
-            onBack={onBackToLibrary}
-          />
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <Fb2ReaderScreen
+              title={activeBook.title}
+              bookId={activeBook.id}
+              initialCfi={readerInitialCfi}
+              onInitialCfiApplied={() => setReaderInitialCfi(null)}
+              loading={loading}
+              onBack={onBackToLibrary}
+            />
+          </React.Suspense>
         );
       }
 
       if (activeBook && activeBook.format === 'txt') {
         return (
-          <TxtReaderScreen
-            title={activeBook.title}
-            bookId={activeBook.id}
-            initialCfi={readerInitialCfi}
-            onInitialCfiApplied={() => setReaderInitialCfi(null)}
-            loading={loading}
-            onBack={onBackToLibrary}
-          />
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <TxtReaderScreen
+              title={activeBook.title}
+              bookId={activeBook.id}
+              initialCfi={readerInitialCfi}
+              onInitialCfiApplied={() => setReaderInitialCfi(null)}
+              loading={loading}
+              onBack={onBackToLibrary}
+            />
+          </React.Suspense>
         );
       }
 
@@ -451,37 +480,57 @@ export default function App() {
     }
 
     if (currentView === 'knowledge-hub') {
-      return <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />;
+      return (
+        <SectionBoundary area="Knowledge Hub">
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />
+          </React.Suspense>
+        </SectionBoundary>
+      );
     }
 
     if (currentView === 'book-advisor') {
       return (
-        <BookAdvisorScreen
-          books={books}
-          onFindInDiscover={({ query }) => {
-            setDiscoverInitialQuery(query);
-            setDiscoverInitialSearchToken((value) => value + 1);
-            resetReaderState();
-            setCurrentView('library');
-          }}
-        />
+        <SectionBoundary area="Book Advisor">
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <BookAdvisorScreen
+              books={books}
+              onFindInDiscover={({ query }) => {
+                setDiscoverInitialQuery(query);
+                setDiscoverInitialSearchToken((value) => value + 1);
+                resetReaderState();
+                setCurrentView('library');
+              }}
+            />
+          </React.Suspense>
+        </SectionBoundary>
       );
     }
 
     if (currentView === 'wishlist') {
       return (
-        <WishlistScreen
-          onSearchInDiscover={(query) => {
-            setDiscoverInitialQuery(query);
-            setDiscoverInitialSearchToken((value) => value + 1);
-            resetReaderState();
-            setCurrentView('library');
-          }}
-        />
+        <SectionBoundary area="Wishlist">
+          <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+            <WishlistScreen
+              onSearchInDiscover={(query) => {
+                setDiscoverInitialQuery(query);
+                setDiscoverInitialSearchToken((value) => value + 1);
+                resetReaderState();
+                setCurrentView('library');
+              }}
+            />
+          </React.Suspense>
+        </SectionBoundary>
       );
     }
 
-    return <SettingsScreen />;
+    return (
+      <SectionBoundary area="Settings">
+        <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
+          <SettingsScreen />
+        </React.Suspense>
+      </SectionBoundary>
+    );
   };
 
   return (

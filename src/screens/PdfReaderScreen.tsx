@@ -24,6 +24,8 @@ import { type PdfOutlineItem } from '@/components/outline-tree';
 import { ExportDialog, type ExportFormat } from '@/components/ExportDialog';
 import { PdfSidebar } from '@/components/pdf-sidebar';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { READER_PANEL_WIDTH } from '@/lib/constants';
+import { markCachedBookMetricDirty } from '@/lib/library-metrics-cache';
 import { getPdfViewportBackground, getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -954,6 +956,7 @@ export function PdfReaderScreen({
       return;
     }
     void window.api.setLastPage({ bookId: safeBookId, lastPage: Math.max(1, latestPageRef.current) });
+    markCachedBookMetricDirty(safeBookId);
   }, [bookId]);
 
   const handleBack = React.useCallback(() => {
@@ -2033,6 +2036,7 @@ export function PdfReaderScreen({
 
     saveTimerRef.current = setTimeout(() => {
       void window.api?.setLastPage({ bookId: safeBookId, lastPage: Math.max(1, page) });
+      markCachedBookMetricDirty(safeBookId);
       saveTimerRef.current = null;
     }, 400);
 
@@ -2536,7 +2540,7 @@ export function PdfReaderScreen({
       settings={settings}
       onClose={() => setBookmarksPanelOpen(false)}
       icon={<Bookmark className="h-4 w-4" />}
-      rightOffset={12}
+      rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
     >
       <div className="space-y-2">
         {bookmarksError ? <p className="text-xs text-destructive">{bookmarksError}</p> : null}
@@ -2597,7 +2601,7 @@ export function PdfReaderScreen({
       onRegisterActivity={registerActivity}
       inputRef={searchInputRef}
       placeholder="Search in this PDF..."
-      rightOffset={12}
+      rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
       emptyQueryMessage="Type a query to search all pages."
       noResultsMessage="No matches found."
     />
@@ -2626,7 +2630,7 @@ export function PdfReaderScreen({
       }}
       onEditNote={openHighlightNoteEditorFromPanel}
       settings={settings}
-      rightOffset={12}
+      rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
     />
   );
 

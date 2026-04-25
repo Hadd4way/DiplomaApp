@@ -21,7 +21,7 @@ export type ReaderShellProps = {
   viewportClassName?: string;
 };
 
-export function ReaderShell({
+function ReaderShellComponent({
   title,
   settings,
   leftPanel,
@@ -99,3 +99,5 @@ export function ReaderShell({
     </div>
   );
 }
+
+export const ReaderShell = React.memo(ReaderShellComponent);

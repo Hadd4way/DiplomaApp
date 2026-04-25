@@ -45,7 +45,7 @@ function getLocationLabel(item: ReaderHighlightItem, pageLabel: string, flowLabe
   return fallbackLabel;
 }
 
-export function HighlightsPanel({
+function HighlightsPanelComponent({
   items,
   isOpen,
   onClose,
@@ -149,3 +149,5 @@ export function HighlightsPanel({
     </ReaderSidePanel>
   );
 }
+
+export const HighlightsPanel = React.memo(HighlightsPanelComponent);

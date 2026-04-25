@@ -4,6 +4,7 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker?url';
 import ePub from 'epubjs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { parseFb2Document } from '@/lib/fb2';
+import { getCachedBookMetric, saveCachedBookMetric, type StoredBookMetric } from '@/lib/library-metrics-cache';
 import { parseTxtDocument } from '@/lib/txt';
 import type { Book, RecentBookEntry } from '../../shared/ipc';
 
@@ -22,6 +23,47 @@ export type BookActivitySummary = {
   highlightCount: number;
   bookmarkCount: number;
 };
+
+function toBookMetric(storedMetric: StoredBookMetric, book: Book, t: ReturnType<typeof useLanguage>['t']): BookMetric {
+  const pageCountLabel =
+    storedMetric.pageCountKind === 'pages' && storedMetric.pageCount
+      ? `${storedMetric.pageCount} ${t.bookCard.pages}`
+      : storedMetric.pageCountKind === 'locations' && storedMetric.pageCount
+        ? `${storedMetric.pageCount} ${t.bookCard.locations}`
+        : storedMetric.pageCountKind === 'sections' && storedMetric.pageCount
+          ? `${storedMetric.pageCount} ${t.bookCard.sections}`
+          : storedMetric.pageCountKind === 'chapters' && storedMetric.pageCount
+            ? `${storedMetric.pageCount} ${t.bookCard.chapters}`
+            : book.format === 'pdf'
+              ? t.bookCard.pagesUnavailable
+              : book.format === 'fb2'
+                ? 'FB2'
+                : book.format === 'txt'
+                  ? 'TXT'
+                  : 'EPUB';
+
+  const currentLocationLabel =
+    storedMetric.currentLocationKind === 'pageOf' && storedMetric.currentLocation && storedMetric.pageCount
+      ? `${t.bookCard.pageOf} ${storedMetric.currentLocation} / ${storedMetric.pageCount}`
+      : storedMetric.currentLocationKind === 'chapter' && storedMetric.currentLocation !== null
+        ? `${t.bookCard.chapter} ${storedMetric.currentLocation + 1}`
+        : storedMetric.currentLocationKind === 'section' && storedMetric.currentLocation !== null
+          ? `${t.bookCard.section} ${storedMetric.currentLocation + 1}`
+          : storedMetric.currentLocationKind === 'startOnPage'
+            ? t.bookCard.startOnPage
+            : storedMetric.currentLocationKind === 'continueReading'
+              ? t.bookCard.continueReading
+              : t.bookCard.startReading;
+
+  return {
+    pageCount: storedMetric.pageCount,
+    currentLocation: storedMetric.currentLocation,
+    progressPercent: storedMetric.progressPercent,
+    progressLabel: formatPercent(storedMetric.progressPercent, t),
+    pageCountLabel,
+    currentLocationLabel
+  };
+}
 
 function getRendererApi() {
   if (!window.api) {
@@ -42,7 +84,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {
   const bytes = base64ToUint8Array(base64);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return bytes.slice().buffer;
 }
 
 function clampPercent(value: number): number {
@@ -120,6 +162,30 @@ async function loadPdfMetric(book: Book, t: ReturnType<typeof useLanguage>['t'])
     progressLabel: formatPercent(progressPercent, t),
     pageCountLabel: `${pageCount} ${t.bookCard.pages}`,
     currentLocationLabel: safeLastPage ? `${t.bookCard.pageOf} ${safeLastPage} / ${pageCount}` : t.bookCard.startOnPage
+  };
+}
+
+async function loadPdfStoredMetric(book: Book): Promise<StoredBookMetric> {
+  const api = getRendererApi();
+  const [pdfResult, lastPage] = await Promise.all([
+    api.books.getPdfData({ bookId: book.id }),
+    api.getLastPage({ bookId: book.id })
+  ]);
+
+  if (!pdfResult.ok) {
+    throw new Error(pdfResult.error);
+  }
+
+  const documentProxy = await getDocument({ data: base64ToUint8Array(pdfResult.base64) }).promise;
+  const pageCount = documentProxy.numPages;
+  const safeLastPage = lastPage && lastPage > 0 ? Math.min(lastPage, pageCount) : null;
+
+  return {
+    pageCount,
+    currentLocation: safeLastPage,
+    progressPercent: safeLastPage ? (safeLastPage / pageCount) * 100 : 0,
+    pageCountKind: 'pages',
+    currentLocationKind: safeLastPage ? 'pageOf' : 'startOnPage'
   };
 }
 
@@ -207,7 +273,87 @@ async function loadEpubMetric(book: Book, t: ReturnType<typeof useLanguage>['t']
       currentLocationLabel: progressResult.cfi ? t.bookCard.continueReading : t.bookCard.startReading
     };
   } finally {
-    epubBook.destroy?.();
+    epubBook?.destroy?.();
+  }
+}
+
+async function loadEpubStoredMetric(book: Book): Promise<StoredBookMetric> {
+  const api = getRendererApi();
+  const [epubResult, progressResult] = await Promise.all([
+    api.books.getEpubData({ bookId: book.id }),
+    api.epubProgress.get({ bookId: book.id })
+  ]);
+
+  if (!epubResult.ok) {
+    throw new Error(epubResult.error);
+  }
+  if (!progressResult.ok) {
+    throw new Error(progressResult.error);
+  }
+
+  const epubArrayBuffer = base64ToArrayBuffer(epubResult.base64);
+  const openCandidates = [
+    () => ePub(epubArrayBuffer, { openAs: 'binary' }),
+    () => ePub(epubArrayBuffer, { openAs: 'epub', replacements: 'blobUrl' }),
+    () => ePub(epubArrayBuffer, { replacements: 'blobUrl' }),
+    () => ePub(epubResult.base64, { openAs: 'base64', replacements: 'blobUrl' }),
+    () => ePub(epubResult.base64, { encoding: 'base64' })
+  ];
+
+  let epubBook: ReturnType<typeof ePub> | null = null;
+
+  try {
+    let lastError: unknown = null;
+    for (const createBook of openCandidates) {
+      let candidate: ReturnType<typeof ePub> | null = null;
+      try {
+        candidate = createBook();
+        await withTimeout(candidate.ready, 8000, `Timed out while opening EPUB "${book.title}".`);
+        epubBook = candidate;
+        break;
+      } catch (error) {
+        lastError = error;
+        candidate?.destroy?.();
+      }
+    }
+
+    if (!epubBook) {
+      throw lastError instanceof Error ? lastError : new Error('Failed to open EPUB for metrics.');
+    }
+
+    try {
+      await withTimeout(
+        epubBook.locations?.generate?.(1000) ?? Promise.resolve(),
+        12000,
+        `Timed out while generating EPUB locations for "${book.title}".`
+      );
+    } catch {
+      // Fall back to spine length if locations generation is too slow or unsupported.
+    }
+
+    const generatedLocationCount = epubBook.locations?.length?.() ?? null;
+    const spineSectionCount =
+      Array.isArray((epubBook as { spine?: { spineItems?: unknown[]; items?: unknown[] } }).spine?.spineItems)
+        ? (epubBook as { spine?: { spineItems?: unknown[] } }).spine?.spineItems?.length ?? null
+        : Array.isArray((epubBook as { spine?: { items?: unknown[] } }).spine?.items)
+          ? (epubBook as { spine?: { items?: unknown[] } }).spine?.items?.length ?? null
+          : null;
+
+    return {
+      pageCount: generatedLocationCount || spineSectionCount || null,
+      currentLocation: progressResult.cfi ? 1 : null,
+      progressPercent: progressResult.cfi
+        ? epubBook.locations?.percentageFromCfi && generatedLocationCount
+          ? epubBook.locations.percentageFromCfi(progressResult.cfi) * 100
+          : spineSectionCount
+            ? Math.min(100, Math.max(1, (1 / spineSectionCount) * 100))
+            : 0
+        : 0,
+      pageCountKind: generatedLocationCount ? 'locations' : spineSectionCount ? 'sections' : 'format',
+      currentLocationKind: progressResult.cfi ? 'continueReading' : 'startReading'
+    };
+  } finally {
+    epubBook?.destroy?.();
   }
 }
 
@@ -243,6 +389,36 @@ async function loadFb2Metric(book: Book, t: ReturnType<typeof useLanguage>['t'])
   };
 }
 
+async function loadFb2StoredMetric(book: Book): Promise<StoredBookMetric> {
+  const api = getRendererApi();
+  const [fb2Result, progressResult] = await Promise.all([
+    api.books.getFb2Data({ bookId: book.id }),
+    api.flowProgress.get({ bookId: book.id })
+  ]);
+
+  if (!fb2Result.ok) {
+    throw new Error(fb2Result.error);
+  }
+  if (!progressResult.ok) {
+    throw new Error(progressResult.error);
+  }
+
+  const parsed = parseFb2Document(fb2Result.content);
+  const chapterCount = parsed.chapters.length || null;
+  const chapterIndex = progressResult.progress.chapterIndex;
+
+  return {
+    pageCount: chapterCount,
+    currentLocation: chapterIndex,
+    progressPercent:
+      chapterCount && chapterIndex !== null
+        ? ((chapterIndex + (progressResult.progress.scrollRatio ?? 0)) / chapterCount) * 100
+        : 0,
+    pageCountKind: chapterCount ? 'chapters' : 'format',
+    currentLocationKind: chapterIndex !== null ? 'chapter' : 'startReading'
+  };
+}
+
 async function loadTxtMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   const api = getRendererApi();
   const [txtResult, progressResult] = await Promise.all([
@@ -275,6 +451,36 @@ async function loadTxtMetric(book: Book, t: ReturnType<typeof useLanguage>['t'])
   };
 }
 
+async function loadTxtStoredMetric(book: Book): Promise<StoredBookMetric> {
+  const api = getRendererApi();
+  const [txtResult, progressResult] = await Promise.all([
+    api.books.getTxtData({ bookId: book.id }),
+    api.flowProgress.get({ bookId: book.id })
+  ]);
+
+  if (!txtResult.ok) {
+    throw new Error(txtResult.error);
+  }
+  if (!progressResult.ok) {
+    throw new Error(progressResult.error);
+  }
+
+  const parsed = parseTxtDocument(txtResult.content, txtResult.title);
+  const sectionCount = parsed.chapters.length || null;
+  const chapterIndex = progressResult.progress.chapterIndex;
+
+  return {
+    pageCount: sectionCount,
+    currentLocation: chapterIndex,
+    progressPercent:
+      sectionCount && chapterIndex !== null
+        ? ((chapterIndex + (progressResult.progress.scrollRatio ?? 0)) / sectionCount) * 100
+        : 0,
+    pageCountKind: sectionCount ? 'sections' : 'format',
+    currentLocationKind: chapterIndex !== null ? 'section' : 'startReading'
+  };
+}
+
 async function loadBookMetric(book: Book, t: ReturnType<typeof useLanguage>['t']): Promise<BookMetric> {
   if (book.format === 'pdf') {
     return loadPdfMetric(book, t);
@@ -287,6 +493,20 @@ async function loadBookMetric(book: Book, t: ReturnType<typeof useLanguage>['t']
   }
 
   return loadEpubMetric(book, t);
+}
+
+async function loadStoredBookMetric(book: Book): Promise<StoredBookMetric> {
+  if (book.format === 'pdf') {
+    return loadPdfStoredMetric(book);
+  }
+  if (book.format === 'fb2') {
+    return loadFb2StoredMetric(book);
+  }
+  if (book.format === 'txt') {
+    return loadTxtStoredMetric(book);
+  }
+
+  return loadEpubStoredMetric(book);
 }
 
 function useLibraryRefreshSignal(refreshKey?: string) {
@@ -314,18 +534,29 @@ export function useLibraryBookMetrics(books: Book[], refreshKey?: string) {
       };
     }
 
-    const nextMetrics = Object.fromEntries(books.map((book) => [book.id, getMetricFallback(book, t)]));
+    const nextMetrics = Object.fromEntries(
+      books.map((book) => {
+        const cached = getCachedBookMetric(book);
+        return [book.id, cached ? toBookMetric(cached.metric, book, t) : getMetricFallback(book, t)];
+      })
+    );
     setMetrics(nextMetrics);
 
     for (const book of books) {
-      void withTimeout(loadBookMetric(book, t), 15000, `Timed out while loading metrics for ${book.title}`)
-        .then((metric) => {
+      const cached = getCachedBookMetric(book);
+      if (cached && !cached.dirty) {
+        continue;
+      }
+
+      void withTimeout(loadStoredBookMetric(book), 15000, `Timed out while loading metrics for ${book.title}`)
+        .then((storedMetric) => {
           if (canceled) {
             return;
           }
+          saveCachedBookMetric(book, storedMetric);
           setMetrics((current) => ({
             ...current,
-            [book.id]: metric
+            [book.id]: toBookMetric(storedMetric, book, t)
           }));
         })
         .catch(() => {

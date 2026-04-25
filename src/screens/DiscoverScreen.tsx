@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { BookOpen, BookOpenText, Download, Globe, LoaderCircle, Search, Sparkles } from 'lucide-react';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,8 +12,13 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
+import { SkeletonGrid } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { DISCOVER_PROVIDER_LABELS, FORMAT_BADGE_LABELS, LIST_BATCH_SIZE } from '@/lib/constants';
+import { SimpleCache } from '@/lib/simple-cache';
+import { useIncrementalList } from '@/lib/useIncrementalList';
 import { cn } from '@/lib/utils';
 import type {
   Book,
@@ -45,6 +49,8 @@ type DuplicatePromptState = {
   existingBook: Book;
 } | null;
 
+const discoverSearchCache = new SimpleCache<string, DiscoverBookResult[]>(5 * 60 * 1000, 30);
+
 function getRendererApi() {
   if (!window.api) {
     throw new Error('Renderer API is unavailable. Open this app via Electron.');
@@ -66,11 +72,11 @@ function getDuplicateKey(title: string, author: string | null) {
 }
 
 function getFormatBadgeLabel(kind: DiscoverBookResult['formats'][number]['kind']) {
-  return kind === 'txt' ? 'TXT' : kind === 'html' ? 'HTML' : kind.toUpperCase();
+  return FORMAT_BADGE_LABELS[kind as keyof typeof FORMAT_BADGE_LABELS] ?? kind.toUpperCase();
 }
 
 function getSourceLabel(source: DiscoverBookResult['source']) {
-  return source === 'standardebooks' ? 'Standard Ebooks' : 'Project Gutenberg';
+  return DISCOVER_PROVIDER_LABELS[source];
 }
 
 function getPremiumBadgeLabel(result: DiscoverBookResult, t: ReturnType<typeof useLanguage>['t']) {
@@ -177,19 +183,15 @@ function getProgressLabel(downloadState: DownloadCardState, t: ReturnType<typeof
       ? `${t.discover.downloading} ${downloadState.progressPercent}%`
       : t.discover.downloading;
   }
-
   if (downloadState.state === 'importing') {
     return t.discover.importing;
   }
-
   if (downloadState.state === 'completed') {
     return t.discover.downloadedSuccessfully;
   }
-
   if (downloadState.state === 'failed') {
     return downloadState.error ?? t.discover.downloadFailed;
   }
-
   return t.discover.readyToDownload;
 }
 
@@ -202,6 +204,155 @@ function createIdleState(): DownloadCardState {
     error: null
   };
 }
+
+type DiscoverResultCardProps = {
+  result: DiscoverBookResult;
+  downloadState: DownloadCardState;
+  likelyDuplicate: boolean;
+  t: ReturnType<typeof useLanguage>['t'];
+  onRequestDownload: (result: DiscoverBookResult) => void;
+  onOpenBook: (book: Book) => Promise<void> | void;
+  onBack: () => void;
+};
+
+const DiscoverResultCard = React.memo(function DiscoverResultCard({
+  result,
+  downloadState,
+  likelyDuplicate,
+  t,
+  onRequestDownload,
+  onOpenBook,
+  onBack
+}: DiscoverResultCardProps) {
+  const isBusy = downloadState.state === 'downloading' || downloadState.state === 'importing';
+  const importedBook = downloadState.importedBook;
+
+  return (
+    <Card className="flex h-full flex-col overflow-hidden border-white/50 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+      <CardContent className="flex h-full flex-col gap-4 p-5">
+        <div className="flex gap-4">
+          <div className="flex h-36 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-muted/30 shadow-sm">
+            {result.coverUrl ? (
+              <img src={result.coverUrl} alt={`${result.title} ${t.discover.coverAlt}`} className="h-full w-full object-cover" loading="lazy" />
+            ) : (
+              <PlaceholderCover title={result.title} author={result.author} fallbackAuthor={t.discover.unknownAuthor} />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {getSourceLabel(result.source)}
+                </span>
+                {getPremiumBadgeLabel(result, t) ? (
+                  <span className="inline-flex rounded-full border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                    {getPremiumBadgeLabel(result, t)}
+                  </span>
+                ) : null}
+                {result.formats.map((format) => (
+                  <span
+                    key={`${result.id}:${format.mimeType}:${format.url}`}
+                    className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+                  >
+                    {getFormatBadgeLabel(format.kind)}
+                  </span>
+                ))}
+              </div>
+              <h2 className="line-clamp-2 text-lg font-semibold tracking-tight">{result.title}</h2>
+              {result.subtitle ? <p className="line-clamp-2 text-sm text-muted-foreground">{result.subtitle}</p> : null}
+              <p className="line-clamp-2 text-sm text-muted-foreground">
+                {[result.author || t.discover.unknownAuthor, result.publishYear ? String(result.publishYear) : null]
+                  .filter(Boolean)
+                  .join(' • ')}
+              </p>
+            </div>
+
+            {result.description ? <p className="line-clamp-4 text-sm leading-6 text-muted-foreground">{result.description}</p> : null}
+
+            <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
+              <p>{t.discover.language}: {result.languages.length > 0 ? result.languages.join(', ') : t.discover.unknown}</p>
+              <p>{t.discover.source}: {getSourceLabel(result.source)}</p>
+              <p>{t.discover.year}: {result.publishYear ?? t.discover.unknown}</p>
+              <p>{t.discover.format}: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
+              <p>
+                {result.source === 'standardebooks'
+                  ? t.discover.editionPremium
+                  : `${t.discover.downloads}: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : t.discover.unknown}`}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {likelyDuplicate ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {t.discover.sameTitleAuthorExists}
+          </div>
+        ) : null}
+
+        {downloadState.state === 'downloading' || downloadState.state === 'importing' ? (
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-3">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-medium">{getProgressLabel(downloadState, t)}</span>
+              {downloadState.progressPercent !== null ? <span className="text-muted-foreground">{downloadState.progressPercent}%</span> : null}
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-background/80">
+              <div
+                className={cn('h-full rounded-full transition-[width]', downloadState.state === 'importing' ? 'bg-emerald-500' : 'bg-primary')}
+                style={{ width: `${Math.max(8, Math.min(100, downloadState.progressPercent ?? (downloadState.state === 'importing' ? 100 : 12)))}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {downloadState.state === 'completed' && importedBook ? (
+          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+            <div>
+              <p className="font-medium text-emerald-950">{t.discover.downloadedSuccessfully}</p>
+              <p className="text-sm text-emerald-900/80">{t.discover.localLibraryDescription}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => void onOpenBook(importedBook)}>
+                <BookOpen className="h-4 w-4" />
+                {t.discover.openNow}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={onBack}>
+                {t.discover.showInLibrary}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {downloadState.state === 'failed' ? (
+          <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3">
+            <div>
+              <p className="font-medium text-rose-950">{t.discover.downloadFailed}</p>
+              <p className="text-sm text-rose-900/80">{downloadState.error ?? t.discover.tryAgain}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => onRequestDownload(result)}>
+                {t.discover.retry}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-auto flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={() => onRequestDownload(result)} disabled={isBusy || downloadState.state === 'completed'}>
+            {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {downloadState.state === 'completed'
+              ? t.discover.downloaded
+              : downloadState.state === 'importing'
+                ? t.discover.importing
+                : downloadState.state === 'downloading'
+                  ? t.discover.downloading
+                  : t.discover.download}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
 
 export function DiscoverScreen({
   books,
@@ -222,6 +373,16 @@ export function DiscoverScreen({
   const [downloadStates, setDownloadStates] = React.useState<Record<string, DownloadCardState>>({});
   const [duplicatePrompt, setDuplicatePrompt] = React.useState<DuplicatePromptState>(null);
   const lastInitialSearchKeyRef = React.useRef<string | null>(null);
+
+  const sourceOptions = React.useMemo(
+    () =>
+      ([
+        ['all', t.discover.allSources],
+        ['gutenberg', t.discover.gutenberg],
+        ['standardebooks', t.discover.standardEbooks]
+      ] as Array<[DiscoverSourceFilter, string]>),
+    [t]
+  );
 
   const duplicateMap = React.useMemo(() => {
     const map = new Map<string, Book>();
@@ -253,41 +414,54 @@ export function DiscoverScreen({
     });
   }, [t]);
 
-  const runSearch = React.useCallback(async (override?: { query?: string; language?: string }) => {
-    const searchQuery = override?.query ?? query;
-    const searchLanguage = override?.language ?? language;
-    const trimmedQuery = searchQuery.trim();
-    setHasSearched(true);
-    setError(null);
+  const runSearch = React.useCallback(
+    async (override?: { query?: string; language?: string }) => {
+      const searchQuery = override?.query ?? query;
+      const searchLanguage = override?.language ?? language;
+      const trimmedQuery = searchQuery.trim();
+      const normalizedLanguage = searchLanguage.trim() || undefined;
+      setHasSearched(true);
+      setError(null);
 
-    if (!trimmedQuery) {
-      setResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const api = getRendererApi();
-      const response = await api.discover.search({
-        query: trimmedQuery,
-        source: sourceFilter,
-        language: searchLanguage.trim() || undefined
-      });
-      if (!response.ok) {
-        setError(getFriendlyDiscoverError(response.error, t));
+      if (!trimmedQuery) {
         setResults([]);
         return;
       }
 
-      setResults(response.results);
-      setDownloadStates({});
-    } catch (err) {
-      setResults([]);
-      setError(getFriendlyDiscoverError(err instanceof Error ? err.message : String(err), t));
-    } finally {
-      setLoading(false);
-    }
-  }, [language, query, sourceFilter, t]);
+      setLoading(true);
+      try {
+        const cacheKey = JSON.stringify({
+          query: trimmedQuery.toLocaleLowerCase(),
+          source: sourceFilter,
+          language: normalizedLanguage?.toLocaleLowerCase() ?? ''
+        });
+        const cachedResults = discoverSearchCache.get(cacheKey);
+        const response = cachedResults
+          ? { ok: true as const, results: cachedResults }
+          : await getRendererApi().discover.search({
+              query: trimmedQuery,
+              source: sourceFilter,
+              language: normalizedLanguage
+            });
+
+        if (!response.ok) {
+          setError(getFriendlyDiscoverError(response.error, t));
+          setResults([]);
+          return;
+        }
+
+        discoverSearchCache.set(cacheKey, response.results);
+        setResults(response.results);
+        setDownloadStates({});
+      } catch (err) {
+        setResults([]);
+        setError(getFriendlyDiscoverError(err instanceof Error ? err.message : String(err), t));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [language, query, sourceFilter, t]
+  );
 
   React.useEffect(() => {
     const trimmedInitialQuery = initialQuery?.trim();
@@ -301,7 +475,6 @@ export function DiscoverScreen({
     }
 
     lastInitialSearchKeyRef.current = searchKey;
-
     setQuery(trimmedInitialQuery);
     void runSearch({ query: trimmedInitialQuery });
   }, [initialQuery, initialSearchToken, runSearch]);
@@ -319,8 +492,7 @@ export function DiscoverScreen({
       }));
 
       try {
-        const api = getRendererApi();
-        const response = await api.discover.download({ result });
+        const response = await getRendererApi().discover.download({ result });
         if (!response.ok) {
           setDownloadStates((current) => ({
             ...current,
@@ -380,6 +552,8 @@ export function DiscoverScreen({
     await runSearch();
   };
 
+  const { visibleItems: visibleResults, hasMore, showMore } = useIncrementalList(results, LIST_BATCH_SIZE.discover);
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden pr-1">
       <Card className="shrink-0 overflow-hidden border-white/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98)_0%,rgba(255,255,255,0.99)_45%,rgba(240,249,255,0.98)_100%)] shadow-sm">
@@ -409,6 +583,7 @@ export function DiscoverScreen({
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={t.discover.searchPlaceholder}
                   className="pl-9"
+                  aria-label={t.discover.searchPlaceholder}
                 />
               </div>
 
@@ -417,6 +592,7 @@ export function DiscoverScreen({
                 onChange={(event) => setLanguage(event.target.value)}
                 placeholder={t.discover.languagePlaceholder}
                 className="xl:max-w-60"
+                aria-label={t.discover.languagePlaceholder}
               />
 
               <Button type="submit" disabled={loading}>
@@ -431,11 +607,7 @@ export function DiscoverScreen({
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {([
-                ['all', t.discover.allSources],
-                ['gutenberg', t.discover.gutenberg],
-                ['standardebooks', t.discover.standardEbooks]
-              ] as Array<[DiscoverSourceFilter, string]>).map(([value, label]) => (
+              {sourceOptions.map(([value, label]) => (
                 <Button
                   key={value}
                   type="button"
@@ -454,197 +626,52 @@ export function DiscoverScreen({
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         <div className="space-y-6">
-          {error ? (
-            <Alert variant="destructive">
-              <AlertTitle>{t.discover.discoverErrorTitle}</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
+          {error ? <ScreenErrorState title={t.discover.discoverErrorTitle} description={error} onRetry={() => void runSearch()} /> : null}
 
           {!hasSearched ? (
-            <Card className="border-dashed bg-card/80">
-              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
-                  <BookOpenText className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-xl font-semibold tracking-tight">{t.discover.introTitle}</h2>
-                  <p className="max-w-md text-sm text-muted-foreground">{t.discover.introDescription}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <ScreenEmptyState
+              title={t.discover.introTitle}
+              description={t.discover.introDescription}
+              icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />}
+            />
           ) : loading ? (
-            <Card className="border-dashed bg-card/80">
-              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{getSearchLoadingLabel(sourceFilter, t)}</p>
-              </CardContent>
-            </Card>
+            <div className="space-y-4">
+              <ScreenLoadingState label={getSearchLoadingLabel(sourceFilter, t)} />
+              <SkeletonGrid count={6} />
+            </div>
           ) : results.length === 0 ? (
-            <Card className="border-dashed bg-card/80">
-              <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-                <p className="text-sm font-medium">{getEmptyStateTitle(sourceFilter, t)}</p>
-                <p className="max-w-md text-sm text-muted-foreground">{t.discover.emptyDescription}</p>
-              </CardContent>
-            </Card>
+            <ScreenEmptyState
+              title={getEmptyStateTitle(sourceFilter, t)}
+              description={t.discover.emptyDescription}
+              icon={<Search className="h-6 w-6 text-muted-foreground" />}
+            />
           ) : (
-            <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-              {results.map((result) => {
-                const downloadState = downloadStates[result.id] ?? createIdleState();
-                const likelyDuplicate = duplicateMap.get(getDuplicateKey(result.title, result.author));
-                const isBusy = downloadState.state === 'downloading' || downloadState.state === 'importing';
-
-                return (
+            <>
+              <ul className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+                {visibleResults.map((result) => (
                   <li key={result.id} className="h-full">
-                    <Card className="flex h-full flex-col overflow-hidden border-white/50 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-                      <CardContent className="flex h-full flex-col gap-4 p-5">
-                        <div className="flex gap-4">
-                          <div className="flex h-36 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-muted/30 shadow-sm">
-                            {result.coverUrl ? (
-                              <img
-                                src={result.coverUrl}
-                                alt={`${result.title} ${t.discover.coverAlt}`}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <PlaceholderCover title={result.title} author={result.author} fallbackAuthor={t.discover.unknownAuthor} />
-                            )}
-                          </div>
-
-                          <div className="min-w-0 flex-1 space-y-3">
-                            <div className="space-y-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                  {getSourceLabel(result.source)}
-                                </span>
-                                {getPremiumBadgeLabel(result, t) ? (
-                                  <span className="inline-flex rounded-full border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                                    {getPremiumBadgeLabel(result, t)}
-                                  </span>
-                                ) : null}
-                                {result.formats.map((format) => (
-                                  <span
-                                    key={`${result.id}:${format.mimeType}:${format.url}`}
-                                    className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground"
-                                  >
-                                    {getFormatBadgeLabel(format.kind)}
-                                  </span>
-                                ))}
-                              </div>
-                              <h2 className="line-clamp-2 text-lg font-semibold tracking-tight">{result.title}</h2>
-                              {result.subtitle ? (
-                                <p className="line-clamp-2 text-sm text-muted-foreground">{result.subtitle}</p>
-                              ) : null}
-                              <p className="line-clamp-2 text-sm text-muted-foreground">
-                                {[result.author || t.discover.unknownAuthor, result.publishYear ? String(result.publishYear) : null]
-                                  .filter(Boolean)
-                                  .join(' • ')}
-                              </p>
-                            </div>
-
-                            {result.description ? (
-                              <p className="line-clamp-4 text-sm leading-6 text-muted-foreground">{result.description}</p>
-                            ) : null}
-
-                            <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
-                              <p>{t.discover.language}: {result.languages.length > 0 ? result.languages.join(', ') : t.discover.unknown}</p>
-                              <p>{t.discover.source}: {getSourceLabel(result.source)}</p>
-                              <p>{t.discover.year}: {result.publishYear ?? t.discover.unknown}</p>
-                              <p>{t.discover.format}: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
-                              <p>
-                                {result.source === 'standardebooks'
-                                  ? t.discover.editionPremium
-                                  : `${t.discover.downloads}: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : t.discover.unknown}`}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-
-                        {likelyDuplicate ? (
-                          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-                            {t.discover.sameTitleAuthorExists}
-                          </div>
-                        ) : null}
-
-                        {downloadState.state === 'downloading' || downloadState.state === 'importing' ? (
-                          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/30 px-3 py-3">
-                            <div className="flex items-center justify-between gap-3 text-sm">
-                              <span className="font-medium">{getProgressLabel(downloadState, t)}</span>
-                              {downloadState.progressPercent !== null ? (
-                                <span className="text-muted-foreground">{downloadState.progressPercent}%</span>
-                              ) : null}
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-background/80">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full transition-[width]',
-                                  downloadState.state === 'importing' ? 'bg-emerald-500' : 'bg-primary'
-                                )}
-                                style={{ width: `${Math.max(8, Math.min(100, downloadState.progressPercent ?? (downloadState.state === 'importing' ? 100 : 12)))}%` }}
-                              />
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {downloadState.state === 'completed' && downloadState.importedBook ? (
-                          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-                            <div>
-                              <p className="font-medium text-emerald-950">{t.discover.downloadedSuccessfully}</p>
-                              <p className="text-sm text-emerald-900/80">{t.discover.localLibraryDescription}</p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button type="button" size="sm" onClick={() => void onOpenBook(downloadState.importedBook)}>
-                                <BookOpen className="h-4 w-4" />
-                                {t.discover.openNow}
-                              </Button>
-                              <Button type="button" size="sm" variant="outline" onClick={onBack}>
-                                {t.discover.showInLibrary}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        {downloadState.state === 'failed' ? (
-                          <div className="space-y-3 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3">
-                            <div>
-                              <p className="font-medium text-rose-950">{t.discover.downloadFailed}</p>
-                              <p className="text-sm text-rose-900/80">{downloadState.error ?? t.discover.tryAgain}</p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button type="button" size="sm" onClick={() => void requestDownload(result)}>
-                                {t.discover.retry}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="mt-auto flex flex-wrap items-center gap-2">
-                          <Button
-                            type="button"
-                            onClick={() => void requestDownload(result)}
-                            disabled={isBusy || downloadState.state === 'completed'}
-                          >
-                            {isBusy ? (
-                              <LoaderCircle className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Download className="h-4 w-4" />
-                            )}
-                            {downloadState.state === 'completed'
-                              ? t.discover.downloaded
-                              : downloadState.state === 'importing'
-                                ? t.discover.importing
-                                : downloadState.state === 'downloading'
-                                  ? t.discover.downloading
-                                  : t.discover.download}
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <DiscoverResultCard
+                      result={result}
+                      downloadState={downloadStates[result.id] ?? createIdleState()}
+                      likelyDuplicate={duplicateMap.has(getDuplicateKey(result.title, result.author))}
+                      t={t}
+                      onRequestDownload={(item) => {
+                        void requestDownload(item);
+                      }}
+                      onOpenBook={onOpenBook}
+                      onBack={onBack}
+                    />
                   </li>
-                );
-              })}
-            </ul>
+                ))}
+              </ul>
+              {hasMore ? (
+                <div className="flex justify-center pt-2">
+                  <Button type="button" variant="outline" onClick={showMore}>
+                    Show more
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </div>
       </div>

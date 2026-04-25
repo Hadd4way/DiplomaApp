@@ -22,6 +22,8 @@ import { ReaderSidePanel } from '@/components/reader/ReaderSidePanel';
 import { SearchPanel, type ReaderSearchResultItem } from '@/components/reader/SearchPanel';
 import { Button } from '@/components/ui/button';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { READER_PANEL_WIDTH } from '@/lib/constants';
+import { markCachedBookMetricDirty } from '@/lib/library-metrics-cache';
 import {
   isSameFlowPointLocation,
   parseFlowLocation,
@@ -474,7 +476,8 @@ export function FlowDocumentReader({
 
   const persistProgress = React.useCallback(
     (chapterIndex: number, scrollRatio: number) => {
-      if (!window.api?.flowProgress) {
+      const api = window.api;
+      if (!api?.flowProgress) {
         return;
       }
       latestChapterIndexRef.current = Math.max(0, chapterIndex);
@@ -484,11 +487,14 @@ export function FlowDocumentReader({
       }
       saveTimerRef.current = setTimeout(() => {
         saveTimerRef.current = null;
-        void window.api.flowProgress
+        void api.flowProgress
           .set({
             bookId,
             chapterIndex: latestChapterIndexRef.current,
             scrollRatio: latestScrollRatioRef.current
+          })
+          .then(() => {
+            markCachedBookMetricDirty(bookId);
           })
           .catch(() => undefined);
       }, 250);
@@ -565,6 +571,9 @@ export function FlowDocumentReader({
         bookId,
         chapterIndex: latestChapterIndexRef.current,
         scrollRatio: latestScrollRatioRef.current
+      })
+      .then(() => {
+        markCachedBookMetricDirty(bookId);
       })
       .catch(() => undefined);
   }, [bookId]);
@@ -1178,7 +1187,7 @@ export function FlowDocumentReader({
               onSelectResult={navigateToSearchIndex}
               onRegisterActivity={registerActivity}
               placeholder={searchPlaceholder}
-              rightOffset={settingsPanelOpen ? 344 : 12}
+              rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
               emptyQueryMessage="Type a query to search the whole book."
               noResultsMessage="No matches found."
             />
@@ -1188,7 +1197,7 @@ export function FlowDocumentReader({
               settings={settings}
               onClose={() => setBookmarksPanelOpen(false)}
               icon={<Bookmark className="h-4 w-4" />}
-              rightOffset={settingsPanelOpen ? 344 : 12}
+              rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
             >
               <div className="space-y-2">
                 {bookmarksState.error ? <p className="text-xs text-destructive">{bookmarksState.error}</p> : null}
@@ -1255,7 +1264,7 @@ export function FlowDocumentReader({
                 }
               }}
               settings={settings}
-              rightOffset={settingsPanelOpen ? 344 : 12}
+              rightOffset={settingsPanelOpen ? READER_PANEL_WIDTH.stackedOffset : READER_PANEL_WIDTH.offset}
             />
             <ReaderSettingsPanel
               open={settingsPanelOpen}
@@ -1295,7 +1304,7 @@ export function FlowDocumentReader({
           <div
             ref={scrollContainerRef}
             className="fb2-reader-scroll h-full w-full overflow-y-auto px-5 py-6 md:px-8"
-            style={{ backgroundColor: palette.readerSurface, color: bodyStyles.color }}
+            style={{ backgroundColor: palette.pageShellBg, color: bodyStyles.color }}
           >
             {error ? (
               <div className="mx-auto max-w-3xl rounded-2xl border px-5 py-4" style={{ borderColor: palette.chromeBorder }}>
