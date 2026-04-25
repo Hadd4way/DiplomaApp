@@ -1,4 +1,5 @@
 import { AI_BACKEND_DEFAULT_URL, REQUEST_TIMEOUT_MS } from '@/lib/constants';
+import { assertOnline } from '@/lib/network';
 import { SimpleCache } from '@/lib/simple-cache';
 
 export type RecommendationLength = 'short' | 'medium' | 'long';
@@ -59,6 +60,8 @@ function getCacheKey(payload: RecommendationRequestPayload): string {
 }
 
 export async function recommendBooks(payload: RecommendationRequestPayload): Promise<RecommendationResponse> {
+  assertOnline();
+
   const cacheKey = getCacheKey(payload);
   const cached = recommendationResponseCache.get(cacheKey);
   if (cached) {

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { AlertCircle, ArrowRight, BookOpenText, BookmarkPlus, LoaderCircle, Sparkles, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, BookOpenText, BookmarkPlus, LoaderCircle, Sparkles, WifiOff, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { BookAdvisorChat } from '@/components/BookAdvisorChat';
 import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useNetworkStatus } from '@/contexts/NetworkStatusContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { LIST_BATCH_SIZE } from '@/lib/constants';
 import { getReaderHeroCardStyles, getReaderThemePalette } from '@/lib/reader-theme';
@@ -444,9 +445,14 @@ const RecommendationCard = React.memo(function RecommendationCard({
 
 export function RecommendationScreen({ books, onFindInDiscover }: Props) {
   const { language } = useLanguage();
+  const { isOnline } = useNetworkStatus();
   const { settings } = useReaderSettings();
   const copy = screenCopy[language];
   const palette = getReaderThemePalette(settings);
+  const offlineMessage =
+    language === 'ru'
+      ? 'Рекомендации работают только при подключении к интернету.'
+      : 'Recommendations are available only when you are connected to the internet.';
   const { recentBooks } = useRecentBooks('recommendations');
   const [genres, setGenres] = React.useState<string[]>([]);
   const [moods, setMoods] = React.useState<string[]>([]);
@@ -482,6 +488,16 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!isOnline) {
+      setHasRequested(true);
+      setLoading(false);
+      setError(offlineMessage);
+      setWarning(null);
+      setRecommendationSummary('');
+      setRecommendations([]);
+      return;
+    }
+
     setHasRequested(true);
     setLoading(true);
     setError(null);
@@ -561,7 +577,15 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+                  {!isOnline ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                      <WifiOff className="h-3.5 w-3.5" />
+                      {language === 'ru' ? 'Офлайн' : 'Offline'}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="max-w-2xl text-sm text-muted-foreground">{copy.subtitle}</p>
               </div>
             </div>
@@ -586,67 +610,87 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                     <p className="text-sm text-muted-foreground">{copy.formDescription}</p>
                   </div>
 
-                  <form className="space-y-6" onSubmit={handleSubmit}>
+                  {!isOnline ? (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>{language === 'ru' ? 'Офлайн-режим' : 'Offline mode'}</AlertTitle>
+                      <AlertDescription>{offlineMessage}</AlertDescription>
+                    </Alert>
+                  ) : null}
+
+                  <form className={isOnline ? 'space-y-6' : 'space-y-6 opacity-60'} onSubmit={handleSubmit}>
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.genres}</h3>
-                      <ChipGroup options={genreOptions} selected={genres} language={language} onToggle={(value) => toggleSelection(value, setGenres)} />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <ChipGroup options={genreOptions} selected={genres} language={language} onToggle={(value) => toggleSelection(value, setGenres)} />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.moods}</h3>
-                      <ChipGroup options={moodOptions} selected={moods} language={language} onToggle={(value) => toggleSelection(value, setMoods)} />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <ChipGroup options={moodOptions} selected={moods} language={language} onToggle={(value) => toggleSelection(value, setMoods)} />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.length}</h3>
-                      <SegmentedControl
-                        value={length}
-                        onChange={setLength}
-                        options={[
-                          { value: 'short', label: copy.short },
-                          { value: 'medium', label: copy.medium },
-                          { value: 'long', label: copy.long }
-                        ]}
-                      />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <SegmentedControl
+                          value={length}
+                          onChange={setLength}
+                          options={[
+                            { value: 'short', label: copy.short },
+                            { value: 'medium', label: copy.medium },
+                            { value: 'long', label: copy.long }
+                          ]}
+                        />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.type}</h3>
-                      <SegmentedControl
-                        value={typePreference}
-                        onChange={setTypePreference}
-                        options={[
-                          { value: 'fiction', label: copy.fiction },
-                          { value: 'non-fiction', label: copy.nonFiction },
-                          { value: 'any', label: copy.any }
-                        ]}
-                      />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <SegmentedControl
+                          value={typePreference}
+                          onChange={setTypePreference}
+                          options={[
+                            { value: 'fiction', label: copy.fiction },
+                            { value: 'non-fiction', label: copy.nonFiction },
+                            { value: 'any', label: copy.any }
+                          ]}
+                        />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.era}</h3>
-                      <SegmentedControl
-                        value={eraPreference}
-                        onChange={setEraPreference}
-                        options={[
-                          { value: 'classic', label: copy.classic },
-                          { value: 'modern', label: copy.modern },
-                          { value: 'any', label: copy.any }
-                        ]}
-                      />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <SegmentedControl
+                          value={eraPreference}
+                          onChange={setEraPreference}
+                          options={[
+                            { value: 'classic', label: copy.classic },
+                            { value: 'modern', label: copy.modern },
+                            { value: 'any', label: copy.any }
+                          ]}
+                        />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold">{copy.preferredLanguage}</h3>
-                      <SegmentedControl
-                        value={languagePreference}
-                        onChange={setLanguagePreference}
-                        options={[
-                          { value: 'ru', label: copy.russian },
-                          { value: 'en', label: copy.english },
-                          { value: 'any', label: copy.any }
-                        ]}
-                      />
+                      <div className={!isOnline ? 'pointer-events-none' : undefined}>
+                        <SegmentedControl
+                          value={languagePreference}
+                          onChange={setLanguagePreference}
+                          options={[
+                            { value: 'ru', label: copy.russian },
+                            { value: 'en', label: copy.english },
+                            { value: 'any', label: copy.any }
+                          ]}
+                        />
+                      </div>
                     </section>
 
                     <section className="space-y-3">
@@ -659,6 +703,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                         onChange={(event) => setFreeText(event.target.value)}
                         placeholder={copy.freeTextPlaceholder}
                         className="min-h-36 w-full rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        disabled={!isOnline}
                       />
                     </section>
 
@@ -669,6 +714,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                           checked={useLibraryContext}
                           onChange={(event) => setUseLibraryContext(event.target.checked)}
                           className="mt-0.5 h-4 w-4 rounded border border-input"
+                          disabled={!isOnline}
                         />
                         <span className="space-y-1">
                           <span className="block font-medium text-foreground">{copy.libraryContext}</span>
@@ -678,7 +724,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                       {showPersonalizedNote ? <p className="text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
                     </section>
 
-                    <Button type="submit" disabled={loading} size="lg" className="w-full">
+                    <Button type="submit" disabled={loading || !isOnline} size="lg" className="w-full">
                       {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       {loading ? copy.loading : copy.submit}
                     </Button>

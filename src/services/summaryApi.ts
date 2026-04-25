@@ -1,4 +1,5 @@
 import { AI_BACKEND_DEFAULT_URL, REQUEST_TIMEOUT_MS } from '@/lib/constants';
+import { assertOnline } from '@/lib/network';
 import { SimpleCache } from '@/lib/simple-cache';
 
 export type SummaryLanguage = 'ru' | 'en';
@@ -37,6 +38,8 @@ function getCacheKey(payload: SummarizeBookNotesPayload): string {
 }
 
 export async function summarizeBookNotes(payload: SummarizeBookNotesPayload): Promise<SummarizeBookNotesResponse> {
+  assertOnline();
+
   const cacheKey = getCacheKey(payload);
   const cached = summaryResponseCache.get(cacheKey);
   if (cached) {

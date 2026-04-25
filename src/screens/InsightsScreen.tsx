@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { AiSummaryEntry, Book } from '../../shared/ipc';
-import { BookOpen, Brain, Clock3, Copy, Highlighter, MessageSquare, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { BookOpen, Brain, Clock3, Copy, Highlighter, MessageSquare, Search, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
 import { AiSummaryDialog } from '@/components/AiSummaryDialog';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import {
@@ -19,6 +19,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ScreenEmptyState, ScreenErrorState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useNetworkStatus } from '@/contexts/NetworkStatusContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { aiSummaryToMarkdown, aiSummaryToText } from '@/lib/ai-summary';
 import { LIST_BATCH_SIZE } from '@/lib/constants';
@@ -163,9 +164,14 @@ function getAiSummaryPreview(text: string): string {
 
 export function InsightsScreen({ books, onOpenItem }: Props) {
   const { language, t } = useLanguage();
+  const { isOnline } = useNetworkStatus();
   const { settings } = useReaderSettings();
   const palette = getReaderThemePalette(settings);
   const aiSummaryLabels = React.useMemo(() => getAiSummaryLabels(language), [language]);
+  const offlineSummaryMessage =
+    language === 'ru'
+      ? 'AI-конспекты недоступны без интернета.'
+      : 'AI summaries are unavailable offline.';
   const [items, setItems] = React.useState<InsightItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -511,6 +517,17 @@ export function InsightsScreen({ books, onOpenItem }: Props) {
       return;
     }
 
+    if (!isOnline) {
+      setSummaryOpen(true);
+      setSummaryLoading(false);
+      setSummaryError(offlineSummaryMessage);
+      setSummaryActionError(null);
+      setSummaryActionMessage(null);
+      setSummaryResult(null);
+      setSummarySource(null);
+      return;
+    }
+
     setSummaryOpen(true);
     setSummaryLoading(true);
     setSummaryError(null);
@@ -545,7 +562,7 @@ export function InsightsScreen({ books, onOpenItem }: Props) {
     } finally {
       setSummaryLoading(false);
     }
-  }, [language, selectedBook, summaryItems]);
+  }, [isOnline, language, offlineSummaryMessage, selectedBook, summaryItems]);
 
   const handleCopySummary = React.useCallback(async () => {
     if (!summaryText) {
@@ -857,13 +874,22 @@ export function InsightsScreen({ books, onOpenItem }: Props) {
 
               <div className="flex flex-col gap-3 rounded-[1.4rem] border p-4 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold" style={{ color: palette.chromeText }}>
-                    {language === 'ru' ? 'AI-конспект по текущему выбору' : 'AI summary for the current selection'}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold" style={{ color: palette.chromeText }}>
+                      {language === 'ru' ? 'AI-конспект по текущему выбору' : 'AI summary for the current selection'}
+                    </p>
+                    {!isOnline ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-800">
+                        <WifiOff className="h-3.5 w-3.5" />
+                        {language === 'ru' ? 'Офлайн' : 'Offline'}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-sm" style={{ color: palette.mutedText }}>{summaryHint}</p>
+                  {!isOnline ? <p className="text-sm text-destructive">{offlineSummaryMessage}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
+                  <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading || !isOnline}>
                     {language === 'ru' ? 'Сделать AI-конспект' : 'Generate AI Summary'}
                   </Button>
                 </div>

@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { BookOpen, BookOpenText, Download, Globe, LoaderCircle, Search, Sparkles } from 'lucide-react';
+import { BookOpen, BookOpenText, Download, Globe, LoaderCircle, Search, Sparkles, WifiOff } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +16,7 @@ import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/compon
 import { SkeletonGrid } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useNetworkStatus } from '@/contexts/NetworkStatusContext';
 import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { DISCOVER_PROVIDER_LABELS, FORMAT_BADGE_LABELS, LIST_BATCH_SIZE } from '@/lib/constants';
 import { getReaderHeroCardStyles } from '@/lib/reader-theme';
@@ -212,6 +213,8 @@ type DiscoverResultCardProps = {
   downloadState: DownloadCardState;
   likelyDuplicate: boolean;
   t: ReturnType<typeof useLanguage>['t'];
+  isOnline: boolean;
+  offlineMessage: string;
   onRequestDownload: (result: DiscoverBookResult) => void;
   onOpenBook: (book: Book) => Promise<void> | void;
   onBack: () => void;
@@ -222,6 +225,8 @@ const DiscoverResultCard = React.memo(function DiscoverResultCard({
   downloadState,
   likelyDuplicate,
   t,
+  isOnline,
+  offlineMessage,
   onRequestDownload,
   onOpenBook,
   onBack
@@ -340,7 +345,7 @@ const DiscoverResultCard = React.memo(function DiscoverResultCard({
         ) : null}
 
         <div className="mt-auto flex flex-wrap items-center gap-2">
-          <Button type="button" onClick={() => onRequestDownload(result)} disabled={isBusy || downloadState.state === 'completed'}>
+          <Button type="button" onClick={() => onRequestDownload(result)} disabled={!isOnline || isBusy || downloadState.state === 'completed'} title={!isOnline ? offlineMessage : undefined}>
             {isBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {downloadState.state === 'completed'
               ? t.discover.downloaded
@@ -364,8 +369,13 @@ export function DiscoverScreen({
   initialQuery = null,
   initialSearchToken
 }: Props) {
-  const { t } = useLanguage();
+  const { language: appLanguage, t } = useLanguage();
+  const { isOnline } = useNetworkStatus();
   const { settings } = useReaderSettings();
+  const offlineMessage =
+    appLanguage === 'ru'
+      ? 'Поиск и загрузка книг недоступны без интернета.'
+      : 'Searching and downloading books is unavailable offline.';
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
   const [sourceFilter, setSourceFilter] = React.useState<DiscoverSourceFilter>('all');
@@ -426,6 +436,12 @@ export function DiscoverScreen({
       setHasSearched(true);
       setError(null);
 
+      if (!isOnline) {
+        setResults([]);
+        setError(offlineMessage);
+        return;
+      }
+
       if (!trimmedQuery) {
         setResults([]);
         return;
@@ -463,7 +479,7 @@ export function DiscoverScreen({
         setLoading(false);
       }
     },
-    [language, query, sourceFilter, t]
+    [isOnline, language, offlineMessage, query, sourceFilter, t]
   );
 
   React.useEffect(() => {
@@ -484,6 +500,11 @@ export function DiscoverScreen({
 
   const performDownload = React.useCallback(
     async (result: DiscoverBookResult) => {
+      if (!isOnline) {
+        setError(offlineMessage);
+        return;
+      }
+
       setDownloadStates((current) => ({
         ...current,
         [result.id]: {
@@ -534,7 +555,7 @@ export function DiscoverScreen({
         }));
       }
     },
-    [onLibraryChanged, t]
+    [isOnline, offlineMessage, onLibraryChanged, t]
   );
 
   const requestDownload = React.useCallback(
@@ -567,7 +588,15 @@ export function DiscoverScreen({
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-1">
-                <h1 className="text-3xl font-semibold tracking-tight">{t.discover.title}</h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-3xl font-semibold tracking-tight">{t.discover.title}</h1>
+                  {!isOnline ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                      <WifiOff className="h-3.5 w-3.5" />
+                      {appLanguage === 'ru' ? 'Офлайн' : 'Offline'}
+                    </span>
+                  ) : null}
+                </div>
                 <p className="max-w-2xl text-sm text-muted-foreground">{t.discover.subtitle}</p>
               </div>
             </div>
@@ -577,7 +606,7 @@ export function DiscoverScreen({
             </Button>
           </div>
 
-          <form className="space-y-4" onSubmit={onSubmit}>
+          <form className={isOnline ? 'space-y-4' : 'space-y-4 opacity-60'} onSubmit={onSubmit}>
             <div className="flex flex-col gap-3 xl:flex-row">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -587,6 +616,7 @@ export function DiscoverScreen({
                   placeholder={t.discover.searchPlaceholder}
                   className="pl-9"
                   aria-label={t.discover.searchPlaceholder}
+                  disabled={!isOnline}
                 />
               </div>
 
@@ -596,9 +626,10 @@ export function DiscoverScreen({
                 placeholder={t.discover.languagePlaceholder}
                 className="xl:max-w-60"
                 aria-label={t.discover.languagePlaceholder}
+                disabled={!isOnline}
               />
 
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || !isOnline} title={!isOnline ? offlineMessage : undefined}>
                 {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                 {t.discover.search}
               </Button>
@@ -618,6 +649,7 @@ export function DiscoverScreen({
                   size="sm"
                   onClick={() => setSourceFilter(value)}
                   className={cn(sourceFilter === value ? '' : 'bg-background/70')}
+                  disabled={!isOnline}
                 >
                   {label}
                 </Button>
@@ -629,9 +661,16 @@ export function DiscoverScreen({
 
       <div className="min-h-0 flex-1 overflow-y-auto pb-2">
         <div className="space-y-6">
-          {error ? <ScreenErrorState title={t.discover.discoverErrorTitle} description={error} onRetry={() => void runSearch()} /> : null}
+          {!isOnline ? (
+            <ScreenErrorState
+              title={appLanguage === 'ru' ? 'Нет интернета' : 'No internet'}
+              description={offlineMessage}
+            />
+          ) : null}
 
-          {!hasSearched ? (
+          {error ? <ScreenErrorState title={t.discover.discoverErrorTitle} description={error} onRetry={isOnline ? () => void runSearch() : undefined} /> : null}
+
+          {!isOnline ? null : !hasSearched ? (
             <ScreenEmptyState
               title={t.discover.introTitle}
               description={t.discover.introDescription}
@@ -658,6 +697,8 @@ export function DiscoverScreen({
                       downloadState={downloadStates[result.id] ?? createIdleState()}
                       likelyDuplicate={duplicateMap.has(getDuplicateKey(result.title, result.author))}
                       t={t}
+                      isOnline={isOnline}
+                      offlineMessage={offlineMessage}
                       onRequestDownload={(item) => {
                         void requestDownload(item);
                       }}

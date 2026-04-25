@@ -1,4 +1,5 @@
 import { REQUEST_TIMEOUT_MS } from '@/lib/constants';
+import { assertOnline } from '@/lib/network';
 import { AI_BACKEND_URL, type RecommendationLibraryBook, type RecommendationLibraryContext } from '@/services/recommendationApi';
 
 export type ChatMessage = {
@@ -21,6 +22,8 @@ export type ChatResponse = {
 type ChatApiResponse = ChatResponse | { error?: string } | null;
 
 export async function chatBooks(payload: ChatRequest): Promise<ChatResponse> {
+  assertOnline();
+
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS.summary);
 

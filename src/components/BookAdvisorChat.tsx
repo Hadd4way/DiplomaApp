@@ -1,9 +1,10 @@
 import * as React from 'react';
-import { AlertCircle, LoaderCircle, MessageSquareText, SendHorizontal } from 'lucide-react';
+import { AlertCircle, LoaderCircle, MessageSquareText, SendHorizontal, WifiOff } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useNetworkStatus } from '@/contexts/NetworkStatusContext';
 import { cn } from '@/lib/utils';
 import { chatBooks, type ChatMessage } from '@/services/chatBooksApi';
 import type { RecommendationLibraryContext } from '@/services/recommendationApi';
@@ -126,7 +127,12 @@ function loadChatSession(): ChatSessionSnapshot {
 
 export function BookAdvisorChat({ libraryContext }: Props) {
   const { language } = useLanguage();
+  const { isOnline } = useNetworkStatus();
   const localizedCopy = copy[language];
+  const offlineMessage =
+    language === 'ru'
+      ? 'Книжный чат недоступен без интернета. Подключитесь к сети, чтобы отправлять сообщения.'
+      : 'Book chat is unavailable offline. Reconnect to the internet to send messages.';
   const [session, setSession] = React.useState<ChatSessionSnapshot>(() => loadChatSession());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -143,7 +149,10 @@ export function BookAdvisorChat({ libraryContext }: Props) {
 
   const submitMessage = React.useCallback(async (rawMessage: string) => {
     const trimmed = rawMessage.trim();
-    if (!trimmed || loading) {
+    if (!trimmed || loading || !isOnline) {
+      if (!isOnline) {
+        setError(offlineMessage);
+      }
       return;
     }
 
@@ -185,7 +194,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
       setLoading(false);
       window.setTimeout(() => textareaRef.current?.focus(), 0);
     }
-  }, [language, libraryContext, loading, localizedCopy.errorDescription, messages]);
+  }, [isOnline, language, libraryContext, loading, localizedCopy.errorDescription, messages, offlineMessage]);
 
   const handleSubmit = React.useCallback(async (event?: React.FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
@@ -207,7 +216,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
-  const canSend = draft.trim().length > 0 && !loading;
+  const canSend = draft.trim().length > 0 && !loading && isOnline;
   const sourceLabel = lastSource === 'fallback' ? localizedCopy.sourceFallback : localizedCopy.sourceOpenrouter;
 
   return (
@@ -216,13 +225,21 @@ export function BookAdvisorChat({ libraryContext }: Props) {
         <Card className="border-white/60 bg-card/95">
           <CardContent className="space-y-6 p-6">
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold tracking-tight">{localizedCopy.title}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-semibold tracking-tight">{localizedCopy.title}</h2>
+                {!isOnline ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                    <WifiOff className="h-3.5 w-3.5" />
+                    {language === 'ru' ? 'Офлайн' : 'Offline'}
+                  </span>
+                ) : null}
+              </div>
               <p className="text-sm text-muted-foreground">{localizedCopy.description}</p>
             </div>
 
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">{localizedCopy.chipsLabel}</h3>
-              <div className="flex flex-wrap gap-2.5">
+              <div className={isOnline ? 'flex flex-wrap gap-2.5' : 'pointer-events-none flex flex-wrap gap-2.5 opacity-60'}>
                 {promptChips[language].map((prompt) => (
                   <button
                     key={prompt}
@@ -254,7 +271,15 @@ export function BookAdvisorChat({ libraryContext }: Props) {
           </Alert>
         ) : null}
 
-        <Card className="flex min-h-0 flex-1 flex-col border-white/60 bg-card/95">
+        {!isOnline ? (
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>{language === 'ru' ? 'Чат временно недоступен' : 'Chat temporarily unavailable'}</AlertTitle>
+            <AlertDescription>{offlineMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Card className={cn('flex min-h-0 flex-1 flex-col border-white/60 bg-card/95', !isOnline ? 'opacity-75' : '')}>
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             <div className="flex items-center justify-between border-b border-border/70 px-6 py-4">
               <div className="flex items-center gap-3">
@@ -324,7 +349,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
                   onKeyDown={handleKeyDown}
                   placeholder={localizedCopy.placeholder}
                   className="min-h-28 w-full resize-none rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={loading}
+                  disabled={loading || !isOnline}
                 />
                 <div className="flex justify-end">
                   <Button type="submit" disabled={!canSend} className="min-w-32">
