@@ -6,7 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { LIST_BATCH_SIZE } from '@/lib/constants';
+import { getReaderHeroCardStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import { useRecentBooks } from '@/lib/library-metrics';
 import { useIncrementalList } from '@/lib/useIncrementalList';
 import { useWishlist } from '@/lib/useWishlist';
@@ -356,7 +358,9 @@ function SegmentedControl<TValue extends string>({
 
 export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   const { language } = useLanguage();
+  const { settings } = useReaderSettings();
   const copy = screenCopy[language];
+  const palette = getReaderThemePalette(settings);
   const { recentBooks } = useRecentBooks('book-advisor');
   const [genres, setGenres] = React.useState<string[]>([]);
   const [moods, setMoods] = React.useState<string[]>([]);
@@ -439,7 +443,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
-      <Card className="shrink-0 overflow-hidden border-white/70 bg-[linear-gradient(135deg,rgba(255,250,245,0.98)_0%,rgba(255,255,255,0.99)_50%,rgba(239,246,255,0.98)_100%)] shadow-sm">
+      <Card className="shrink-0 overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-3">
@@ -554,7 +558,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                       <span className="block text-muted-foreground">{copy.libraryContextHint}</span>
                     </span>
                   </label>
-                  {showPersonalizedNote ? <p className="text-xs font-medium text-emerald-700">{copy.personalizedNote}</p> : null}
+                  {showPersonalizedNote ? <p className="text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
                 </section>
 
                 <Button type="submit" disabled={loading} className="w-full">
@@ -618,7 +622,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">{copy.recommendationsTitle}</h2>
                       <p className="text-sm text-muted-foreground">{copy.recommendationsDescription}</p>
-                      {showPersonalizedNote ? <p className="mt-2 text-xs font-medium text-emerald-700">{copy.personalizedNote}</p> : null}
+                      {showPersonalizedNote ? <p className="mt-2 text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">

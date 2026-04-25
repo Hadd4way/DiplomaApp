@@ -8,7 +8,9 @@ import { SkeletonGrid } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
 import { BookCard } from '@/components/book-card';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { DEBOUNCE_MS, FORMAT_BADGE_LABELS, LIST_BATCH_SIZE } from '@/lib/constants';
+import { getReaderHeroCardStyles } from '@/lib/reader-theme';
 import { cn } from '@/lib/utils';
 import { useLibraryBookActivity, useLibraryBookMetrics, useRecentBooks } from '@/lib/library-metrics';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -54,6 +56,7 @@ export function LibraryCard({
   onReload
 }: Props) {
   const { language, t } = useLanguage();
+  const { settings } = useReaderSettings();
   const [searchQuery, setSearchQuery] = React.useState('');
   const [sortBy, setSortBy] = React.useState<SortKey>('recent-opened');
   const [formatFilter, setFormatFilter] = React.useState<FormatFilter>('all');
@@ -132,7 +135,7 @@ export function LibraryCard({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
-      <Card className="overflow-hidden border-white/50 bg-[linear-gradient(135deg,rgba(219,234,254,0.9)_0%,rgba(239,246,255,0.92)_38%,rgba(255,255,255,0.98)_100%)] shadow-sm">
+      <Card className="overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
             <div className="space-y-2">

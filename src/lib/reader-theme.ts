@@ -209,6 +209,16 @@ export function getReaderPanelStyles(input: ReaderTheme | ReaderSettings): CSSPr
   };
 }
 
+export function getReaderHeroCardStyles(input: ReaderTheme | ReaderSettings): CSSProperties {
+  const palette = getReaderThemePalette(input);
+  return {
+    background: `linear-gradient(135deg, ${palette.accentBg} 0%, ${palette.panelBg} 52%, ${palette.appBg} 100%)`,
+    borderColor: palette.chromeBorder,
+    color: palette.appForeground,
+    boxShadow: palette.shadow
+  };
+}
+
 export function getReaderButtonStyles(input: ReaderTheme | ReaderSettings, active = false): CSSProperties {
   const palette = getReaderThemePalette(input);
   if (active) {

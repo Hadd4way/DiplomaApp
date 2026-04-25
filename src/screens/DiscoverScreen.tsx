@@ -16,7 +16,9 @@ import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/compon
 import { SkeletonGrid } from '@/components/Skeletons';
 import { Input } from '@/components/ui/input';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { DISCOVER_PROVIDER_LABELS, FORMAT_BADGE_LABELS, LIST_BATCH_SIZE } from '@/lib/constants';
+import { getReaderHeroCardStyles } from '@/lib/reader-theme';
 import { SimpleCache } from '@/lib/simple-cache';
 import { useIncrementalList } from '@/lib/useIncrementalList';
 import { cn } from '@/lib/utils';
@@ -363,6 +365,7 @@ export function DiscoverScreen({
   initialSearchToken
 }: Props) {
   const { t } = useLanguage();
+  const { settings } = useReaderSettings();
   const [query, setQuery] = React.useState('');
   const [language, setLanguage] = React.useState('');
   const [sourceFilter, setSourceFilter] = React.useState<DiscoverSourceFilter>('all');
@@ -556,7 +559,7 @@ export function DiscoverScreen({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden pr-1">
-      <Card className="shrink-0 overflow-hidden border-white/70 bg-[linear-gradient(135deg,rgba(255,247,237,0.98)_0%,rgba(255,255,255,0.99)_45%,rgba(240,249,255,0.98)_100%)] shadow-sm">
+      <Card className="shrink-0 overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-2">

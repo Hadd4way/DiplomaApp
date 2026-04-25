@@ -5,7 +5,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { LIST_BATCH_SIZE } from '@/lib/constants';
+import { getReaderHeroCardStyles } from '@/lib/reader-theme';
 import { useIncrementalList } from '@/lib/useIncrementalList';
 import { useWishlist } from '@/lib/useWishlist';
 
@@ -59,6 +61,7 @@ function formatConfidence(value: number | null | undefined, label: string) {
 
 export function WishlistScreen({ onSearchInDiscover }: Props) {
   const { language } = useLanguage();
+  const { settings } = useReaderSettings();
   const copy = screenCopy[language];
   const { loading, error, items, removeItem, updateItem } = useWishlist();
   const [pendingIds, setPendingIds] = React.useState<string[]>([]);
@@ -75,7 +78,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
-      <Card className="shrink-0 overflow-hidden border-white/70 bg-[linear-gradient(135deg,rgba(255,248,240,0.98)_0%,rgba(255,255,255,0.99)_50%,rgba(240,249,255,0.98)_100%)] shadow-sm">
+      <Card className="shrink-0 overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-4 p-6">
           <div className="flex items-start gap-4">
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/85 shadow-sm">

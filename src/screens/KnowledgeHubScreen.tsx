@@ -19,8 +19,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { ScreenEmptyState, ScreenErrorState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { aiSummaryToMarkdown, aiSummaryToText } from '@/lib/ai-summary';
 import { LIST_BATCH_SIZE } from '@/lib/constants';
+import { getReaderHeroCardStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import { useIncrementalList } from '@/lib/useIncrementalList';
 import { summarizeBookNotes, type AiSummaryResult } from '@/services/summaryApi';
 import { cn } from '@/lib/utils';
@@ -149,6 +151,8 @@ function getAiSummaryPreview(text: string): string {
 
 export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const { language, t } = useLanguage();
+  const { settings } = useReaderSettings();
+  const palette = getReaderThemePalette(settings);
   const aiSummaryLabels = React.useMemo(() => getAiSummaryLabels(language), [language]);
   const [items, setItems] = React.useState<KnowledgeHubItem[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -753,17 +757,27 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto pr-2">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-5 pb-8">
-          <section className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_32%),linear-gradient(135deg,_rgba(15,23,42,0.98),_rgba(30,41,59,0.95)_52%,_rgba(8,47,73,0.92))] p-6 text-white shadow-[0_24px_80px_rgba(15,23,42,0.28)]">
-            <div className="absolute inset-y-0 right-0 w-72 bg-[radial-gradient(circle_at_center,_rgba(125,211,252,0.20),_transparent_68%)]" />
+          <section className="relative overflow-hidden rounded-[28px] p-6" style={getReaderHeroCardStyles(settings)}>
+            <div
+              className="absolute inset-y-0 right-0 w-72"
+              style={{ background: `radial-gradient(circle at center, ${palette.accentBg}, transparent 68%)` }}
+            />
             <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-2xl space-y-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.18em] text-slate-100">
+                <div
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-[0.18em]"
+                  style={{
+                    border: `1px solid ${palette.chromeBorder}`,
+                    backgroundColor: palette.panelBg,
+                    color: palette.chromeText
+                  }}
+                >
                   <Brain className="h-3.5 w-3.5" />
                   {t.hub.secondBrain}
                 </div>
                 <div className="space-y-2">
                   <h2 className="text-3xl font-semibold tracking-tight">{t.hub.title}</h2>
-                  <p className="max-w-xl text-sm leading-6 text-slate-300">{t.hub.description}</p>
+                  <p className="max-w-xl text-sm leading-6" style={{ color: palette.mutedText }}>{t.hub.description}</p>
                 </div>
               </div>
 
@@ -775,9 +789,17 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                   [aiSummaryLabels.title, summary.aiSummaries],
                   [t.hub.books, summary.books]
                 ].map(([label, value]) => (
-                  <Card key={label} className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur">
+                  <Card
+                    key={label}
+                    className="shadow-none backdrop-blur"
+                    style={{
+                      borderColor: palette.chromeBorder,
+                      backgroundColor: palette.panelBg,
+                      color: palette.chromeText
+                    }}
+                  >
                     <CardContent className="p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-300">{label}</p>
+                      <p className="text-xs uppercase tracking-[0.18em]" style={{ color: palette.mutedText }}>{label}</p>
                       <p className="mt-2 text-2xl font-semibold">{value}</p>
                     </CardContent>
                   </Card>

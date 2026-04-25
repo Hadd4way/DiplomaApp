@@ -4,6 +4,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { BookCard } from '@/components/book-card';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { getReaderHeroCardStyles } from '@/lib/reader-theme';
 import type { Book, RecommendationEntry } from '../../shared/ipc';
 import type { BookActivitySummary, BookMetric } from '@/lib/library-metrics';
 
@@ -102,11 +104,12 @@ export function BookDetailsScreen(props: Props) {
     onOpen,
     onReveal
   } = props;
+  const { settings } = useReaderSettings();
 
   return (
     <div className="flex h-full w-full min-w-0 flex-1 overflow-y-auto pr-1">
       <div className="flex w-full min-w-0 flex-col gap-6">
-        <Card className="overflow-hidden border-white/50 bg-[linear-gradient(135deg,rgba(255,250,240,0.96)_0%,rgba(255,255,255,0.98)_45%,rgba(239,246,255,0.98)_100%)] shadow-sm">
+        <Card className="overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
           <CardContent className="space-y-6 p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Button type="button" variant="outline" onClick={onBack}>
