@@ -71,13 +71,13 @@
 }
 
 @layer utilities {
-  .premium-card {
+  .app-surface {
     background: var(--surface-glass);
     backdrop-filter: blur(18px);
     box-shadow: var(--shadow-sm);
   }
 
-  .premium-border {
+  .app-border {
     border-color: hsl(var(--border) / 0.8);
   }
 

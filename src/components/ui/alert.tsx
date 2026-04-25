@@ -3,7 +3,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const alertVariants = cva(
-  'premium-card premium-border relative w-full rounded-[calc(var(--radius)+0.1rem)] border px-4 py-3 text-sm shadow-[var(--shadow-sm)]',
+  'app-surface app-border relative w-full rounded-[calc(var(--radius)+0.1rem)] border px-4 py-3 text-sm shadow-[var(--shadow-sm)]',
   {
     variants: {
       variant: {

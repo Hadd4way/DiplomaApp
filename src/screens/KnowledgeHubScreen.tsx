@@ -820,7 +820,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             </div>
           </section>
 
-          <section className="premium-card rounded-[24px] border p-4 backdrop-blur" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelBg }}>
+          <section className="app-surface rounded-[24px] border p-4 backdrop-blur" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelBg }}>
             <div className="flex flex-col gap-3">
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.7fr))]">
                 <div className="relative">

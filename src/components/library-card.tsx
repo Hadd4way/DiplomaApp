@@ -224,7 +224,7 @@ export function LibraryCard({
           </section>
 
           <section className="space-y-4">
-            <div className="premium-card flex flex-col gap-4 rounded-[1.7rem] border border-white/40 bg-card/95 p-5">
+            <div className="app-surface flex flex-col gap-4 rounded-[1.7rem] border border-white/40 bg-card/95 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight">{t.library.browseTitle}</h2>
