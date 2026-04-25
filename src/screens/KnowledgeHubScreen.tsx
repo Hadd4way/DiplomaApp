@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { AiSummaryEntry, Book } from '../../shared/ipc';
-import { BookOpen, Brain, Clock3, Copy, FileDown, Highlighter, MessageSquare, Search, Sparkles, Trash2 } from 'lucide-react';
+import { BookOpen, Brain, Clock3, Copy, Highlighter, MessageSquare, Search, Sparkles, Trash2, X } from 'lucide-react';
 import { AiSummaryDialog } from '@/components/AiSummaryDialog';
 import { NoteEditorDialog } from '@/components/NoteEditorDialog';
 import {
@@ -92,13 +92,13 @@ function getBadgeLabel(language: 'ru' | 'en', type: KnowledgeHubItem['type']): s
   if (type === 'note') {
     return language === 'ru' ? 'Заметка' : 'Note';
   }
-  return 'AI Summary';
+  return language === 'ru' ? 'AI-конспект' : 'AI Summary';
 }
 
 function getAiSummaryLabels(language: 'ru' | 'en') {
   return language === 'ru'
     ? {
-        title: 'AI Summary',
+        title: 'AI-конспект',
         summary: 'Краткий конспект',
         keyIdeas: 'Ключевые идеи',
         studyNotes: 'Учебные заметки',
@@ -826,7 +826,6 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 <select value={selectedType} onChange={(event) => setSelectedType(event.target.value as TypeFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
                   <option value="all">{t.hub.allTypes}</option>
                   <option value="highlight">{t.hub.highlights}</option>
-                  <option value="note">{t.hub.notes}</option>
                   <option value="ai_summary">{aiSummaryLabels.title}</option>
                 </select>
                 <select value={selectedRecent} onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
@@ -852,10 +851,6 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                   <p className="text-sm text-slate-500">{summaryHint}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={() => void handleExportSummary()} disabled={!summaryMarkdown || summaryLoading}>
-                    <FileDown className="mr-2 h-4 w-4" />
-                    {aiSummaryLabels.exportMarkdownTitle}
-                  </Button>
                   <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
                     {language === 'ru' ? 'Сделать AI-конспект' : 'Generate AI Summary'}
                   </Button>
@@ -1042,23 +1037,22 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         onSave={() => void handleSaveEdit()}
       />
 
-      <AiSummaryDialog
-        open={summaryOpen}
-        loading={summaryLoading}
-        savingToHub={summarySavingToHub}
-        result={summaryResult}
+            <AiSummaryDialog
+              open={summaryOpen}
+              loading={summaryLoading}
+              savingToHub={summarySavingToHub}
+              result={summaryResult}
         source={summarySource}
         error={summaryError}
         language={language}
         bookTitle={selectedBook?.title ?? null}
-        actionMessage={summaryActionMessage}
-        actionError={summaryActionError}
-        onClose={() => setSummaryOpen(false)}
-        onCopy={() => void handleCopySummary()}
-        onSaveToNotes={() => void handleSaveSummaryToNotes()}
-        onSaveToHub={() => void handleSaveSummaryToHub()}
-        onRegenerate={() => void handleGenerateSummary()}
-      />
+              actionMessage={summaryActionMessage}
+              actionError={summaryActionError}
+              onClose={() => setSummaryOpen(false)}
+              onCopy={() => void handleCopySummary()}
+              onSaveToHub={() => void handleSaveSummaryToHub()}
+              onRegenerate={() => void handleGenerateSummary()}
+            />
 
       <AlertDialog
         open={Boolean(detailTarget)}
@@ -1072,8 +1066,21 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         }}
       >
         <AlertDialogContent className="max-w-4xl">
+          <button
+            type="button"
+            onClick={() => {
+              setDetailTarget(null);
+              setDetailError(null);
+              setDetailActionError(null);
+              setDetailActionMessage(null);
+            }}
+            aria-label={language === 'ru' ? 'Закрыть' : 'Close'}
+            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+          >
+            <X className="h-4 w-4" />
+          </button>
           <AlertDialogHeader>
-            <AlertDialogTitle>
+            <AlertDialogTitle className="pr-12">
               {detailTarget?.bookTitle}
               {detailTarget?.author ? ` - ${detailTarget.author}` : ''}
             </AlertDialogTitle>
@@ -1115,44 +1122,6 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </div>
               </section>
 
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.studyNotes}</h3>
-                <div className="space-y-2">
-                  {detailTarget.studyNotes.length === 0 ? (
-                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
-                  ) : (
-                    detailTarget.studyNotes.map((item, index) => (
-                      <div key={`${index}:${item}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                        {item}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </section>
-
-              <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.flashcards}</h3>
-                <div className="space-y-3">
-                  {detailTarget.flashcards.length === 0 ? (
-                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
-                  ) : (
-                    detailTarget.flashcards.map((card, index) => (
-                      <Card key={`${index}:${card.question}`} className="border-slate-200">
-                        <CardContent className="space-y-2 p-4">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{aiSummaryLabels.question}</p>
-                            <p className="mt-1 text-sm text-slate-800">{card.question}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{aiSummaryLabels.answer}</p>
-                            <p className="mt-1 text-sm text-slate-700">{card.answer}</p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                </div>
-              </section>
 
               {detailActionError ? <p className="text-sm text-destructive">{detailActionError}</p> : null}
               {detailActionMessage ? <p className="text-sm text-emerald-700">{detailActionMessage}</p> : null}
@@ -1163,10 +1132,6 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             <Button type="button" variant="outline" onClick={() => void handleCopyDetail()} disabled={!detailTarget}>
               <Copy className="mr-2 h-4 w-4" />
               {aiSummaryLabels.copy}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => void handleExportDetail()} disabled={!detailTarget}>
-              <FileDown className="mr-2 h-4 w-4" />
-              {aiSummaryLabels.exportMarkdown}
             </Button>
             <Button type="button" variant="outline" onClick={handleDeleteDetail} disabled={!detailTarget} className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800">
               <Trash2 className="mr-2 h-4 w-4" />
