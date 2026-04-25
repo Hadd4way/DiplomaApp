@@ -12,6 +12,14 @@ type Props = {
   libraryContext?: RecommendationLibraryContext;
 };
 
+const CHAT_STORAGE_KEY = 'book-advisor-chat-session-v1';
+
+type ChatSessionSnapshot = {
+  messages: ChatMessage[];
+  draft: string;
+  lastSource: 'openrouter' | 'fallback' | null;
+};
+
 const promptChips = {
   ru: [
     'Что почитать после 1984?',
@@ -66,15 +74,72 @@ const copy = {
   }
 } as const;
 
+function isChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as ChatMessage;
+  return (
+    (candidate.role === 'user' || candidate.role === 'assistant') &&
+    typeof candidate.content === 'string'
+  );
+}
+
+function loadChatSession(): ChatSessionSnapshot {
+  if (typeof window === 'undefined') {
+    return {
+      messages: [],
+      draft: '',
+      lastSource: null
+    };
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (!rawValue) {
+      return {
+        messages: [],
+        draft: '',
+        lastSource: null
+      };
+    }
+
+    const parsed = JSON.parse(rawValue) as Partial<ChatSessionSnapshot>;
+    const messages = Array.isArray(parsed.messages) ? parsed.messages.filter(isChatMessage) : [];
+    const draft = typeof parsed.draft === 'string' ? parsed.draft : '';
+    const lastSource = parsed.lastSource === 'openrouter' || parsed.lastSource === 'fallback' ? parsed.lastSource : null;
+
+    return {
+      messages,
+      draft,
+      lastSource
+    };
+  } catch {
+    return {
+      messages: [],
+      draft: '',
+      lastSource: null
+    };
+  }
+}
+
 export function BookAdvisorChat({ libraryContext }: Props) {
   const { language } = useLanguage();
   const localizedCopy = copy[language];
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
-  const [draft, setDraft] = React.useState('');
+  const [session, setSession] = React.useState<ChatSessionSnapshot>(() => loadChatSession());
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [lastSource, setLastSource] = React.useState<'openrouter' | 'fallback' | null>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const { messages, draft, lastSource } = session;
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(session));
+  }, [session]);
 
   const submitMessage = React.useCallback(async (rawMessage: string) => {
     const trimmed = rawMessage.trim();
@@ -88,8 +153,11 @@ export function BookAdvisorChat({ libraryContext }: Props) {
     };
 
     const nextMessages = [...messages, nextUserMessage];
-    setMessages(nextMessages);
-    setDraft('');
+    setSession((current) => ({
+      ...current,
+      messages: nextMessages,
+      draft: ''
+    }));
     setError(null);
     setLoading(true);
 
@@ -100,14 +168,17 @@ export function BookAdvisorChat({ libraryContext }: Props) {
         libraryContext: libraryContext?.books.length ? libraryContext.books : undefined
       });
 
-      setMessages((current) => [
+      setSession((current) => ({
         ...current,
-        {
-          role: 'assistant',
-          content: result.reply
-        }
-      ]);
-      setLastSource(result.source ?? null);
+        messages: [
+          ...current.messages,
+          {
+            role: 'assistant',
+            content: result.reply
+          }
+        ],
+        lastSource: result.source ?? null
+      }));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : localizedCopy.errorDescription);
     } finally {
@@ -129,7 +200,10 @@ export function BookAdvisorChat({ libraryContext }: Props) {
   }, [draft, submitMessage]);
 
   const handleChipClick = React.useCallback((value: string) => {
-    setDraft(value);
+    setSession((current) => ({
+      ...current,
+      draft: value
+    }));
     window.setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
 
@@ -246,7 +320,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
                 <textarea
                   ref={textareaRef}
                   value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
+                  onChange={(event) => setSession((current) => ({ ...current, draft: event.target.value }))}
                   onKeyDown={handleKeyDown}
                   placeholder={localizedCopy.placeholder}
                   className="min-h-28 w-full resize-none rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-70"
