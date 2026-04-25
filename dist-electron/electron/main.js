@@ -40,6 +40,7 @@ function createWindow() {
     mainWindow = new electron_1.BrowserWindow({
         width: 1200,
         height: 800,
+        autoHideMenuBar: true,
         webPreferences: {
             preload: node_path_1.default.join(__dirname, 'preload.js'),
             sandbox: false,
@@ -50,6 +51,7 @@ function createWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
+    mainWindow.setMenuBarVisibility(false);
     const devServerUrl = process.env.VITE_DEV_SERVER_URL;
     if (devServerUrl) {
         mainWindow.loadURL(devServerUrl);
