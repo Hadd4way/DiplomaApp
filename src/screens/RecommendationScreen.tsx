@@ -15,11 +15,11 @@ import { useWishlist } from '@/lib/useWishlist';
 import { cn } from '@/lib/utils';
 import {
   recommendBooks,
-  type AdvisorLanguagePreference,
-  type AdvisorLibraryBook,
-  type AdvisorLength,
-  type AdvisorRecommendation
-} from '@/services/advisorApi';
+  type RecommendationLanguagePreference,
+  type RecommendationLibraryBook,
+  type RecommendationLength,
+  type Recommendation
+} from '@/services/recommendationApi';
 import type { Book } from '../../shared/ipc';
 
 type TypePreference = 'fiction' | 'non-fiction' | 'any';
@@ -34,7 +34,7 @@ type Props = {
   onFindInDiscover: (payload: DiscoverLaunchPayload) => void;
 };
 
-type AdvisorCopy = (typeof screenCopy)['en'] | (typeof screenCopy)['ru'];
+type RecommendationCopy = (typeof screenCopy)['en'] | (typeof screenCopy)['ru'];
 
 const genreOptions = [
   { id: 'dystopia', label: { ru: 'Антиутопия', en: 'Dystopia' } },
@@ -98,8 +98,8 @@ const screenCopy = {
     errorTitle: 'Не удалось получить рекомендации',
     recommendationsTitle: 'AI-рекомендации',
     recommendationsDescription: 'Книги, которые лучше всего подходят под выбранные вами предпочтения.',
-    advisorNoteTitle: 'Комментарий советника',
-    advisorNoteBadge: 'Заметка советника',
+    summaryTitle: 'Комментарий советника',
+    summaryBadge: 'Заметка советника',
     confidence: 'Уверенность',
     save: 'Сохранить',
     saved: 'Сохранено',
@@ -114,7 +114,7 @@ const screenCopy = {
     showMore: 'Показать ещё'
   },
   en: {
-    title: 'Book Advisor',
+    title: 'Recommendations',
     subtitle: 'Set genres, mood, and format preferences, then let AI suggest books that fit.',
     formTitle: 'Your preferences',
     formDescription: 'Pick a few filters or describe the kind of book you want in your own words.',
@@ -150,8 +150,8 @@ const screenCopy = {
     errorTitle: 'Failed to get recommendations',
     recommendationsTitle: 'AI recommendations',
     recommendationsDescription: 'Books that best match the preferences you selected.',
-    advisorNoteTitle: "Advisor's Note",
-    advisorNoteBadge: 'Advisor Note',
+    summaryTitle: 'Recommendation Summary',
+    summaryBadge: 'Summary',
     confidence: 'Confidence',
     save: 'Save',
     saved: 'Saved',
@@ -167,7 +167,7 @@ const screenCopy = {
   }
 } as const;
 
-function getLanguageDefault(language: 'ru' | 'en'): AdvisorLanguagePreference {
+function getLanguageDefault(language: 'ru' | 'en'): RecommendationLanguagePreference {
   return language === 'ru' ? 'ru' : 'en';
 }
 
@@ -185,7 +185,7 @@ function getRecommendationKey(recommendation: { title: string; author?: string |
   return `${recommendation.title.trim().toLocaleLowerCase()}::${(recommendation.author ?? '').trim().toLocaleLowerCase()}`;
 }
 
-function toLibraryBook(book: Pick<Book, 'title' | 'author'>): AdvisorLibraryBook | null {
+function toLibraryBook(book: Pick<Book, 'title' | 'author'>): RecommendationLibraryBook | null {
   const title = book.title.trim();
   const author = book.author?.trim() ?? null;
 
@@ -224,7 +224,7 @@ function buildLibraryContext(books: Book[], recentBookIds: string[]) {
   });
 
   const seen = new Set<string>();
-  const libraryBooks: AdvisorLibraryBook[] = [];
+  const libraryBooks: RecommendationLibraryBook[] = [];
 
   for (const book of sortedBooks) {
     const entry = toLibraryBook(book);
@@ -245,7 +245,7 @@ function buildLibraryContext(books: Book[], recentBookIds: string[]) {
     }
   }
 
-  const recentlyOpenedBooks: AdvisorLibraryBook[] = [];
+  const recentlyOpenedBooks: RecommendationLibraryBook[] = [];
 
   for (const bookId of recentBookIds) {
     const book = booksById.get(bookId);
@@ -364,18 +364,18 @@ function SegmentedControlInner<TValue extends string>({
 
 const SegmentedControl = React.memo(SegmentedControlInner) as typeof SegmentedControlInner;
 
-type AdvisorRecommendationCardProps = {
-  recommendation: AdvisorRecommendation;
-  copy: AdvisorCopy;
+type RecommendationCardProps = {
+  recommendation: Recommendation;
+  copy: RecommendationCopy;
   sourceLabel: string;
   isSaved: boolean;
   isSaving: boolean;
-  onSave: (recommendation: AdvisorRecommendation, recommendationKey: string) => void;
+  onSave: (recommendation: Recommendation, recommendationKey: string) => void;
   onFindInDiscover: (query: string) => void;
   onDismiss: (recommendationKey: string) => void;
 };
 
-const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard({
+const RecommendationCard = React.memo(function RecommendationCard({
   recommendation,
   copy,
   sourceLabel,
@@ -384,7 +384,7 @@ const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard(
   onSave,
   onFindInDiscover,
   onDismiss
-}: AdvisorRecommendationCardProps) {
+}: RecommendationCardProps) {
   const query = `${recommendation.title} ${recommendation.author}`.trim();
   const confidenceLabel = getConfidenceLabel(recommendation.confidence, copy.confidence);
   const recommendationKey = getRecommendationKey(recommendation);
@@ -436,22 +436,22 @@ const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard(
   );
 });
 
-export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
+export function RecommendationScreen({ books, onFindInDiscover }: Props) {
   const { language } = useLanguage();
   const { settings } = useReaderSettings();
   const copy = screenCopy[language];
   const palette = getReaderThemePalette(settings);
-  const { recentBooks } = useRecentBooks('book-advisor');
+  const { recentBooks } = useRecentBooks('recommendations');
   const [genres, setGenres] = React.useState<string[]>([]);
   const [moods, setMoods] = React.useState<string[]>([]);
-  const [length, setLength] = React.useState<AdvisorLength>('medium');
+  const [length, setLength] = React.useState<RecommendationLength>('medium');
   const [typePreference, setTypePreference] = React.useState<TypePreference>('any');
   const [eraPreference, setEraPreference] = React.useState<EraPreference>('any');
-  const [languagePreference, setLanguagePreference] = React.useState<AdvisorLanguagePreference>(getLanguageDefault(language));
+  const [languagePreference, setLanguagePreference] = React.useState<RecommendationLanguagePreference>(getLanguageDefault(language));
   const [freeText, setFreeText] = React.useState('');
   const [useLibraryContext, setUseLibraryContext] = React.useState(true);
-  const [recommendations, setRecommendations] = React.useState<AdvisorRecommendation[]>([]);
-  const [advisorComment, setAdvisorComment] = React.useState('');
+  const [recommendations, setRecommendations] = React.useState<Recommendation[]>([]);
+  const [recommendationSummary, setRecommendationSummary] = React.useState('');
   const [responseSource, setResponseSource] = React.useState<string | null>(null);
   const [warning, setWarning] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -480,7 +480,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
     setLoading(true);
     setError(null);
     setWarning(null);
-    setAdvisorComment('');
+    setRecommendationSummary('');
 
     try {
       const result = await recommendBooks({
@@ -495,13 +495,13 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
         libraryContext: useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined
       });
 
-      setAdvisorComment(result.advisorComment);
+      setRecommendationSummary(result.summary);
       setRecommendations(result.recommendations);
       setDismissedKeys([]);
       setResponseSource(result.source ?? null);
       setWarning(result.warning ?? null);
     } catch (requestError) {
-      setAdvisorComment('');
+      setRecommendationSummary('');
       setRecommendations([]);
       setDismissedKeys([]);
       setResponseSource(null);
@@ -522,7 +522,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
   );
   const { visibleItems: visibleRecommendationItems, hasMore, showMore } = useIncrementalList(
     visibleRecommendations,
-    LIST_BATCH_SIZE.advisor
+    LIST_BATCH_SIZE.recommendations
   );
   const showPersonalizedNote = useLibraryContext && libraryContext.books.length > 0;
 
@@ -533,7 +533,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
     }
   }, []);
 
-  const handleSaveRecommendation = React.useCallback((recommendation: AdvisorRecommendation, recommendationKey: string) => {
+  const handleSaveRecommendation = React.useCallback((recommendation: Recommendation, recommendationKey: string) => {
     setSavingKeys((current) => [...current, recommendationKey]);
     void saveItem({
       title: recommendation.title,
@@ -637,11 +637,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                 </section>
 
                 <section className="space-y-3">
-                  <label className="text-sm font-semibold" htmlFor="book-advisor-free-text">
+                  <label className="text-sm font-semibold" htmlFor="recommendations-free-text">
                     {copy.freeTextLabel}
                   </label>
                   <textarea
-                    id="book-advisor-free-text"
+                    id="recommendations-free-text"
                     value={freeText}
                     onChange={(event) => setFreeText(event.target.value)}
                     placeholder={copy.freeTextPlaceholder}
@@ -700,7 +700,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
               <ScreenEmptyState title={copy.noRecommendations} description={copy.noRecommendationsDescription} icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />} />
             ) : (
               <>
-                {advisorComment ? (
+                {recommendationSummary ? (
                   <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)]">
                     <CardContent className="p-6">
                       <div className="flex items-start gap-4">
@@ -709,11 +709,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                         </div>
                         <div className="space-y-2">
                           <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                            {copy.advisorNoteBadge}
+                            {copy.summaryBadge}
                           </span>
                           <div className="space-y-1">
-                            <h3 className="text-lg font-semibold tracking-tight text-foreground">{copy.advisorNoteTitle}</h3>
-                            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{advisorComment}</p>
+                            <h3 className="text-lg font-semibold tracking-tight text-foreground">{copy.summaryTitle}</h3>
+                            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{recommendationSummary}</p>
                           </div>
                         </div>
                       </div>
@@ -747,7 +747,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
                     return (
                       <li key={recommendationKey}>
-                        <AdvisorRecommendationCard
+                        <RecommendationCard
                           recommendation={recommendation}
                           copy={copy}
                           sourceLabel={sourceLabel}
@@ -776,3 +776,4 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
     </div>
   );
 }
+

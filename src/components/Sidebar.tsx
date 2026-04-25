@@ -4,7 +4,7 @@ import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getReaderThemePalette } from '@/lib/reader-theme';
 
-export type AppView = 'library' | 'import' | 'notes' | 'knowledge-hub' | 'book-advisor' | 'wishlist' | 'settings';
+export type AppView = 'library' | 'import' | 'notes' | 'insights' | 'recommendations' | 'wishlist' | 'settings';
 
 type Props = {
   currentView: AppView;
@@ -17,8 +17,8 @@ export function Sidebar({ currentView, onViewChange }: Props) {
   const palette = getReaderThemePalette(settings);
   const navItems: Array<{ view: AppView; label: string; icon: ComponentType<{ className?: string }> }> = [
     { view: 'library', label: t.sidebar.library, icon: BookOpen },
-    { view: 'knowledge-hub', label: t.sidebar.knowledgeHub, icon: Brain },
-    { view: 'book-advisor', label: language === 'ru' ? 'Книжный советник' : 'Book Advisor', icon: Sparkles },
+    { view: 'insights', label: t.sidebar.knowledgeHub, icon: Brain },
+    { view: 'recommendations', label: language === 'ru' ? 'Рекомендации' : 'Recommendations', icon: Sparkles },
     { view: 'wishlist', label: language === 'ru' ? 'Вишлист' : 'Wishlist', icon: Bookmark },
     { view: 'settings', label: t.sidebar.settings, icon: Settings }
   ];

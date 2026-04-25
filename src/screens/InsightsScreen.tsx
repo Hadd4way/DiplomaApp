@@ -27,7 +27,7 @@ import { useIncrementalList } from '@/lib/useIncrementalList';
 import { summarizeBookNotes, type AiSummaryResult } from '@/services/summaryApi';
 import { cn } from '@/lib/utils';
 
-type KnowledgeHubAnnotationItem = {
+type InsightAnnotationItem = {
   id: string;
   bookId: string;
   bookTitle: string;
@@ -39,17 +39,17 @@ type KnowledgeHubAnnotationItem = {
   createdAt: number;
 };
 
-type KnowledgeHubAiSummaryItem = AiSummaryEntry & {
+type InsightSummaryItem = AiSummaryEntry & {
   type: 'ai_summary';
   text: string;
   note: null;
 };
 
-export type KnowledgeHubItem = KnowledgeHubAnnotationItem | KnowledgeHubAiSummaryItem;
+export type InsightItem = InsightAnnotationItem | InsightSummaryItem;
 
 type Props = {
   books: Book[];
-  onOpenItem: (item: KnowledgeHubItem) => void;
+  onOpenItem: (item: InsightItem) => void;
 };
 
 type SortOption = 'newest' | 'oldest' | 'book-title';
@@ -75,7 +75,7 @@ function normalizeText(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getBadgeStyle(type: KnowledgeHubItem['type'], palette: ReturnType<typeof getReaderThemePalette>) {
+function getBadgeStyle(type: InsightItem['type'], palette: ReturnType<typeof getReaderThemePalette>) {
   if (type === 'highlight') {
     return {
       borderColor: palette.accentBorder,
@@ -97,7 +97,7 @@ function getBadgeStyle(type: KnowledgeHubItem['type'], palette: ReturnType<typeo
   };
 }
 
-function getBadgeLabel(language: 'ru' | 'en', type: KnowledgeHubItem['type']): string {
+function getBadgeLabel(language: 'ru' | 'en', type: InsightItem['type']): string {
   if (type === 'highlight') {
     return language === 'ru' ? 'Выделение' : 'Highlight';
   }
@@ -147,7 +147,7 @@ function getAiSummaryLabels(language: 'ru' | 'en') {
       };
 }
 
-function toSummaryResult(item: KnowledgeHubAiSummaryItem): AiSummaryResult {
+function toSummaryResult(item: InsightSummaryItem): AiSummaryResult {
   return {
     summary: item.summary,
     keyIdeas: item.keyIdeas,
@@ -161,12 +161,12 @@ function getAiSummaryPreview(text: string): string {
   return normalized.length > 0 ? normalized : '';
 }
 
-export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
+export function InsightsScreen({ books, onOpenItem }: Props) {
   const { language, t } = useLanguage();
   const { settings } = useReaderSettings();
   const palette = getReaderThemePalette(settings);
   const aiSummaryLabels = React.useMemo(() => getAiSummaryLabels(language), [language]);
-  const [items, setItems] = React.useState<KnowledgeHubItem[]>([]);
+  const [items, setItems] = React.useState<InsightItem[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [queryInput, setQueryInput] = React.useState('');
@@ -175,9 +175,9 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const [selectedType, setSelectedType] = React.useState<TypeFilter>('all');
   const [selectedRecent, setSelectedRecent] = React.useState<RecentFilter>('all');
   const [sortBy, setSortBy] = React.useState<SortOption>('newest');
-  const [deleteTarget, setDeleteTarget] = React.useState<KnowledgeHubItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<InsightItem | null>(null);
   const [deleteLoading, setDeleteLoading] = React.useState(false);
-  const [editTarget, setEditTarget] = React.useState<KnowledgeHubAnnotationItem | null>(null);
+  const [editTarget, setEditTarget] = React.useState<InsightAnnotationItem | null>(null);
   const [editValue, setEditValue] = React.useState('');
   const [editError, setEditError] = React.useState<string | null>(null);
   const [editLoading, setEditLoading] = React.useState(false);
@@ -189,7 +189,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   const [summaryActionMessage, setSummaryActionMessage] = React.useState<string | null>(null);
   const [summarySource, setSummarySource] = React.useState<'openrouter' | 'fallback' | null>(null);
   const [summaryResult, setSummaryResult] = React.useState<AiSummaryResult | null>(null);
-  const [detailTarget, setDetailTarget] = React.useState<KnowledgeHubAiSummaryItem | null>(null);
+  const [detailTarget, setDetailTarget] = React.useState<InsightSummaryItem | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
   const [detailActionError, setDetailActionError] = React.useState<string | null>(null);
@@ -243,7 +243,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         setError(summariesResult.error);
       }
 
-      const nextItems: KnowledgeHubItem[] = [];
+      const nextItems: InsightItem[] = [];
       if (notesResult.ok) {
         for (const note of notesResult.notes) {
           const bookTitle = books.find((book) => book.id === note.bookId)?.title ?? t.hub.unknownBook;
@@ -353,7 +353,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
   }, [deferredQuery, items, language, recentThreshold, selectedBookId, selectedType, sortBy]);
   const { visibleItems: visibleFilteredItems, hasMore, showMore } = useIncrementalList(
     filteredItems,
-    LIST_BATCH_SIZE.knowledgeHub
+    LIST_BATCH_SIZE.insights
   );
 
   const selectedBook = React.useMemo(
@@ -366,7 +366,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
       selectedBookId === 'all'
         ? []
         : filteredItems.filter(
-            (item): item is KnowledgeHubAnnotationItem => item.type !== 'ai_summary' && item.bookId === selectedBookId
+            (item): item is InsightAnnotationItem => item.type !== 'ai_summary' && item.bookId === selectedBookId
           ),
     [filteredItems, selectedBookId]
   );
@@ -436,7 +436,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
   }, [deleteTarget]);
 
-  const openEditDialog = React.useCallback((item: KnowledgeHubAnnotationItem) => {
+  const openEditDialog = React.useCallback((item: InsightAnnotationItem) => {
     setEditTarget(item);
     setEditValue(item.note ?? '');
     setEditError(null);
@@ -612,7 +612,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
         return;
       }
 
-      const savedItem: KnowledgeHubAiSummaryItem = {
+      const savedItem: InsightSummaryItem = {
         ...result.entry,
         type: 'ai_summary',
         text: getAiSummaryPreview(result.entry.summary),
@@ -656,7 +656,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
     }
   }, [language, selectedBook, summaryMarkdown]);
 
-  const openAiSummaryDetail = React.useCallback(async (item: KnowledgeHubAiSummaryItem) => {
+  const openAiSummaryDetail = React.useCallback(async (item: InsightSummaryItem) => {
     if (!window.api?.aiSummaries) {
       return;
     }

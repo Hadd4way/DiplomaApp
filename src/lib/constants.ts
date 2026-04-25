@@ -1,7 +1,7 @@
 export const AI_BACKEND_DEFAULT_URL = 'https://diplomaapp-production.up.railway.app';
 
 export const REQUEST_TIMEOUT_MS = {
-  advisor: 15000,
+  recommendations: 15000,
   summary: 20000
 } as const;
 
@@ -26,9 +26,9 @@ export const READER_PANEL_WIDTH_CLASSNAME = {
 export const LIST_BATCH_SIZE = {
   library: 24,
   discover: 18,
-  knowledgeHub: 20,
+  insights: 20,
   wishlist: 20,
-  advisor: 12
+  recommendations: 12
 } as const;
 
 export const FORMAT_BADGE_LABELS = {

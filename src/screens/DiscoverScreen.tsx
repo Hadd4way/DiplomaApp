@@ -81,7 +81,7 @@ function getSourceLabel(source: DiscoverBookResult['source']) {
   return DISCOVER_PROVIDER_LABELS[source];
 }
 
-function getPremiumBadgeLabel(result: DiscoverBookResult, t: ReturnType<typeof useLanguage>['t']) {
+function getEditionBadgeLabel(result: DiscoverBookResult, t: ReturnType<typeof useLanguage>['t']) {
   return result.source === 'standardebooks' ? t.discover.curatedEdition : null;
 }
 
@@ -247,9 +247,9 @@ const DiscoverResultCard = React.memo(function DiscoverResultCard({
                 <span className="inline-flex rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   {getSourceLabel(result.source)}
                 </span>
-                {getPremiumBadgeLabel(result, t) ? (
+                {getEditionBadgeLabel(result, t) ? (
                   <span className="inline-flex rounded-full border border-amber-300/80 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                    {getPremiumBadgeLabel(result, t)}
+                    {getEditionBadgeLabel(result, t)}
                   </span>
                 ) : null}
                 {result.formats.map((format) => (
@@ -279,7 +279,7 @@ const DiscoverResultCard = React.memo(function DiscoverResultCard({
               <p>{t.discover.format}: {result.formats.map((format) => getFormatBadgeLabel(format.kind)).join(', ')}</p>
               <p>
                 {result.source === 'standardebooks'
-                  ? t.discover.editionPremium
+                  ? t.discover.editionLabel
                   : `${t.discover.downloads}: ${typeof result.downloadCount === 'number' ? result.downloadCount.toLocaleString() : t.discover.unknown}`}
               </p>
             </div>

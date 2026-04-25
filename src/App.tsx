@@ -26,14 +26,14 @@ const EpubReaderScreen = React.lazy(async () => import('@/screens/EpubReaderScre
 const Fb2ReaderScreen = React.lazy(async () => import('@/screens/Fb2ReaderScreen').then((module) => ({ default: module.Fb2ReaderScreen })));
 const PdfReaderScreen = React.lazy(async () => import('@/screens/PdfReaderScreen').then((module) => ({ default: module.PdfReaderScreen })));
 const TxtReaderScreen = React.lazy(async () => import('@/screens/TxtReaderScreen').then((module) => ({ default: module.TxtReaderScreen })));
-const KnowledgeHubScreen = React.lazy(async () =>
-  import('@/screens/KnowledgeHubScreen').then((module) => ({ default: module.KnowledgeHubScreen }))
+const InsightsScreen = React.lazy(async () =>
+  import('@/screens/InsightsScreen').then((module) => ({ default: module.InsightsScreen }))
 );
-const BookAdvisorScreen = React.lazy(async () => import('@/screens/BookAdvisorScreen').then((module) => ({ default: module.BookAdvisorScreen })));
+const RecommendationScreen = React.lazy(async () => import('@/screens/RecommendationScreen').then((module) => ({ default: module.RecommendationScreen })));
 const WishlistScreen = React.lazy(async () => import('@/screens/WishlistScreen').then((module) => ({ default: module.WishlistScreen })));
 const SettingsScreen = React.lazy(async () => import('@/screens/SettingsScreen').then((module) => ({ default: module.SettingsScreen })));
 
-type KnowledgeHubItem = import('@/screens/KnowledgeHubScreen').KnowledgeHubItem;
+type InsightItem = import('@/screens/InsightsScreen').InsightItem;
 
 type ReaderRuntimeBoundaryProps = {
   children: React.ReactNode;
@@ -291,7 +291,7 @@ export default function App() {
     await onOpenBook(book, { initialPage: note.page });
   };
 
-  const onOpenKnowledgeHubItem = async (item: KnowledgeHubItem) => {
+  const onOpenInsightItem = async (item: InsightItem) => {
     if (item.type === 'ai_summary' || !item.bookId) {
       return;
     }
@@ -503,21 +503,21 @@ export default function App() {
       return <NotesScreen books={books} onOpenNote={(note) => void onOpenNote(note)} />;
     }
 
-    if (currentView === 'knowledge-hub') {
+    if (currentView === 'insights') {
       return (
-        <SectionBoundary area="Knowledge Hub">
+        <SectionBoundary area="Insights">
           <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
-            <KnowledgeHubScreen books={books} onOpenItem={(item) => void onOpenKnowledgeHubItem(item)} />
+            <InsightsScreen books={books} onOpenItem={(item) => void onOpenInsightItem(item)} />
           </React.Suspense>
         </SectionBoundary>
       );
     }
 
-    if (currentView === 'book-advisor') {
+    if (currentView === 'recommendations') {
       return (
-        <SectionBoundary area="Book Advisor">
+        <SectionBoundary area="Recommendations">
           <React.Suspense fallback={<LazyScreenFallback label={t.app.loadingLibrary} />}>
-            <BookAdvisorScreen
+            <RecommendationScreen
               books={books}
               onFindInDiscover={({ query }) => {
                 setDiscoverInitialQuery(query);

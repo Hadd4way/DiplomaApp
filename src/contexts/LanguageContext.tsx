@@ -152,7 +152,7 @@ type TranslationTree = {
     language: string;
     year: string;
     format: string;
-    editionPremium: string;
+    editionLabel: string;
     downloads: string;
     unknown: string;
     coverAlt: string;
@@ -469,7 +469,7 @@ const translations: Record<AppLanguage, TranslationTree> = {
       language: 'Язык',
       year: 'Год',
       format: 'Формат',
-      editionPremium: 'Издание: Premium EPUB',
+      editionLabel: 'Издание: Кураторский EPUB',
       downloads: 'Загрузки',
       unknown: 'Неизвестно',
       coverAlt: 'обложка',
@@ -782,7 +782,7 @@ const translations: Record<AppLanguage, TranslationTree> = {
       language: 'Language',
       year: 'Year',
       format: 'Format',
-      editionPremium: 'Edition: Premium EPUB',
+      editionLabel: 'Edition: Curated EPUB',
       downloads: 'Downloads',
       unknown: 'Unknown',
       coverAlt: 'cover',
