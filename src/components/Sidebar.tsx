@@ -19,7 +19,7 @@ export function Sidebar({ currentView, onViewChange }: Props) {
     { view: 'library', label: t.sidebar.library, icon: BookOpen },
     { view: 'knowledge-hub', label: t.sidebar.knowledgeHub, icon: Brain },
     { view: 'book-advisor', label: language === 'ru' ? 'Книжный советник' : 'Book Advisor', icon: Sparkles },
-    { view: 'wishlist', label: 'Wishlist', icon: Bookmark },
+    { view: 'wishlist', label: language === 'ru' ? 'Вишлист' : 'Wishlist', icon: Bookmark },
     { view: 'settings', label: t.sidebar.settings, icon: Settings }
   ];
 

@@ -26,21 +26,25 @@ const screenCopy = {
     searchInDiscover: 'Search in Discover',
     markReadLater: 'Mark as Read Later',
     unmarkReadLater: 'Unmark Read Later',
-    requestErrorTitle: 'Wishlist error'
+    requestErrorTitle: 'Wishlist error',
+    unknownAuthor: 'Unknown author',
+    showMore: 'Show more'
   },
   ru: {
-    title: 'Wishlist',
-    subtitle: 'Save promising recommendations, come back later, and launch straight into Discover when you are ready.',
-    emptyTitle: 'No saved recommendations yet',
-    emptyDescription: 'Books you save from AI recommendations will show up here.',
-    readLater: 'Read Later',
-    saved: 'Saved',
-    confidence: 'Confidence',
-    remove: 'Remove',
-    searchInDiscover: 'Search in Discover',
-    markReadLater: 'Mark as Read Later',
-    unmarkReadLater: 'Unmark Read Later',
-    requestErrorTitle: 'Wishlist error'
+    title: 'Вишлист',
+    subtitle: 'Сохраняйте интересные рекомендации, возвращайтесь к ним позже и сразу переходите в поиск, когда будете готовы.',
+    emptyTitle: 'Пока нет сохранённых рекомендаций',
+    emptyDescription: 'Книги, которые вы сохраняете из AI-рекомендаций, будут появляться здесь.',
+    readLater: 'Читать позже',
+    saved: 'Сохранено',
+    confidence: 'Уверенность',
+    remove: 'Удалить',
+    searchInDiscover: 'Найти в поиске',
+    markReadLater: 'Отметить как читать позже',
+    unmarkReadLater: 'Убрать из читать позже',
+    requestErrorTitle: 'Ошибка вишлиста',
+    unknownAuthor: 'Неизвестный автор',
+    showMore: 'Показать ещё'
   }
 } as const;
 
@@ -130,7 +134,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
 
                         <div className="space-y-2">
                           <h2 className="text-xl font-semibold tracking-tight">{item.title}</h2>
-                          <p className="text-sm text-muted-foreground">{item.author || 'Unknown author'}</p>
+                          <p className="text-sm text-muted-foreground">{item.author || copy.unknownAuthor}</p>
                           <p className="text-sm leading-6 text-muted-foreground">{item.reason}</p>
                         </div>
 
@@ -177,9 +181,9 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
               {hasMore ? (
                 <div className="flex justify-center pt-2">
                   <Button type="button" variant="outline" onClick={showMore}>
-                    Show more
-                  </Button>
-                </div>
+                      {copy.showMore}
+                    </Button>
+                  </div>
               ) : null}
             </>
           )}
