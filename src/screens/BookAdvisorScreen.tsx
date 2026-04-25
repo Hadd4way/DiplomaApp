@@ -33,19 +33,28 @@ type Props = {
 };
 
 const genreOptions = [
-  'Dystopia',
-  'Philosophy',
-  'Science Fiction',
-  'Fantasy',
-  'History',
-  'Psychology',
-  'Classics',
-  'Self-development',
-  'Romance',
-  'Mystery'
+  { id: 'dystopia', label: { ru: 'Антиутопия', en: 'Dystopia' } },
+  { id: 'philosophy', label: { ru: 'Философия', en: 'Philosophy' } },
+  { id: 'science-fiction', label: { ru: 'Научная фантастика', en: 'Science Fiction' } },
+  { id: 'fantasy', label: { ru: 'Фэнтези', en: 'Fantasy' } },
+  { id: 'history', label: { ru: 'История', en: 'History' } },
+  { id: 'psychology', label: { ru: 'Психология', en: 'Psychology' } },
+  { id: 'classics', label: { ru: 'Классика', en: 'Classics' } },
+  { id: 'self-development', label: { ru: 'Саморазвитие', en: 'Self-development' } },
+  { id: 'romance', label: { ru: 'Романтика', en: 'Romance' } },
+  { id: 'mystery', label: { ru: 'Детектив', en: 'Mystery' } }
 ] as const;
 
-const moodOptions = ['Dark', 'Intellectual', 'Inspiring', 'Cozy', 'Serious', 'Emotional', 'Fast-paced', 'Reflective'] as const;
+const moodOptions = [
+  { id: 'dark', label: { ru: 'Мрачное', en: 'Dark' } },
+  { id: 'intellectual', label: { ru: 'Интеллектуальное', en: 'Intellectual' } },
+  { id: 'inspiring', label: { ru: 'Вдохновляющее', en: 'Inspiring' } },
+  { id: 'cozy', label: { ru: 'Уютное', en: 'Cozy' } },
+  { id: 'serious', label: { ru: 'Серьёзное', en: 'Serious' } },
+  { id: 'emotional', label: { ru: 'Эмоциональное', en: 'Emotional' } },
+  { id: 'fast-paced', label: { ru: 'Динамичное', en: 'Fast-paced' } },
+  { id: 'reflective', label: { ru: 'Созерцательное', en: 'Reflective' } }
+] as const;
 
 const screenCopy = {
   ru: {
@@ -282,28 +291,30 @@ function buildLibraryContext(books: Book[], recentBookIds: string[]) {
 function ChipGroup({
   options,
   selected,
+  language,
   onToggle
 }: {
-  options: readonly string[];
+  options: readonly { id: string; label: { ru: string; en: string } }[];
   selected: string[];
+  language: 'ru' | 'en';
   onToggle: (value: string) => void;
 }) {
   return (
     <div className="flex flex-wrap gap-2">
       {options.map((option) => {
-        const isSelected = selected.includes(option);
+        const isSelected = selected.includes(option.id);
         return (
           <button
-            key={option}
+            key={option.id}
             type="button"
-            onClick={() => onToggle(option)}
+            onClick={() => onToggle(option.id)}
             className={cn(
               'rounded-full border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/80 hover:bg-accent'
             )}
             aria-pressed={isSelected}
           >
-            {option}
+            {option.label[language]}
           </button>
         );
       })}
@@ -441,13 +452,6 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-border/70 bg-background/80 px-4 py-3 text-sm text-muted-foreground shadow-sm">
-              <p className="font-medium text-foreground">{copy.currentLibrary}</p>
-              <p>
-                {books.length} {copy.booksInLibrary}
-              </p>
-              <p className="mt-1 text-xs">{copy.helperLine}</p>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -464,12 +468,12 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
               <form className="space-y-6" onSubmit={handleSubmit}>
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold">{copy.genres}</h3>
-                  <ChipGroup options={genreOptions} selected={genres} onToggle={(value) => toggleSelection(value, setGenres)} />
+                  <ChipGroup options={genreOptions} selected={genres} language={language} onToggle={(value) => toggleSelection(value, setGenres)} />
                 </section>
 
                 <section className="space-y-3">
                   <h3 className="text-sm font-semibold">{copy.moods}</h3>
-                  <ChipGroup options={moodOptions} selected={moods} onToggle={(value) => toggleSelection(value, setMoods)} />
+                  <ChipGroup options={moodOptions} selected={moods} language={language} onToggle={(value) => toggleSelection(value, setMoods)} />
                 </section>
 
                 <section className="space-y-3">
