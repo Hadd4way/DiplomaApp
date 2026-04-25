@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 
+import { chatRouter } from "./routes/chat.routes";
 import { recommendRouter } from "./routes/recommend.routes";
 import { summaryRouter } from "./routes/summary.routes";
 import { notFoundMiddleware } from "./middleware/notfound.middleware";
@@ -23,6 +24,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", recommendRouter);
+app.use("/api", chatRouter);
 app.use("/api", summaryRouter);
 
 app.use(notFoundMiddleware);

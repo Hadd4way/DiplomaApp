@@ -9,3 +9,5 @@ export {
   type RecommendationRequestPayload,
   type RecommendationResponse
 } from '@/services/recommendationApi';
+
+export { chatBooks, type ChatMessage, type ChatRequest, type ChatResponse } from '@/services/chatBooksApi';

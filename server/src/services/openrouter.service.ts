@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { ChatBooksRequestBody } from "../types/chat.types";
 import {
   BookRecommendation,
   LibraryBookContextEntry,
@@ -13,7 +14,7 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_RECOMMENDATIONS = 5;
 
 interface OpenRouterMessage {
-  role: "system" | "user";
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -221,13 +222,11 @@ const buildHeaders = (): Record<string, string> => {
   };
 };
 
-const requestOpenRouterJsonCompletion = async ({
-  systemPrompt,
-  userPrompt,
+const requestOpenRouterTextCompletion = async ({
+  messages,
   temperature
 }: {
-  systemPrompt: string;
-  userPrompt: string;
+  messages: OpenRouterMessage[];
   temperature: number;
 }): Promise<string> => {
   if (!env.OPENROUTER_API_KEY) {
@@ -239,6 +238,69 @@ const requestOpenRouterJsonCompletion = async ({
     controller.abort();
   }, env.OPENROUTER_TIMEOUT_MS);
 
+  try {
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: buildHeaders(),
+      body: JSON.stringify({
+        model: env.OPENROUTER_MODEL,
+        messages,
+        temperature
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const responseText = await response.text();
+      const trimmedResponseText = responseText.trim();
+      const detail = trimmedResponseText
+        ? ` ${trimmedResponseText.slice(0, 200)}`
+        : "";
+
+      throw new Error(
+        `OpenRouter request failed with status ${response.status}.${detail}`
+      );
+    }
+
+    let data: OpenRouterResponse;
+
+    try {
+      data = (await response.json()) as OpenRouterResponse;
+    } catch {
+      throw new Error("OpenRouter returned invalid JSON.");
+    }
+
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content || typeof content !== "string") {
+      throw new Error("OpenRouter response did not include message content.");
+    }
+
+    return content.trim();
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("OpenRouter request timed out after 20 seconds.");
+    }
+
+    if (error instanceof Error) {
+      throw error;
+    }
+
+    throw new Error("OpenRouter request failed unexpectedly.");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+const requestOpenRouterJsonCompletion = async ({
+  systemPrompt,
+  userPrompt,
+  temperature
+}: {
+  systemPrompt: string;
+  userPrompt: string;
+  temperature: number;
+}): Promise<string> => {
   const messages: OpenRouterMessage[] = [
     {
       role: "system",
@@ -249,6 +311,15 @@ const requestOpenRouterJsonCompletion = async ({
       content: userPrompt
     }
   ];
+
+  if (!env.OPENROUTER_API_KEY) {
+    throw new Error("OPENROUTER_API_KEY is missing.");
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, env.OPENROUTER_TIMEOUT_MS);
 
   try {
     const response = await fetch(OPENROUTER_URL, {
@@ -372,6 +443,62 @@ const buildSummarizeUserPrompt = (
   );
 };
 
+const bookChatSystemPrompt = [
+  "You are a book-focused assistant inside a reading app.",
+  "Help only with books, reading, authors, genres, recommendations, reading plans, and choosing what to read next.",
+  "If the user asks about anything off-topic, politely redirect the conversation back to books and reading.",
+  "Use the requested language exactly: ru means Russian, en means English.",
+  "Keep answers concise, practical, and useful.",
+  "When library context is provided, use it as a taste signal and avoid suggesting books already listed there unless the user explicitly asks."
+].join(" ");
+
+const formatChatLibraryContext = (
+  items: ChatBooksRequestBody["libraryContext"]
+): string[] => {
+  return (items ?? [])
+    .slice(0, 20)
+    .map((item) => {
+      const title = item.title.trim();
+      const author = item.author?.trim();
+      return author ? `${title} by ${author}` : title;
+    })
+    .filter((item) => item.length > 0);
+};
+
+const buildBookChatMessages = (
+  payload: ChatBooksRequestBody
+): OpenRouterMessage[] => {
+  const instructions = [
+    `Reply language: ${payload.language}`,
+    "Topic restriction: books and reading only."
+  ];
+
+  const libraryEntries = formatChatLibraryContext(payload.libraryContext);
+
+  if (libraryEntries.length > 0) {
+    instructions.push(
+      "Library context:",
+      ...libraryEntries.map((entry) => `- ${entry}`)
+    );
+  }
+
+  const messages: OpenRouterMessage[] = [
+    {
+      role: "system",
+      content: `${bookChatSystemPrompt}\n${instructions.join("\n")}`
+    }
+  ];
+
+  for (const message of payload.messages) {
+    messages.push({
+      role: message.role,
+      content: message.content
+    });
+  }
+
+  return messages;
+};
+
 export const requestBookRecommendations = async (
   payload: RecommendBooksRequestBody
 ): Promise<BookRecommendationResult> => {
@@ -399,4 +526,15 @@ export const requestBookNotesSummary = async (
   });
 
   return parseSummary(content);
+};
+
+export const requestBookChatReply = async (
+  payload: ChatBooksRequestBody
+): Promise<string> => {
+  const content = await requestOpenRouterTextCompletion({
+    messages: buildBookChatMessages(payload),
+    temperature: 0.5
+  });
+
+  return content;
 };

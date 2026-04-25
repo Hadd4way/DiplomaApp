@@ -3,6 +3,8 @@ import { AlertCircle, ArrowRight, BookOpenText, BookmarkPlus, LoaderCircle, Spar
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BookAdvisorChat } from '@/components/BookAdvisorChat';
 import { ScreenEmptyState, ScreenErrorState, ScreenLoadingState } from '@/components/ScreenState';
 import { SkeletonGrid } from '@/components/Skeletons';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -111,7 +113,9 @@ const screenCopy = {
     warningTitle: 'Внимание',
     recommendationCount: 'рекомендаций',
     helperLine: 'Запросы отправляются только в локальный backend.',
-    showMore: 'Показать ещё'
+    showMore: 'Показать ещё',
+    recommendationsTab: 'Рекомендации',
+    chatTab: 'Чат'
   },
   en: {
     title: 'Recommendations',
@@ -163,7 +167,9 @@ const screenCopy = {
     warningTitle: 'Notice',
     recommendationCount: 'recommendations',
     helperLine: 'Requests are sent only to the local backend.',
-    showMore: 'Show more'
+    showMore: 'Show more',
+    recommendationsTab: 'Recommendations',
+    chatTab: 'Chat'
   }
 } as const;
 
@@ -564,215 +570,228 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
         </CardContent>
       </Card>
 
-      <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
-        <div className="min-h-0 overflow-y-auto pb-2">
-          <Card className="border-white/60 bg-card/95">
-            <CardContent className="space-y-6 p-6">
-              <div className="space-y-1">
-                <h2 className="text-xl font-semibold tracking-tight">{copy.formTitle}</h2>
-                <p className="text-sm text-muted-foreground">{copy.formDescription}</p>
-              </div>
+      <Tabs defaultValue="recommendations" className="flex min-h-0 flex-1 flex-col">
+        <TabsList className="w-fit">
+          <TabsTrigger value="recommendations">{copy.recommendationsTab}</TabsTrigger>
+          <TabsTrigger value="chat">{copy.chatTab}</TabsTrigger>
+        </TabsList>
 
-              <form className="space-y-6" onSubmit={handleSubmit}>
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.genres}</h3>
-                  <ChipGroup options={genreOptions} selected={genres} language={language} onToggle={(value) => toggleSelection(value, setGenres)} />
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.moods}</h3>
-                  <ChipGroup options={moodOptions} selected={moods} language={language} onToggle={(value) => toggleSelection(value, setMoods)} />
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.length}</h3>
-                  <SegmentedControl
-                    value={length}
-                    onChange={setLength}
-                    options={[
-                      { value: 'short', label: copy.short },
-                      { value: 'medium', label: copy.medium },
-                      { value: 'long', label: copy.long }
-                    ]}
-                  />
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.type}</h3>
-                  <SegmentedControl
-                    value={typePreference}
-                    onChange={setTypePreference}
-                    options={[
-                      { value: 'fiction', label: copy.fiction },
-                      { value: 'non-fiction', label: copy.nonFiction },
-                      { value: 'any', label: copy.any }
-                    ]}
-                  />
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.era}</h3>
-                  <SegmentedControl
-                    value={eraPreference}
-                    onChange={setEraPreference}
-                    options={[
-                      { value: 'classic', label: copy.classic },
-                      { value: 'modern', label: copy.modern },
-                      { value: 'any', label: copy.any }
-                    ]}
-                  />
-                </section>
-
-                <section className="space-y-3">
-                  <h3 className="text-sm font-semibold">{copy.preferredLanguage}</h3>
-                  <SegmentedControl
-                    value={languagePreference}
-                    onChange={setLanguagePreference}
-                    options={[
-                      { value: 'ru', label: copy.russian },
-                      { value: 'en', label: copy.english },
-                      { value: 'any', label: copy.any }
-                    ]}
-                  />
-                </section>
-
-                <section className="space-y-3">
-                  <label className="text-sm font-semibold" htmlFor="recommendations-free-text">
-                    {copy.freeTextLabel}
-                  </label>
-                  <textarea
-                    id="recommendations-free-text"
-                    value={freeText}
-                    onChange={(event) => setFreeText(event.target.value)}
-                    placeholder={copy.freeTextPlaceholder}
-                    className="min-h-36 w-full rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                </section>
-
-                <section className="space-y-2 rounded-[1.4rem] border border-dashed border-border bg-muted/25 p-4">
-                  <label className="flex items-start gap-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={useLibraryContext}
-                      onChange={(event) => setUseLibraryContext(event.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border border-input"
-                    />
-                    <span className="space-y-1">
-                      <span className="block font-medium text-foreground">{copy.libraryContext}</span>
-                      <span className="block text-muted-foreground">{copy.libraryContextHint}</span>
-                    </span>
-                  </label>
-                  {showPersonalizedNote ? <p className="text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
-                </section>
-
-                <Button type="submit" disabled={loading} size="lg" className="w-full">
-                  {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {loading ? copy.loading : copy.submit}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="min-h-0 overflow-y-auto pb-2">
-          <div className="space-y-6">
-            {error ? <ScreenErrorState title={copy.errorTitle} description={error} onRetry={retrySubmit} /> : null}
-
-            {warning ? (
-              <Alert>
-                <AlertTitle>{copy.warningTitle}</AlertTitle>
-                <AlertDescription>{warning}</AlertDescription>
-              </Alert>
-            ) : null}
-
-            {!hasRequested ? (
-              <ScreenEmptyState
-                title={copy.emptyTitle}
-                description={copy.emptyDescription}
-                icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />}
-              />
-            ) : loading ? (
-              <div className="space-y-4">
-                <ScreenLoadingState label={copy.loading} />
-                <SkeletonGrid count={4} />
-              </div>
-            ) : visibleRecommendations.length === 0 ? (
-              <ScreenEmptyState title={copy.noRecommendations} description={copy.noRecommendationsDescription} icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />} />
-            ) : (
-              <>
-                {recommendationSummary ? (
-                  <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)]">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white/90 text-amber-700 shadow-[var(--shadow-sm)]">
-                          <Sparkles className="h-5 w-5" />
-                        </div>
-                        <div className="space-y-2">
-                          <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
-                            {copy.summaryBadge}
-                          </span>
-                          <div className="space-y-1">
-                            <h3 className="text-lg font-semibold tracking-tight text-foreground">{copy.summaryTitle}</h3>
-                            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{recommendationSummary}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : null}
-
-                <Card className="border-white/60 bg-card/90">
-                  <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="text-xl font-semibold tracking-tight">{copy.recommendationsTitle}</h2>
-                      <p className="text-sm text-muted-foreground">{copy.recommendationsDescription}</p>
-                      {showPersonalizedNote ? <p className="mt-2 text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
-                        {visibleRecommendations.length} {copy.recommendationCount}
-                      </span>
-                      <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
-                        {sourceLabel}
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
-                  {visibleRecommendationItems.map((recommendation) => {
-                    const recommendationKey = getRecommendationKey(recommendation);
-                    const isSaved = wishlistKeySet.has(recommendationKey);
-                    const isSaving = savingKeySet.has(recommendationKey);
-
-                    return (
-                      <li key={recommendationKey}>
-                        <RecommendationCard
-                          recommendation={recommendation}
-                          copy={copy}
-                          sourceLabel={sourceLabel}
-                          isSaved={isSaved}
-                          isSaving={isSaving}
-                          onSave={handleSaveRecommendation}
-                          onFindInDiscover={(query) => onFindInDiscover({ query })}
-                          onDismiss={(key) => setDismissedKeys((current) => [...current, key])}
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-                {hasMore ? (
-                  <div className="flex justify-center pt-2">
-                    <Button type="button" variant="outline" onClick={showMore}>
-                      {copy.showMore}
-                    </Button>
+        <TabsContent value="recommendations" className="mt-6 min-h-0 flex-1">
+          <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+            <div className="min-h-0 overflow-y-auto pb-2">
+              <Card className="border-white/60 bg-card/95">
+                <CardContent className="space-y-6 p-6">
+                  <div className="space-y-1">
+                    <h2 className="text-xl font-semibold tracking-tight">{copy.formTitle}</h2>
+                    <p className="text-sm text-muted-foreground">{copy.formDescription}</p>
                   </div>
+
+                  <form className="space-y-6" onSubmit={handleSubmit}>
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.genres}</h3>
+                      <ChipGroup options={genreOptions} selected={genres} language={language} onToggle={(value) => toggleSelection(value, setGenres)} />
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.moods}</h3>
+                      <ChipGroup options={moodOptions} selected={moods} language={language} onToggle={(value) => toggleSelection(value, setMoods)} />
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.length}</h3>
+                      <SegmentedControl
+                        value={length}
+                        onChange={setLength}
+                        options={[
+                          { value: 'short', label: copy.short },
+                          { value: 'medium', label: copy.medium },
+                          { value: 'long', label: copy.long }
+                        ]}
+                      />
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.type}</h3>
+                      <SegmentedControl
+                        value={typePreference}
+                        onChange={setTypePreference}
+                        options={[
+                          { value: 'fiction', label: copy.fiction },
+                          { value: 'non-fiction', label: copy.nonFiction },
+                          { value: 'any', label: copy.any }
+                        ]}
+                      />
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.era}</h3>
+                      <SegmentedControl
+                        value={eraPreference}
+                        onChange={setEraPreference}
+                        options={[
+                          { value: 'classic', label: copy.classic },
+                          { value: 'modern', label: copy.modern },
+                          { value: 'any', label: copy.any }
+                        ]}
+                      />
+                    </section>
+
+                    <section className="space-y-3">
+                      <h3 className="text-sm font-semibold">{copy.preferredLanguage}</h3>
+                      <SegmentedControl
+                        value={languagePreference}
+                        onChange={setLanguagePreference}
+                        options={[
+                          { value: 'ru', label: copy.russian },
+                          { value: 'en', label: copy.english },
+                          { value: 'any', label: copy.any }
+                        ]}
+                      />
+                    </section>
+
+                    <section className="space-y-3">
+                      <label className="text-sm font-semibold" htmlFor="recommendations-free-text">
+                        {copy.freeTextLabel}
+                      </label>
+                      <textarea
+                        id="recommendations-free-text"
+                        value={freeText}
+                        onChange={(event) => setFreeText(event.target.value)}
+                        placeholder={copy.freeTextPlaceholder}
+                        className="min-h-36 w-full rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </section>
+
+                    <section className="space-y-2 rounded-[1.4rem] border border-dashed border-border bg-muted/25 p-4">
+                      <label className="flex items-start gap-3 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={useLibraryContext}
+                          onChange={(event) => setUseLibraryContext(event.target.checked)}
+                          className="mt-0.5 h-4 w-4 rounded border border-input"
+                        />
+                        <span className="space-y-1">
+                          <span className="block font-medium text-foreground">{copy.libraryContext}</span>
+                          <span className="block text-muted-foreground">{copy.libraryContextHint}</span>
+                        </span>
+                      </label>
+                      {showPersonalizedNote ? <p className="text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
+                    </section>
+
+                    <Button type="submit" disabled={loading} size="lg" className="w-full">
+                      {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {loading ? copy.loading : copy.submit}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto pb-2">
+              <div className="space-y-6">
+                {error ? <ScreenErrorState title={copy.errorTitle} description={error} onRetry={retrySubmit} /> : null}
+
+                {warning ? (
+                  <Alert>
+                    <AlertTitle>{copy.warningTitle}</AlertTitle>
+                    <AlertDescription>{warning}</AlertDescription>
+                  </Alert>
                 ) : null}
-              </>
-            )}
+
+                {!hasRequested ? (
+                  <ScreenEmptyState
+                    title={copy.emptyTitle}
+                    description={copy.emptyDescription}
+                    icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />}
+                  />
+                ) : loading ? (
+                  <div className="space-y-4">
+                    <ScreenLoadingState label={copy.loading} />
+                    <SkeletonGrid count={4} />
+                  </div>
+                ) : visibleRecommendations.length === 0 ? (
+                  <ScreenEmptyState title={copy.noRecommendations} description={copy.noRecommendationsDescription} icon={<BookOpenText className="h-6 w-6 text-muted-foreground" />} />
+                ) : (
+                  <>
+                    {recommendationSummary ? (
+                      <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)]">
+                        <CardContent className="p-6">
+                          <div className="flex items-start gap-4">
+                            <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white/90 text-amber-700 shadow-[var(--shadow-sm)]">
+                              <Sparkles className="h-5 w-5" />
+                            </div>
+                            <div className="space-y-2">
+                              <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-800">
+                                {copy.summaryBadge}
+                              </span>
+                              <div className="space-y-1">
+                                <h3 className="text-lg font-semibold tracking-tight text-foreground">{copy.summaryTitle}</h3>
+                                <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{recommendationSummary}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+
+                    <Card className="border-white/60 bg-card/90">
+                      <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h2 className="text-xl font-semibold tracking-tight">{copy.recommendationsTitle}</h2>
+                          <p className="text-sm text-muted-foreground">{copy.recommendationsDescription}</p>
+                          {showPersonalizedNote ? <p className="mt-2 text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
+                            {visibleRecommendations.length} {copy.recommendationCount}
+                          </span>
+                          <span className="rounded-full border border-border bg-background/80 px-3 py-1.5 font-medium text-muted-foreground">
+                            {sourceLabel}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <ul className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+                      {visibleRecommendationItems.map((recommendation) => {
+                        const recommendationKey = getRecommendationKey(recommendation);
+                        const isSaved = wishlistKeySet.has(recommendationKey);
+                        const isSaving = savingKeySet.has(recommendationKey);
+
+                        return (
+                          <li key={recommendationKey}>
+                            <RecommendationCard
+                              recommendation={recommendation}
+                              copy={copy}
+                              sourceLabel={sourceLabel}
+                              isSaved={isSaved}
+                              isSaving={isSaving}
+                              onSave={handleSaveRecommendation}
+                              onFindInDiscover={(query) => onFindInDiscover({ query })}
+                              onDismiss={(key) => setDismissedKeys((current) => [...current, key])}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {hasMore ? (
+                      <div className="flex justify-center pt-2">
+                        <Button type="button" variant="outline" onClick={showMore}>
+                          {copy.showMore}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+
+        <TabsContent value="chat" className="mt-6 min-h-0 flex-1">
+          <BookAdvisorChat libraryContext={useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
