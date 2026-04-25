@@ -97,7 +97,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
       const result = await chatBooks({
         messages: nextMessages,
         language,
-        libraryContext: libraryContext?.books.length ? libraryContext : undefined
+        libraryContext: libraryContext?.books.length ? libraryContext.books : undefined
       });
 
       setMessages((current) => [
@@ -108,8 +108,8 @@ export function BookAdvisorChat({ libraryContext }: Props) {
         }
       ]);
       setLastSource(result.source ?? null);
-    } catch {
-      setError(localizedCopy.errorDescription);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : localizedCopy.errorDescription);
     } finally {
       setLoading(false);
       window.setTimeout(() => textareaRef.current?.focus(), 0);

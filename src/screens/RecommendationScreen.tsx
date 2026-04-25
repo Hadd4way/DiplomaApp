@@ -570,14 +570,14 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="recommendations" className="flex min-h-0 flex-1 flex-col">
+      <Tabs defaultValue="recommendations" className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <TabsList className="w-fit">
           <TabsTrigger value="recommendations">{copy.recommendationsTab}</TabsTrigger>
           <TabsTrigger value="chat">{copy.chatTab}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="recommendations" className="mt-6 min-h-0 flex-1">
-          <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
+        <TabsContent value="recommendations" className="mt-6 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
+          <div className="grid min-h-0 flex-1 gap-6 overflow-hidden xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
             <div className="min-h-0 overflow-y-auto pb-2">
               <Card className="border-white/60 bg-card/95">
                 <CardContent className="space-y-6 p-6">
@@ -788,7 +788,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
           </div>
         </TabsContent>
 
-        <TabsContent value="chat" className="mt-6 min-h-0 flex-1">
+        <TabsContent value="chat" className="mt-6 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
           <BookAdvisorChat libraryContext={useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined} />
         </TabsContent>
       </Tabs>

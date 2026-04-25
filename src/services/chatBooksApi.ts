@@ -1,5 +1,5 @@
 import { REQUEST_TIMEOUT_MS } from '@/lib/constants';
-import { AI_BACKEND_URL, type RecommendationLibraryContext } from '@/services/recommendationApi';
+import { AI_BACKEND_URL, type RecommendationLibraryBook, type RecommendationLibraryContext } from '@/services/recommendationApi';
 
 export type ChatMessage = {
   role: 'user' | 'assistant';
@@ -9,7 +9,7 @@ export type ChatMessage = {
 export type ChatRequest = {
   messages: ChatMessage[];
   language: 'ru' | 'en';
-  libraryContext?: RecommendationLibraryContext;
+  libraryContext?: RecommendationLibraryBook[] | RecommendationLibraryContext;
 };
 
 export type ChatResponse = {
@@ -37,7 +37,11 @@ export async function chatBooks(payload: ChatRequest): Promise<ChatResponse> {
     const data = (await response.json().catch(() => null)) as ChatApiResponse;
 
     if (!response.ok) {
-      throw new Error((data && 'error' in data && data.error) || `Request failed with status ${response.status}`);
+      throw new Error(
+        (data && 'error' in data && data.error) ||
+        (data && 'ok' in data && data.ok === true && typeof data.reply === 'string' ? data.reply : null) ||
+        `Request failed with status ${response.status}`
+      );
     }
 
     if (
