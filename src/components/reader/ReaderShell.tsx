@@ -47,27 +47,27 @@ function ReaderShellComponent({
       style={getReaderThemeStyles(settings)}
     >
       <header
-        className="shrink-0 border-b backdrop-blur"
+        className="shrink-0 border-b backdrop-blur-xl"
         style={{
           backgroundColor: palette.chromeBg,
           borderColor: palette.chromeBorder,
           color: palette.chromeText
         }}
       >
-        <div className="flex min-h-14 items-center gap-3 px-3 py-2">
-          <div className="flex shrink-0 items-center gap-2">{headerLeft}</div>
+        <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
+          <div className="flex shrink-0 items-center gap-2.5">{headerLeft}</div>
           <div className="min-w-0 flex-1 px-1">
-            <p className="truncate text-sm font-semibold">{title}</p>
+            <p className="truncate text-sm font-semibold tracking-tight">{title}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">{headerRight}</div>
+          <div className="flex shrink-0 items-center gap-2.5">{headerRight}</div>
         </div>
-        {headerStatus ? <div className="px-4 pb-2">{headerStatus}</div> : null}
+        {headerStatus ? <div className="px-4 pb-3">{headerStatus}</div> : null}
       </header>
 
       <main className={cn('flex w-full flex-1 min-h-0 min-w-0', mainClassName)}>
         {leftPanel ? (
           <aside
-            className={cn('h-full shrink-0 border-r', leftPanelWidthClassName)}
+            className={cn('h-full shrink-0 border-r backdrop-blur-xl', leftPanelWidthClassName)}
             style={{
               backgroundColor: palette.panelBg,
               borderColor: palette.chromeBorder,
@@ -86,7 +86,7 @@ function ReaderShellComponent({
 
       {footer ? (
         <footer
-          className="shrink-0 border-t px-3 py-2"
+          className="shrink-0 border-t px-4 py-3 backdrop-blur-xl"
           style={{
             backgroundColor: palette.chromeBg,
             borderColor: palette.chromeBorder,

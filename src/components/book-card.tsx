@@ -127,7 +127,7 @@ function BookCardComponent({
   return (
     <Card
       className={cn(
-        'h-full overflow-hidden border-white/40 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg',
+        'surface-hover h-full overflow-hidden border-white/40 bg-card/95',
         isContinueCard ? 'ring-1 ring-primary/10' : ''
       )}
     >
@@ -135,8 +135,8 @@ function BookCardComponent({
         className={cn(
           'relative flex items-center justify-center overflow-hidden',
           isContinueCard
-            ? 'h-52 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.18),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
-            : 'h-44 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
+            ? 'h-60 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.16),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
+            : 'h-56 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.12),transparent_55%),linear-gradient(180deg,hsl(var(--muted))_0%,transparent_100%)]'
         )}
       >
         <DropdownMenu>
@@ -145,7 +145,7 @@ function BookCardComponent({
               type="button"
               variant="outline"
               size="sm"
-              className="absolute right-2 top-2 z-10 h-8 w-8 p-0"
+              className="absolute right-3 top-3 z-10 h-9 w-9 p-0"
               disabled={loading}
               onClick={(event) => event.stopPropagation()}
               title={t.bookCard.bookActions}
@@ -184,8 +184,8 @@ function BookCardComponent({
           disabled={loading}
           aria-label={`${t.bookCard.openBook} ${book.title}`}
         >
-          <div className="flex h-full w-full items-center justify-center px-6">
-            <div className="h-36 w-28 overflow-hidden rounded-2xl border border-white/50 bg-background/85 shadow-lg shadow-black/5 backdrop-blur">
+          <div className="flex h-full w-full items-center justify-center px-6 py-6">
+            <div className="h-44 w-[7.4rem] overflow-hidden rounded-[1.45rem] border border-white/50 bg-background/85 shadow-xl shadow-black/10 backdrop-blur">
               {book.coverUrl ? (
                 <img
                   src={book.coverUrl}
@@ -220,12 +220,12 @@ function BookCardComponent({
         }}
         aria-label={`${t.bookCard.openBook} ${book.title}`}
       >
-        <CardContent className={cn('space-y-3 p-4', isContinueCard ? 'pb-5' : '')}>
+        <CardContent className={cn('space-y-4 p-5', isContinueCard ? 'pb-6' : '')}>
           <div className="flex min-h-[128px] flex-col">
             <p
               className={cn(
                 'line-clamp-2 font-medium leading-5',
-                isContinueCard ? 'min-h-12 text-base' : 'min-h-10 text-sm'
+                isContinueCard ? 'min-h-12 text-base' : 'min-h-12 text-[15px]'
               )}
             >
               {book.title}
@@ -235,14 +235,14 @@ function BookCardComponent({
               <MetaLine>{authorLine}</MetaLine>
             </div>
             <div className="mt-auto flex items-center justify-between gap-2 pt-2">
-              <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="rounded-full border border-border/70 bg-background/75 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 {FORMAT_BADGE_LABELS[book.format]}
               </span>
               <span className="truncate text-[11px] text-muted-foreground">{metadataLabel}</span>
             </div>
           </div>
 
-          <div className="flex min-h-[78px] flex-col justify-between space-y-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-3">
+          <div className="flex min-h-[82px] flex-col justify-between space-y-2 rounded-2xl border border-border/60 bg-muted/35 px-3.5 py-3.5">
             <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
               <span>{metric?.currentLocationLabel ?? (book.format === 'pdf' ? t.bookCard.positionUnavailable : t.bookCard.continueReading)}</span>
               <span>{metric?.pageCountLabel ?? t.bookCard.loadingProgress}</span>
@@ -262,7 +262,7 @@ function BookCardComponent({
             )}
           </div>
 
-          <div className="flex min-h-8 items-center justify-between gap-2">
+          <div className="flex min-h-9 items-center justify-between gap-2">
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Highlighter className="h-3.5 w-3.5" />
@@ -276,7 +276,7 @@ function BookCardComponent({
             <Button
               type="button"
               size="sm"
-              className="h-8 px-3"
+              className="h-9 px-3.5"
               onClick={(event) => {
                 event.stopPropagation();
                 onOpen(book);

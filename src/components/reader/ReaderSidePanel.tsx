@@ -35,14 +35,11 @@ function ReaderSidePanelComponent({
   const { t } = useLanguage();
   const palette = React.useMemo(() => getReaderThemePalette(settings), [settings]);
 
-  if (!open) {
-    return null;
-  }
-
   return (
     <aside
       className={cn(
-        'absolute top-3 bottom-3 z-40 flex flex-col rounded-lg border shadow-xl pointer-events-auto',
+        'absolute bottom-3 top-3 z-40 flex flex-col rounded-[1.35rem] border shadow-xl transition-all duration-200 pointer-events-auto',
+        open ? 'translate-x-0 opacity-100' : 'pointer-events-none translate-x-4 opacity-0',
         widthClassName,
         className
       )}
@@ -51,10 +48,12 @@ function ReaderSidePanelComponent({
         backgroundColor: palette.panelBg,
         borderColor: palette.chromeBorder,
         color: palette.chromeText,
-        boxShadow: palette.shadow
+        boxShadow: palette.shadow,
+        visibility: open ? 'visible' : 'hidden'
       }}
+      aria-hidden={!open}
     >
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2" style={{ borderColor: palette.chromeBorder }}>
+      <div className="flex items-center justify-between gap-2 border-b px-4 py-3" style={{ borderColor: palette.chromeBorder }}>
         <div className="flex min-w-0 items-center gap-2">
           {icon}
           <p className="truncate text-sm font-semibold">{title}</p>
@@ -67,7 +66,7 @@ function ReaderSidePanelComponent({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
     </aside>
   );
 }

@@ -10,25 +10,29 @@
   }
 
   :root {
-    --background: 210 40% 98%;
+    --background: 210 33% 98%;
     --foreground: 222.2 47.4% 11.2%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 47.4% 11.2%;
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 218 78% 52%;
     --primary-foreground: 210 40% 98%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
+    --muted: 210 30% 95%;
+    --muted-foreground: 215 15% 43%;
+    --accent: 210 28% 95%;
     --accent-foreground: 222.2 47.4% 11.2%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.6rem;
+    --border: 214 24% 89%;
+    --input: 214 24% 89%;
+    --ring: 218 78% 52%;
+    --radius: 1rem;
     --reader-ui-scale: 1;
     --reader-ui-font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     --reader-focus-ring: #2563eb;
+    --shadow-sm: 0 10px 30px -18px rgba(15, 23, 42, 0.2);
+    --shadow-md: 0 18px 40px -20px rgba(15, 23, 42, 0.22);
+    --shadow-lg: 0 26px 60px -28px rgba(15, 23, 42, 0.28);
+    --surface-glass: linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.78) 100%);
   }
 
   * {
@@ -37,6 +41,10 @@
 
   body {
     @apply m-0 overflow-hidden bg-background font-sans text-foreground antialiased;
+    background-image:
+      radial-gradient(circle at top left, rgba(59, 130, 246, 0.08), transparent 28%),
+      radial-gradient(circle at top right, rgba(148, 163, 184, 0.1), transparent 24%),
+      linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0));
   }
 
   body,
@@ -58,6 +66,36 @@
   color: hsl(var(--foreground));
 }
 
+::selection {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+@layer utilities {
+  .premium-card {
+    background: var(--surface-glass);
+    backdrop-filter: blur(18px);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .premium-border {
+    border-color: hsl(var(--border) / 0.8);
+  }
+
+  .surface-hover {
+    transition:
+      transform 180ms ease,
+      box-shadow 180ms ease,
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease;
+  }
+
+  .surface-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
 .reader-range {
   accent-color: #3b82f6;
 }
@@ -67,7 +105,8 @@
     background-color 180ms ease,
     border-color 180ms ease,
     color 180ms ease,
-    box-shadow 180ms ease;
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
 .pdf-text-layer {

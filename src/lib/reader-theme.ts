@@ -288,7 +288,8 @@ export function getAppThemeCssVariables(input: ReaderTheme | ReaderSettings): Re
       '--ring': '56 100% 80%',
       '--reader-app-bg': palette.appBg,
       '--reader-app-foreground': palette.appForeground,
-      '--reader-focus-ring': palette.focusRing
+      '--reader-focus-ring': palette.focusRing,
+      '--surface-glass': 'linear-gradient(180deg, rgba(10,10,10,0.94) 0%, rgba(10,10,10,0.86) 100%)'
     };
   }
 
@@ -311,7 +312,8 @@ export function getAppThemeCssVariables(input: ReaderTheme | ReaderSettings): Re
       '--ring': '210 90% 62%',
       '--reader-app-bg': palette.appBg,
       '--reader-app-foreground': palette.appForeground,
-      '--reader-focus-ring': palette.focusRing
+      '--reader-focus-ring': palette.focusRing,
+      '--surface-glass': 'linear-gradient(180deg, rgba(23,32,51,0.94) 0%, rgba(23,32,51,0.84) 100%)'
     };
   }
 
@@ -334,7 +336,8 @@ export function getAppThemeCssVariables(input: ReaderTheme | ReaderSettings): Re
       '--ring': '28 45% 40%',
       '--reader-app-bg': palette.appBg,
       '--reader-app-foreground': palette.appForeground,
-      '--reader-focus-ring': palette.focusRing
+      '--reader-focus-ring': palette.focusRing,
+      '--surface-glass': 'linear-gradient(180deg, rgba(251,244,232,0.94) 0%, rgba(245,234,216,0.88) 100%)'
     };
   }
 
@@ -356,6 +359,7 @@ export function getAppThemeCssVariables(input: ReaderTheme | ReaderSettings): Re
     '--ring': '221.2 83.2% 53.3%',
     '--reader-app-bg': palette.appBg,
     '--reader-app-foreground': palette.appForeground,
-    '--reader-focus-ring': palette.focusRing
+    '--reader-focus-ring': palette.focusRing,
+    '--surface-glass': 'linear-gradient(180deg, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.78) 100%)'
   };
 }

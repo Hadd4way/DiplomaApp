@@ -4,6 +4,8 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useReaderSettings } from '@/contexts/ReaderSettingsContext';
+import { getReaderButtonStyles, getReaderThemePalette } from '@/lib/reader-theme';
 import type { AiSummaryResult } from '@/services/summaryApi';
 
 type Props = {
@@ -53,15 +55,37 @@ function getCopy(language: 'ru' | 'en') {
       };
 }
 
-function StringList({ items, empty }: { items: string[]; empty: string }) {
+function StringList({
+  items,
+  empty,
+  panelBg,
+  borderColor,
+  textColor,
+  mutedText
+}: {
+  items: string[];
+  empty: string;
+  panelBg: string;
+  borderColor: string;
+  textColor: string;
+  mutedText: string;
+}) {
   if (items.length === 0) {
-    return <p className="text-sm text-slate-500">{empty}</p>;
+    return <p className="text-sm" style={{ color: mutedText }}>{empty}</p>;
   }
 
   return (
     <ul className="space-y-2">
       {items.map((item, index) => (
-        <li key={`${index}:${item}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        <li
+          key={`${index}:${item}`}
+          className="rounded-xl border px-3 py-2 text-sm"
+          style={{
+            borderColor,
+            backgroundColor: panelBg,
+            color: textColor
+          }}
+        >
           {item}
         </li>
       ))}
@@ -86,15 +110,25 @@ export function AiSummaryDialog({
   onRegenerate
 }: Props) {
   const copy = getCopy(language);
+  const { settings } = useReaderSettings();
+  const palette = getReaderThemePalette(settings);
 
   return (
     <AlertDialog open={open} onOpenChange={(nextOpen) => (nextOpen ? undefined : onClose())}>
-      <AlertDialogContent className="max-w-4xl">
+      <AlertDialogContent
+        className="max-w-4xl"
+        style={{
+          background: `linear-gradient(180deg, ${palette.chromeBg} 0%, ${palette.panelBg} 100%)`,
+          borderColor: palette.chromeBorder,
+          color: palette.chromeText
+        }}
+      >
         <button
           type="button"
           onClick={onClose}
           aria-label={copy.close}
-          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+          style={getReaderButtonStyles(settings)}
         >
           <X className="h-4 w-4" />
         </button>
@@ -108,7 +142,14 @@ export function AiSummaryDialog({
         </AlertDialogHeader>
 
         {loading ? (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600">
+          <div
+            className="rounded-2xl border px-4 py-10 text-center text-sm"
+            style={{
+              borderColor: palette.chromeBorder,
+              backgroundColor: palette.panelHoverBg,
+              color: palette.mutedText
+            }}
+          >
             {copy.loading}
           </div>
         ) : null}
@@ -117,46 +158,87 @@ export function AiSummaryDialog({
 
         {!loading && result ? (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: palette.mutedText }}>
+              <span
+                className="rounded-full border px-3 py-1"
+                style={{
+                  borderColor: palette.chromeBorder,
+                  backgroundColor: palette.panelHoverBg,
+                  color: palette.mutedText
+                }}
+              >
                 {source === 'fallback' ? copy.sourceFallback : copy.sourceAi}
               </span>
             </div>
 
             <Tabs defaultValue="summary" className="w-full">
-              <TabsList className="grid h-auto w-full grid-cols-2 gap-1 bg-slate-100 p-1">
-                <TabsTrigger value="summary">{copy.summary}</TabsTrigger>
-                <TabsTrigger value="ideas">{copy.keyIdeas}</TabsTrigger>
+              <TabsList
+                className="grid h-auto w-full grid-cols-2 gap-1 p-1"
+                style={{
+                  backgroundColor: palette.panelHoverBg,
+                  color: palette.mutedText
+                }}
+              >
+                <TabsTrigger
+                  value="summary"
+                  style={{ color: palette.chromeText }}
+                  className="data-[state=active]:shadow-none"
+                >
+                  {copy.summary}
+                </TabsTrigger>
+                <TabsTrigger
+                  value="ideas"
+                  style={{ color: palette.chromeText }}
+                  className="data-[state=active]:shadow-none"
+                >
+                  {copy.keyIdeas}
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="summary">
-                <Card className="border-slate-200">
+                <Card
+                  className="border"
+                  style={{
+                    borderColor: palette.chromeBorder,
+                    backgroundColor: palette.panelBg,
+                    color: palette.chromeText
+                  }}
+                >
                   <CardContent className="p-4">
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{result.summary || copy.empty}</p>
+                    <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: result.summary ? palette.chromeText : palette.mutedText }}>
+                      {result.summary || copy.empty}
+                    </p>
                   </CardContent>
                 </Card>
               </TabsContent>
 
               <TabsContent value="ideas">
-                <StringList items={result.keyIdeas} empty={copy.empty} />
+                <StringList
+                  items={result.keyIdeas}
+                  empty={copy.empty}
+                  panelBg={palette.panelHoverBg}
+                  borderColor={palette.chromeBorder}
+                  textColor={palette.chromeText}
+                  mutedText={palette.mutedText}
+                />
               </TabsContent>
             </Tabs>
 
             {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
-            {actionMessage ? <p className="text-sm text-emerald-700">{actionMessage}</p> : null}
+            {actionMessage ? <p className="text-sm" style={{ color: palette.accentText }}>{actionMessage}</p> : null}
           </div>
         ) : null}
 
         <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onCopy} disabled={loading || !result}>
+          <Button type="button" variant="outline" onClick={onCopy} disabled={loading || !result} style={getReaderButtonStyles(settings)}>
             <Copy className="mr-2 h-4 w-4" />
             {copy.copy}
           </Button>
-          <Button type="button" variant="outline" onClick={onSaveToHub} disabled={loading || !result || savingToHub}>
+          <Button type="button" variant="outline" onClick={onSaveToHub} disabled={loading || !result || savingToHub} style={getReaderButtonStyles(settings)}>
             <Save className="mr-2 h-4 w-4" />
             {copy.saveToHub}
           </Button>
-          <Button type="button" onClick={onRegenerate} disabled={loading}>
+          <Button type="button" onClick={onRegenerate} disabled={loading} style={getReaderButtonStyles(settings, true)}>
             <RefreshCcw className="mr-2 h-4 w-4" />
             {copy.regenerate}
           </Button>

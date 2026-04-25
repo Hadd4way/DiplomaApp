@@ -31,17 +31,17 @@ export function ScreenEmptyState({
   icon = <Inbox className="h-6 w-6 text-muted-foreground" />
 }: EmptyStateProps) {
   return (
-    <Card className="border-dashed bg-card/80">
-      <CardContent className="flex min-h-64 flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
+    <Card className="border-dashed bg-card/88">
+      <CardContent className="flex min-h-72 flex-col items-center justify-center gap-5 p-10 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-[1.35rem] border border-border/70 bg-background/95 shadow-[var(--shadow-sm)]">
           {icon}
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-          <p className="max-w-md text-sm text-muted-foreground">{description}</p>
+          <h2 className="text-[1.35rem] font-semibold tracking-tight">{title}</h2>
+          <p className="max-w-lg text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
         {actionLabel && onAction ? (
-          <Button type="button" variant="outline" onClick={onAction}>
+          <Button type="button" variant="outline" size="lg" onClick={onAction}>
             {actionLabel}
           </Button>
         ) : null}
@@ -52,9 +52,11 @@ export function ScreenEmptyState({
 
 export function ScreenLoadingState({ label }: LoadingStateProps) {
   return (
-    <Card className="border-dashed bg-card/80">
-      <CardContent className="flex min-h-64 flex-col items-center justify-center gap-3 p-8 text-center">
-        <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
+    <Card className="border-dashed bg-card/88">
+      <CardContent className="flex min-h-72 flex-col items-center justify-center gap-4 p-10 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] border border-border/70 bg-background/95 shadow-[var(--shadow-sm)]">
+          <LoaderCircle className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
         <p className="text-sm text-muted-foreground">{label}</p>
       </CardContent>
     </Card>

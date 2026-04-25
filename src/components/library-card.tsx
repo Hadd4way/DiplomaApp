@@ -38,7 +38,12 @@ type FormatFilter = 'all' | 'pdf' | 'epub' | 'fb2' | 'txt';
 const controlButtonClassName = 'h-9 rounded-full px-4 text-xs font-semibold';
 
 function getFilterButtonClassName(active: boolean) {
-  return cn(controlButtonClassName, active ? 'border-primary/30 bg-primary/10 text-foreground' : 'text-muted-foreground');
+  return cn(
+    controlButtonClassName,
+    active
+      ? 'border-primary/25 bg-primary/10 text-foreground shadow-[0_10px_22px_-16px_hsl(var(--primary))]'
+      : 'bg-background/78 text-muted-foreground hover:text-foreground'
+  );
 }
 
 export function LibraryCard({
@@ -135,7 +140,7 @@ export function LibraryCard({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
-      <Card className="overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
+      <Card className="overflow-hidden" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
             <div className="space-y-2">
@@ -150,18 +155,18 @@ export function LibraryCard({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={onImport} disabled={loading}>
+            <Button type="button" size="lg" onClick={onImport} disabled={loading}>
               <Plus className="h-4 w-4" />
               {t.library.importBook}
             </Button>
-            <Button type="button" variant="outline" onClick={onDiscover} disabled={loading}>
+            <Button type="button" variant="outline" size="lg" onClick={onDiscover} disabled={loading}>
               <Compass className="h-4 w-4" />
               {t.library.discoverBooks}
             </Button>
-            <Button type="button" variant="outline" onClick={onAddSample} disabled={loading}>
+            <Button type="button" variant="outline" size="lg" onClick={onAddSample} disabled={loading}>
               {loading ? t.library.pleaseWait : t.library.addSampleBook}
             </Button>
-            <Button type="button" variant="outline" onClick={onReload} disabled={loading}>
+            <Button type="button" variant="outline" size="lg" onClick={onReload} disabled={loading}>
               {t.library.reload}
             </Button>
           </div>
@@ -191,7 +196,7 @@ export function LibraryCard({
             </div>
 
             {continueReadingBooks.length === 0 ? (
-              <Card className="border-dashed bg-card/80">
+              <Card className="border-dashed bg-card/82">
                 <CardContent className="flex min-h-36 flex-col items-center justify-center gap-2 p-6 text-center">
                   <p className="text-sm font-medium">{t.library.continueReadingEmptyTitle}</p>
                   <p className="text-sm text-muted-foreground">{t.library.continueReadingEmptyDescription}</p>
@@ -219,7 +224,7 @@ export function LibraryCard({
           </section>
 
           <section className="space-y-4">
-            <div className="flex flex-col gap-4 rounded-3xl border border-white/40 bg-card/95 p-5 shadow-sm">
+            <div className="premium-card flex flex-col gap-4 rounded-[1.7rem] border border-white/40 bg-card/95 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                   <h2 className="text-xl font-semibold tracking-tight">{t.library.browseTitle}</h2>
@@ -242,7 +247,7 @@ export function LibraryCard({
                     <ArrowUpDown className="h-3.5 w-3.5" />
                     {t.library.sortBy}
                   </span>
-                    <Button
+                  <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -251,7 +256,7 @@ export function LibraryCard({
                   >
                     {t.library.sortRecentOpened}
                   </Button>
-                    <Button
+                  <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -260,7 +265,7 @@ export function LibraryCard({
                   >
                     {t.library.sortRecentAdded}
                   </Button>
-                    <Button
+                  <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -269,7 +274,7 @@ export function LibraryCard({
                   >
                     {t.library.sortTitle}
                   </Button>
-                    <Button
+                  <Button
                     type="button"
                     variant="outline"
                     size="sm"
@@ -291,13 +296,13 @@ export function LibraryCard({
                   >
                     {t.library.filterAll}
                   </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={getFilterButtonClassName(formatFilter === 'pdf')}
-                      onClick={() => setFormatFilter('pdf')}
-                    >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={getFilterButtonClassName(formatFilter === 'pdf')}
+                    onClick={() => setFormatFilter('pdf')}
+                  >
                     {FORMAT_BADGE_LABELS.pdf}
                   </Button>
                   <Button
@@ -341,21 +346,21 @@ export function LibraryCard({
               <SkeletonGrid count={6} variant="library" />
             ) : (
               <>
-                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {visibleBooks.map((book) => (
-                  <li key={book.id} className="h-full">
-                    <BookCard
-                      book={book}
-                      onOpen={onOpen}
-                      onReveal={onReveal}
-                      onDelete={onDelete}
-                      loading={loading}
-                      metric={metrics[book.id]}
-                      activity={activity[book.id]}
-                      lastOpenedAt={lastOpenedAtByBookId.get(book.id) ?? null}
-                    />
-                  </li>
-                ))}
+                <ul className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  {visibleBooks.map((book) => (
+                    <li key={book.id} className="h-full">
+                      <BookCard
+                        book={book}
+                        onOpen={onOpen}
+                        onReveal={onReveal}
+                        onDelete={onDelete}
+                        loading={loading}
+                        metric={metrics[book.id]}
+                        activity={activity[book.id]}
+                        lastOpenedAt={lastOpenedAtByBookId.get(book.id) ?? null}
+                      />
+                    </li>
+                  ))}
                 </ul>
                 {hasMore ? (
                   <div className="flex justify-center pt-2">

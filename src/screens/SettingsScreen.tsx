@@ -24,14 +24,22 @@ type ToggleRowProps = {
 const SettingCard = React.memo(function SettingCard({
   title,
   description,
-  children
+  children,
+  palette
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
+  palette: ReturnType<typeof getReaderThemePalette>;
 }) {
   return (
-    <Card>
+    <Card
+      style={{
+        backgroundColor: palette.panelBg,
+        borderColor: palette.chromeBorder,
+        color: palette.chromeText
+      }}
+    >
       <CardHeader className="space-y-2">
         <CardTitle className="text-xl">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
@@ -42,18 +50,32 @@ const SettingCard = React.memo(function SettingCard({
 });
 
 const ToggleRow = React.memo(function ToggleRow({ title, description, checked, onChange }: ToggleRowProps) {
+  const { settings } = useReaderSettings();
+  const palette = getReaderThemePalette(settings);
+
   return (
-    <label className="flex items-start justify-between gap-4 rounded-lg border border-border bg-background/60 px-4 py-3">
+    <label
+      className="flex items-start justify-between gap-4 rounded-xl border px-4 py-3"
+      style={{
+        borderColor: palette.chromeBorder,
+        backgroundColor: palette.panelHoverBg
+      }}
+    >
       <div className="space-y-1">
         <p className="text-sm font-medium">{title}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
       <input
         type="checkbox"
-        className="mt-1 h-4 w-4 rounded border-input"
+        className="mt-1 h-4 w-4 rounded"
         checked={checked}
         aria-label={title}
         onChange={(event) => onChange(event.target.checked)}
+        style={{
+          accentColor: palette.focusRing,
+          backgroundColor: palette.inputBg,
+          borderColor: palette.buttonBorder
+        }}
       />
     </label>
   );
@@ -131,7 +153,7 @@ export function SettingsScreen() {
 
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="space-y-6">
-            <SettingCard title={t.settings.languageTitle} description={t.settings.languageDescription}>
+            <SettingCard title={t.settings.languageTitle} description={t.settings.languageDescription} palette={palette}>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant={language === 'ru' ? 'default' : 'outline'} onClick={() => setLanguage('ru')}>
                   {t.settings.languageRu}
@@ -142,7 +164,7 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title={t.settings.appearanceTitle} description={t.settings.appearanceDescription}>
+            <SettingCard title={t.settings.appearanceTitle} description={t.settings.appearanceDescription} palette={palette}>
               <div className="grid gap-3 md:grid-cols-3">
                 {THEME_OPTIONS.map((option) => {
                   const optionPalette = getReaderThemePalette(option.value);
@@ -154,9 +176,13 @@ export function SettingsScreen() {
                       type="button"
                       onClick={() => updateSettings({ theme: option.value })}
                       className={cn(
-                        'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        active ? 'border-primary bg-accent' : 'border-border bg-card hover:bg-accent/60'
+                        'rounded-xl border p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                       )}
+                      style={{
+                        borderColor: active ? palette.accentBorder : palette.chromeBorder,
+                        backgroundColor: active ? palette.accentBg : palette.panelHoverBg,
+                        color: active ? palette.accentText : palette.chromeText
+                      }}
                     >
                       <div className="mb-4 flex gap-2">
                         <span className="h-6 w-6 rounded-full border" style={{ backgroundColor: optionPalette.appBg, borderColor: optionPalette.chromeBorder }} />
@@ -190,7 +216,7 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title={t.settings.flowReadingTitle} description={t.settings.flowReadingDescription}>
+            <SettingCard title={t.settings.flowReadingTitle} description={t.settings.flowReadingDescription} palette={palette}>
               <div className="grid gap-5 lg:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium" htmlFor="epub-font-family">
@@ -198,9 +224,14 @@ export function SettingsScreen() {
                   </label>
                   <select
                     id="epub-font-family"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-10 w-full rounded-md border px-3 text-sm"
                     value={settings.epubFontFamily}
                     onChange={(event) => updateSettings({ epubFontFamily: event.target.value as EpubFontFamily })}
+                    style={{
+                      borderColor: palette.buttonBorder,
+                      backgroundColor: palette.inputBg,
+                      color: palette.inputText
+                    }}
                   >
                     {EPUB_FONT_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -216,9 +247,14 @@ export function SettingsScreen() {
                   </label>
                   <select
                     id="epub-margins"
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    className="h-10 w-full rounded-md border px-3 text-sm"
                     value={settings.epubMargins}
                     onChange={(event) => updateSettings({ epubMargins: event.target.value as EpubMarginSize })}
+                    style={{
+                      borderColor: palette.buttonBorder,
+                      backgroundColor: palette.inputBg,
+                      color: palette.inputText
+                    }}
                   >
                     {EPUB_MARGIN_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -272,16 +308,21 @@ export function SettingsScreen() {
           </div>
 
           <div className="space-y-6">
-            <SettingCard title={t.settings.pdfTitle} description={t.settings.pdfDescription}>
+            <SettingCard title={t.settings.pdfTitle} description={t.settings.pdfDescription} palette={palette}>
               <div className="space-y-2">
                 <label className="text-sm font-medium" htmlFor="pdf-background">
                   {t.settings.backgroundTheme}
                 </label>
                 <select
                   id="pdf-background"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-10 w-full rounded-md border px-3 text-sm"
                   value={settings.pdfBackground}
                   onChange={(event) => updateSettings({ pdfBackground: event.target.value as ReaderTheme })}
+                  style={{
+                    borderColor: palette.buttonBorder,
+                    backgroundColor: palette.inputBg,
+                    color: palette.inputText
+                  }}
                 >
                   {THEME_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -297,9 +338,14 @@ export function SettingsScreen() {
                 </label>
                 <select
                   id="pdf-zoom"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-10 w-full rounded-md border px-3 text-sm"
                   value={settings.pdfZoomPreset}
                   onChange={(event) => updateSettings({ pdfZoomPreset: event.target.value as PdfZoomPreset })}
+                  style={{
+                    borderColor: palette.buttonBorder,
+                    backgroundColor: palette.inputBg,
+                    color: palette.inputText
+                  }}
                 >
                   {PDF_ZOOM_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -310,7 +356,7 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title={t.settings.accessibilityTitle} description={t.settings.accessibilityDescription}>
+            <SettingCard title={t.settings.accessibilityTitle} description={t.settings.accessibilityDescription} palette={palette}>
               <div className="space-y-3">
                 <ToggleRow
                   title={t.settings.dyslexiaFriendlyMode}
@@ -333,21 +379,21 @@ export function SettingsScreen() {
               </div>
             </SettingCard>
 
-            <SettingCard title={t.settings.currentProfileTitle} description={t.settings.currentProfileDescription}>
+            <SettingCard title={t.settings.currentProfileTitle} description={t.settings.currentProfileDescription} palette={palette}>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-border px-4 py-3">
+                <div className="rounded-lg border px-4 py-3" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileTheme}</p>
                   <p className="mt-2 text-lg font-semibold">{settings.highContrastMode ? t.settings.highContrastProfile : THEME_OPTIONS.find((option) => option.value === settings.theme)?.label}</p>
                 </div>
-                <div className="rounded-lg border border-border px-4 py-3">
+                <div className="rounded-lg border px-4 py-3" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profilePdfZoom}</p>
                   <p className="mt-2 text-lg font-semibold">{PDF_ZOOM_OPTIONS.find((option) => option.value === settings.pdfZoomPreset)?.label}</p>
                 </div>
-                <div className="rounded-lg border border-border px-4 py-3">
+                <div className="rounded-lg border px-4 py-3" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileEpubFont}</p>
                   <p className="mt-2 text-lg font-semibold">{EPUB_FONT_OPTIONS.find((option) => option.value === settings.epubFontFamily)?.label}</p>
                 </div>
-                <div className="rounded-lg border border-border px-4 py-3">
+                <div className="rounded-lg border px-4 py-3" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{t.settings.profileTextSize}</p>
                   <p className="mt-2 text-lg font-semibold">{TEXT_SIZE_OPTIONS.find((option) => option.value === settings.textSizePreset)?.label}</p>
                 </div>

@@ -304,7 +304,7 @@ const ChipGroup = React.memo(function ChipGroup({
   onToggle: (value: string) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2.5">
       {options.map((option) => {
         const isSelected = selected.includes(option.id);
         return (
@@ -313,8 +313,10 @@ const ChipGroup = React.memo(function ChipGroup({
             type="button"
             onClick={() => onToggle(option.id)}
             className={cn(
-              'rounded-full border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/80 hover:bg-accent'
+              'rounded-full border px-3.5 py-2 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              isSelected
+                ? 'border-primary/25 bg-primary text-primary-foreground shadow-[0_12px_28px_-18px_hsl(var(--primary))]'
+                : 'border-border bg-background/86 text-muted-foreground hover:border-foreground/10 hover:bg-accent hover:text-foreground'
             )}
             aria-pressed={isSelected}
           >
@@ -336,7 +338,7 @@ function SegmentedControlInner<TValue extends string>({
   onChange: (value: TValue) => void;
 }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-3">
+    <div className="grid gap-2.5 sm:grid-cols-3">
       {options.map((option) => {
         const isSelected = option.value === value;
         return (
@@ -345,8 +347,10 @@ function SegmentedControlInner<TValue extends string>({
             type="button"
             onClick={() => onChange(option.value)}
             className={cn(
-              'rounded-xl border px-4 py-3 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background/80 hover:bg-accent'
+              'rounded-2xl border px-4 py-3.5 text-left text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              isSelected
+                ? 'border-primary/25 bg-primary text-primary-foreground shadow-[0_12px_28px_-18px_hsl(var(--primary))]'
+                : 'border-border bg-background/86 text-muted-foreground hover:border-foreground/10 hover:bg-accent hover:text-foreground'
             )}
             aria-pressed={isSelected}
           >
@@ -386,7 +390,7 @@ const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard(
   const recommendationKey = getRecommendationKey(recommendation);
 
   return (
-    <Card className="flex h-full flex-col border-white/60 bg-card/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+    <Card className="surface-hover flex h-full flex-col border-white/60 bg-card/95">
       <CardContent className="flex h-full flex-col gap-4 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-border bg-background/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -413,7 +417,7 @@ const AdvisorRecommendationCard = React.memo(function AdvisorRecommendationCard(
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-2">
           <span className="text-xs text-muted-foreground">{sourceLabel}</span>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" disabled={isSaved || isSaving} onClick={() => onSave(recommendation, recommendationKey)}>
+            <Button type="button" variant={isSaved ? 'ghost' : 'default'} disabled={isSaved || isSaving} onClick={() => onSave(recommendation, recommendationKey)}>
               <BookmarkPlus className="h-4 w-4" />
               {isSaved ? copy.saved : copy.save}
             </Button>
@@ -543,11 +547,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
-      <Card className="shrink-0 overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
+      <Card className="shrink-0 overflow-hidden" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="space-y-3">
-              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/85 shadow-sm">
+              <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-border/70 bg-background/85 shadow-[var(--shadow-sm)]">
                 <Sparkles className="h-5 w-5" />
               </div>
               <div className="space-y-2">
@@ -562,7 +566,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
 
       <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
         <div className="min-h-0 overflow-y-auto pb-2">
-          <Card className="border-white/60 bg-card/95 shadow-sm">
+          <Card className="border-white/60 bg-card/95">
             <CardContent className="space-y-6 p-6">
               <div className="space-y-1">
                 <h2 className="text-xl font-semibold tracking-tight">{copy.formTitle}</h2>
@@ -641,11 +645,11 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                     value={freeText}
                     onChange={(event) => setFreeText(event.target.value)}
                     placeholder={copy.freeTextPlaceholder}
-                    className="min-h-32 w-full rounded-xl border border-input bg-background px-3 py-3 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-36 w-full rounded-2xl border border-input bg-background/92 px-4 py-3.5 text-sm shadow-[0_8px_24px_-20px_rgba(15,23,42,0.22)] ring-offset-background transition-[border-color,box-shadow,background-color] duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   />
                 </section>
 
-                <section className="space-y-2 rounded-2xl border border-dashed border-border bg-muted/20 p-4">
+                <section className="space-y-2 rounded-[1.4rem] border border-dashed border-border bg-muted/25 p-4">
                   <label className="flex items-start gap-3 text-sm">
                     <input
                       type="checkbox"
@@ -661,7 +665,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                   {showPersonalizedNote ? <p className="text-xs font-medium" style={{ color: palette.accentText }}>{copy.personalizedNote}</p> : null}
                 </section>
 
-                <Button type="submit" disabled={loading} className="w-full">
+                <Button type="submit" disabled={loading} size="lg" className="w-full">
                   {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                   {loading ? copy.loading : copy.submit}
                 </Button>
@@ -697,10 +701,10 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
             ) : (
               <>
                 {advisorComment ? (
-                  <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)] shadow-sm">
+                  <Card className="overflow-hidden border-amber-200/80 bg-[linear-gradient(135deg,rgba(255,251,235,0.98)_0%,rgba(255,255,255,0.99)_48%,rgba(255,247,237,0.98)_100%)]">
                     <CardContent className="p-6">
                       <div className="flex items-start gap-4">
-                        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white/90 text-amber-700 shadow-sm">
+                        <div className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-amber-200/80 bg-white/90 text-amber-700 shadow-[var(--shadow-sm)]">
                           <Sparkles className="h-5 w-5" />
                         </div>
                         <div className="space-y-2">
@@ -717,7 +721,7 @@ export function BookAdvisorScreen({ books, onFindInDiscover }: Props) {
                   </Card>
                 ) : null}
 
-                <Card className="border-white/60 bg-card/90 shadow-sm">
+                <Card className="border-white/60 bg-card/90">
                   <CardContent className="flex flex-col gap-3 p-6 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h2 className="text-xl font-semibold tracking-tight">{copy.recommendationsTitle}</h2>

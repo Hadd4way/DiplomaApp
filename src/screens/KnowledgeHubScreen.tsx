@@ -75,14 +75,26 @@ function normalizeText(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function badgeClasses(type: KnowledgeHubItem['type']): string {
+function getBadgeStyle(type: KnowledgeHubItem['type'], palette: ReturnType<typeof getReaderThemePalette>) {
   if (type === 'highlight') {
-    return 'border-amber-200 bg-amber-100 text-amber-900';
+    return {
+      borderColor: palette.accentBorder,
+      backgroundColor: palette.panelHoverBg,
+      color: palette.chromeText
+    };
   }
   if (type === 'note') {
-    return 'border-sky-200 bg-sky-100 text-sky-900';
+    return {
+      borderColor: palette.buttonBorder,
+      backgroundColor: palette.panelHoverBg,
+      color: palette.chromeText
+    };
   }
-  return 'border-violet-200 bg-violet-100 text-violet-900';
+  return {
+    borderColor: palette.accentBorder,
+    backgroundColor: palette.accentBg,
+    color: palette.accentText
+  };
 }
 
 function getBadgeLabel(language: 'ru' | 'en', type: KnowledgeHubItem['type']): string {
@@ -808,14 +820,14 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             </div>
           </section>
 
-          <section className="rounded-[24px] border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur">
+          <section className="premium-card rounded-[24px] border p-4 backdrop-blur" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelBg }}>
             <div className="flex flex-col gap-3">
               <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,0.7fr))]">
                 <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: palette.mutedText }} />
                   <Input value={queryInput} onChange={(event) => setQueryInput(event.target.value)} placeholder={language === 'ru' ? 'Поиск по заметкам, выделениям и AI-конспектам...' : 'Search across highlights, notes, and AI summaries...'} className="pl-9" />
                 </div>
-                <select value={selectedBookId} onChange={(event) => setSelectedBookId(event.target.value)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                <select value={selectedBookId} onChange={(event) => setSelectedBookId(event.target.value)} className="h-11 rounded-xl border px-3.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring" style={{ borderColor: palette.buttonBorder, backgroundColor: palette.inputBg, color: palette.inputText }}>
                   <option value="all">{t.hub.allBooks}</option>
                   {books.map((book) => (
                     <option key={book.id} value={book.id}>
@@ -823,17 +835,17 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                     </option>
                   ))}
                 </select>
-                <select value={selectedType} onChange={(event) => setSelectedType(event.target.value as TypeFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                <select value={selectedType} onChange={(event) => setSelectedType(event.target.value as TypeFilter)} className="h-11 rounded-xl border px-3.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring" style={{ borderColor: palette.buttonBorder, backgroundColor: palette.inputBg, color: palette.inputText }}>
                   <option value="all">{t.hub.allTypes}</option>
                   <option value="highlight">{t.hub.highlights}</option>
                   <option value="ai_summary">{aiSummaryLabels.title}</option>
                 </select>
-                <select value={selectedRecent} onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                <select value={selectedRecent} onChange={(event) => setSelectedRecent(event.target.value as RecentFilter)} className="h-11 rounded-xl border px-3.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring" style={{ borderColor: palette.buttonBorder, backgroundColor: palette.inputBg, color: palette.inputText }}>
                   <option value="all">{t.hub.allTime}</option>
                   <option value="7d">{t.hub.recent7}</option>
                   <option value="30d">{t.hub.recent30}</option>
                 </select>
-                <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortOption)} className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus-visible:ring-2 focus-visible:ring-ring">
+                <select value={sortBy} onChange={(event) => setSortBy(event.target.value as SortOption)} className="h-11 rounded-xl border px-3.5 text-sm outline-none transition focus-visible:ring-2 focus-visible:ring-ring" style={{ borderColor: palette.buttonBorder, backgroundColor: palette.inputBg, color: palette.inputText }}>
                   <option value="newest">{t.hub.newest}</option>
                   <option value="oldest">{t.hub.oldest}</option>
                   <option value="book-title">{t.hub.bookTitleSort}</option>
@@ -843,12 +855,12 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </Button>
               </div>
 
-              <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 rounded-[1.4rem] border p-4 lg:flex-row lg:items-center lg:justify-between" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-slate-900">
+                  <p className="text-sm font-semibold" style={{ color: palette.chromeText }}>
                     {language === 'ru' ? 'AI-конспект по текущему выбору' : 'AI summary for the current selection'}
                   </p>
-                  <p className="text-sm text-slate-500">{summaryHint}</p>
+                  <p className="text-sm" style={{ color: palette.mutedText }}>{summaryHint}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" onClick={() => void handleGenerateSummary()} disabled={!canGenerateSummary || summaryLoading}>
@@ -857,12 +869,12 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: palette.mutedText }}>
+                <div className="inline-flex items-center gap-1 rounded-full border px-3 py-1" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <Sparkles className="h-3.5 w-3.5" />
                   {filteredItems.length} {t.hub.surfaced}
                 </div>
-                <div className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
+                <div className="inline-flex items-center gap-1 rounded-full border px-3 py-1" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
                   <Clock3 className="h-3.5 w-3.5" />
                   {t.hub.sortedBy} {sortBy === 'book-title' ? t.hub.bookTitleSort : sortBy === 'newest' ? t.hub.newest : t.hub.oldest}
                 </div>
@@ -888,36 +900,35 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             {visibleFilteredItems.map((item) => (
               <Card
                 key={`${item.type}:${item.id}`}
-                className={cn(
-                  'overflow-hidden rounded-[24px] border-slate-200 bg-white/95 shadow-[0_16px_40px_rgba(15,23,42,0.06)]',
-                  item.type === 'ai_summary' ? 'cursor-pointer transition hover:border-violet-200 hover:shadow-[0_20px_48px_rgba(76,29,149,0.10)]' : ''
-                )}
+                className={cn('surface-hover overflow-hidden rounded-[24px]', item.type === 'ai_summary' ? 'cursor-pointer' : '')}
+                style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelBg, color: palette.chromeText, boxShadow: palette.shadow }}
                 onClick={item.type === 'ai_summary' ? () => void openAiSummaryDetail(item) : undefined}
               >
                 <CardContent className="p-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0 flex-1 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-base font-semibold text-slate-900">{item.bookTitle}</p>
-                        <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide', badgeClasses(item.type))}>
+                        <p className="text-base font-semibold" style={{ color: palette.chromeText }}>{item.bookTitle}</p>
+                        <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]" style={getBadgeStyle(item.type, palette)}>
                           {getBadgeLabel(language, item.type)}
                         </span>
-                        {item.type === 'ai_summary' && item.author ? <span className="text-sm text-slate-500">{item.author}</span> : null}
-                        <span className="text-xs text-slate-400">{formatDate(item.createdAt)}</span>
+                        {item.type === 'ai_summary' && item.author ? <span className="text-sm" style={{ color: palette.mutedText }}>{item.author}</span> : null}
+                        <span className="text-xs" style={{ color: palette.mutedText }}>{formatDate(item.createdAt)}</span>
                       </div>
 
                       {item.type === 'ai_summary' ? (
-                        <div className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4">
-                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-900">
+                        <div className="rounded-[1.2rem] border p-4" style={{ borderColor: palette.accentBorder, backgroundColor: palette.panelHoverBg }}>
+                          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: palette.accentText }}>
                             <Brain className="h-3.5 w-3.5" />
                             {aiSummaryLabels.title}
                           </div>
                           <p
-                            className="overflow-hidden text-sm leading-6 text-slate-800"
+                            className="overflow-hidden text-sm leading-6"
                             style={{
                               display: '-webkit-box',
                               WebkitLineClamp: 3,
-                              WebkitBoxOrient: 'vertical'
+                              WebkitBoxOrient: 'vertical',
+                              color: palette.chromeText
                             }}
                           >
                             {item.summary}
@@ -926,26 +937,26 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
                       ) : (
                         <>
                           {item.text ? (
-                            <div className="rounded-2xl border border-amber-100 bg-amber-50/80 p-4">
-                              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
+                            <div className="rounded-[1.2rem] border p-4" style={{ borderColor: palette.accentBorder, backgroundColor: palette.panelHoverBg }}>
+                              <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: palette.chromeText }}>
                                 <Highlighter className="h-3.5 w-3.5" />
                                 {t.hub.highlightedText}
                               </div>
-                              <p className="whitespace-pre-wrap text-sm leading-6 text-slate-800">{item.text}</p>
+                              <p className="whitespace-pre-wrap text-sm leading-6" style={{ color: palette.chromeText }}>{item.text}</p>
                             </div>
                           ) : null}
 
-                          <div className="rounded-2xl border border-slate-200 bg-slate-50/85 p-4">
-                            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+                          <div className="rounded-[1.2rem] border p-4" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg }}>
+                            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: palette.mutedText }}>
                               <MessageSquare className="h-3.5 w-3.5" />
                               {t.hub.noteText}
                             </div>
-                            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.note ?? t.hub.noNoteYet}</p>
+                            <p className="whitespace-pre-wrap text-sm leading-6" style={{ color: palette.chromeText }}>{item.note ?? t.hub.noNoteYet}</p>
                           </div>
                         </>
                       )}
 
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                      <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: palette.mutedText }}>
                         {item.type !== 'ai_summary' && typeof item.page === 'number' ? <span>{t.hub.page} {item.page}</span> : null}
                         {item.type !== 'ai_summary' && item.cfiRange ? <span className="truncate">{t.hub.locationReady}</span> : null}
                         {item.type === 'ai_summary' ? <span>{item.language.toUpperCase()}</span> : null}
@@ -1065,7 +1076,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
           }
         }}
       >
-        <AlertDialogContent className="max-w-4xl">
+        <AlertDialogContent className="max-w-4xl" style={{ backgroundColor: palette.panelBg, borderColor: palette.chromeBorder, color: palette.chromeText }}>
           <button
             type="button"
             onClick={() => {
@@ -1075,7 +1086,8 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
               setDetailActionMessage(null);
             }}
             aria-label={language === 'ru' ? 'Закрыть' : 'Close'}
-            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+            style={{ borderColor: palette.buttonBorder, backgroundColor: palette.buttonBg, color: palette.buttonText }}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1086,35 +1098,35 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
             </AlertDialogTitle>
           </AlertDialogHeader>
 
-          {detailLoading ? <p className="text-sm text-slate-500">{aiSummaryLabels.loading}</p> : null}
+          {detailLoading ? <p className="text-sm" style={{ color: palette.mutedText }}>{aiSummaryLabels.loading}</p> : null}
           {detailError ? <p className="text-sm text-destructive">{detailError}</p> : null}
 
           {detailTarget ? (
             <div className="max-h-[60vh] space-y-4 overflow-y-auto pr-1">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className={cn('inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide', badgeClasses('ai_summary'))}>
+              <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: palette.mutedText }}>
+                <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide" style={getBadgeStyle('ai_summary', palette)}>
                   {aiSummaryLabels.title}
                 </span>
                 <span>{formatDate(detailTarget.createdAt)}</span>
               </div>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.summary}</h3>
-                <Card className="border-slate-200">
+                <h3 className="text-sm font-semibold" style={{ color: palette.chromeText }}>{aiSummaryLabels.summary}</h3>
+                <Card style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg, color: palette.chromeText }}>
                   <CardContent className="p-4">
-                    <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{detailTarget.summary}</p>
+                    <p className="whitespace-pre-wrap text-sm leading-7" style={{ color: palette.chromeText }}>{detailTarget.summary}</p>
                   </CardContent>
                 </Card>
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-900">{aiSummaryLabels.keyIdeas}</h3>
+                <h3 className="text-sm font-semibold" style={{ color: palette.chromeText }}>{aiSummaryLabels.keyIdeas}</h3>
                 <div className="space-y-2">
                   {detailTarget.keyIdeas.length === 0 ? (
-                    <p className="text-sm text-slate-500">{aiSummaryLabels.empty}</p>
+                    <p className="text-sm" style={{ color: palette.mutedText }}>{aiSummaryLabels.empty}</p>
                   ) : (
                     detailTarget.keyIdeas.map((item, index) => (
-                      <div key={`${index}:${item}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <div key={`${index}:${item}`} className="rounded-xl border px-3 py-2 text-sm" style={{ borderColor: palette.chromeBorder, backgroundColor: palette.panelHoverBg, color: palette.chromeText }}>
                         {item}
                       </div>
                     ))
@@ -1124,7 +1136,7 @@ export function KnowledgeHubScreen({ books, onOpenItem }: Props) {
 
 
               {detailActionError ? <p className="text-sm text-destructive">{detailActionError}</p> : null}
-              {detailActionMessage ? <p className="text-sm text-emerald-700">{detailActionMessage}</p> : null}
+              {detailActionMessage ? <p className="text-sm" style={{ color: palette.accentText }}>{detailActionMessage}</p> : null}
             </div>
           ) : null}
 
