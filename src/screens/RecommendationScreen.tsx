@@ -112,6 +112,7 @@ const screenCopy = {
     sourceFallback: 'Резервный набор',
     sourceOpenrouter: 'AI-рекомендация',
     warningTitle: 'Внимание',
+    aiDisclaimer: 'ИИ может давать неточные или неполные ответы. Проверяйте важную информацию самостоятельно.',
     recommendationCount: 'рекомендаций',
     helperLine: 'Запросы отправляются только в локальный backend.',
     showMore: 'Показать ещё',
@@ -166,6 +167,7 @@ const screenCopy = {
     sourceFallback: 'Fallback set',
     sourceOpenrouter: 'AI recommendation',
     warningTitle: 'Notice',
+    aiDisclaimer: 'AI can give inaccurate or incomplete answers. Please verify important information yourself.',
     recommendationCount: 'recommendations',
     helperLine: 'Requests are sent only to the local backend.',
     showMore: 'Show more',
@@ -568,7 +570,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
   }, [saveItem]);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 overflow-y-auto pr-1 xl:gap-6 xl:overflow-hidden">
       <Card className="shrink-0 overflow-hidden" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-6 p-6">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -587,6 +589,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
                   ) : null}
                 </div>
                 <p className="max-w-2xl text-sm text-muted-foreground">{copy.subtitle}</p>
+                <p className="max-w-2xl text-xs leading-5 text-muted-foreground">{copy.aiDisclaimer}</p>
               </div>
             </div>
 
@@ -594,20 +597,24 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="recommendations" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs defaultValue="recommendations" className="flex min-h-0 flex-1 flex-col overflow-visible xl:overflow-hidden">
         <TabsList className="w-fit">
           <TabsTrigger value="recommendations">{copy.recommendationsTab}</TabsTrigger>
           <TabsTrigger value="chat">{copy.chatTab}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="recommendations" className="mt-6 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
-          <div className="grid min-h-0 flex-1 gap-6 overflow-hidden xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]">
-            <div className="min-h-0 overflow-y-auto pb-2">
+        <TabsContent value="recommendations" className="mt-4 min-h-0 flex-1 overflow-visible data-[state=active]:flex data-[state=active]:flex-col xl:mt-6 xl:overflow-hidden">
+          <div className="grid min-h-0 flex-1 gap-4 overflow-visible xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)] xl:gap-6 xl:overflow-hidden">
+            <div className="min-h-0 pb-2 xl:overflow-y-auto">
               <Card className="border-white/60 bg-card/95">
                 <CardContent className="space-y-6 p-6">
                   <div className="space-y-1">
                     <h2 className="text-xl font-semibold tracking-tight">{copy.formTitle}</h2>
                     <p className="text-sm text-muted-foreground">{copy.formDescription}</p>
+                  </div>
+
+                  <div className="rounded-[1.4rem] border border-dashed border-border bg-muted/25 p-4 text-sm text-muted-foreground">
+                    {copy.aiDisclaimer}
                   </div>
 
                   {!isOnline ? (
@@ -733,7 +740,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
               </Card>
             </div>
 
-            <div className="min-h-0 overflow-y-auto pb-2">
+            <div className="min-h-0 pb-2 xl:overflow-y-auto">
               <div className="space-y-6">
                 {error ? <ScreenErrorState title={copy.errorTitle} description={error} onRetry={retrySubmit} /> : null}
 
@@ -834,7 +841,7 @@ export function RecommendationScreen({ books, onFindInDiscover }: Props) {
           </div>
         </TabsContent>
 
-        <TabsContent value="chat" className="mt-6 min-h-0 flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col">
+        <TabsContent value="chat" className="mt-4 min-h-0 flex-1 overflow-visible data-[state=active]:flex data-[state=active]:flex-col xl:mt-6 xl:overflow-hidden">
           <BookAdvisorChat libraryContext={useLibraryContext && libraryContext.books.length > 0 ? libraryContext : undefined} />
         </TabsContent>
       </Tabs>

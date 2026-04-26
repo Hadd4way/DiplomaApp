@@ -142,7 +142,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-6 overflow-hidden pr-1">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 overflow-y-auto pr-1 xl:gap-6 xl:overflow-hidden">
       <Card className="shrink-0 overflow-hidden shadow-sm" style={getReaderHeroCardStyles(settings)}>
         <CardContent className="space-y-4 p-6">
           <div className="flex items-start gap-4">
@@ -157,7 +157,7 @@ export function WishlistScreen({ onSearchInDiscover }: Props) {
         </CardContent>
       </Card>
 
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
+      <div className="min-h-0 flex-1 pb-2 xl:overflow-y-auto">
         <div className="space-y-4">
           {error ? <ScreenErrorState title={copy.requestErrorTitle} description={error} onRetry={() => void refresh()} /> : null}
 

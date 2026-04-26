@@ -54,12 +54,12 @@ function ReaderShellComponent({
           color: palette.chromeText
         }}
       >
-        <div className="flex min-h-[68px] items-center gap-3 px-4 py-3">
-          <div className="flex shrink-0 items-center gap-2.5">{headerLeft}</div>
+        <div className="flex min-h-[68px] flex-wrap items-center gap-3 px-3 py-3 sm:px-4">
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">{headerLeft}</div>
           <div className="min-w-0 flex-1 px-1">
             <p className="truncate text-sm font-semibold tracking-tight">{title}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2.5">{headerRight}</div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">{headerRight}</div>
         </div>
         {headerStatus ? <div className="px-4 pb-3">{headerStatus}</div> : null}
       </header>

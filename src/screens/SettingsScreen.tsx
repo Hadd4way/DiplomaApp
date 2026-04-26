@@ -113,7 +113,7 @@ export function SettingsScreen() {
   ];
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 overflow-auto">
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 overflow-y-auto overflow-x-hidden pr-1">
       <div className="w-full space-y-6 pb-8">
         <Card
           className="border"

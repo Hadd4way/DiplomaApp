@@ -567,7 +567,7 @@ export default function App() {
           setDiscoverInitialQuery(null);
         }
       }}
-      contentClassName={isPdfReaderView ? '' : 'p-6'}
+      contentClassName={isPdfReaderView ? '' : 'p-4 sm:p-6'}
     >
       {renderView()}
     </AppShell>

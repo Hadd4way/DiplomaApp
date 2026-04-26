@@ -32,7 +32,7 @@ export function AppShell({ currentView, onViewChange, children, contentClassName
 
   return (
     <div
-      className="flex h-full min-h-0 overflow-hidden"
+      className="flex h-dvh min-h-0 min-w-0 flex-col overflow-hidden lg:flex-row"
       style={{
         ...getReaderThemeStyles(settings),
         backgroundColor: palette.appBg,
@@ -41,14 +41,14 @@ export function AppShell({ currentView, onViewChange, children, contentClassName
     >
       <Sidebar currentView={currentView} onViewChange={onViewChange} />
       <main
-        className={['flex min-h-0 flex-1 flex-col overflow-hidden', contentClassName ?? 'p-6'].join(' ')}
+        className={['flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden', contentClassName ?? 'p-4 sm:p-6'].join(' ')}
         style={{
           backgroundColor: palette.appBg,
           color: palette.appForeground
         }}
       >
         {!isOnline ? (
-          <div className={contentClassName ? 'px-6 pt-6' : 'mb-4'}>
+          <div className={contentClassName ? 'px-4 pt-4 sm:px-6 sm:pt-6' : 'mb-4'}>
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle className="flex items-center gap-2">
@@ -59,7 +59,7 @@ export function AppShell({ currentView, onViewChange, children, contentClassName
             </Alert>
           </div>
         ) : null}
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
       </main>
     </div>
   );

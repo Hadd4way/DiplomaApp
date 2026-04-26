@@ -25,14 +25,14 @@ export function Sidebar({ currentView, onViewChange }: Props) {
 
   return (
     <aside
-      className="flex w-72 shrink-0 flex-col border-r px-4 pb-4 pt-5"
+      className="flex max-h-[42dvh] min-h-0 w-full shrink-0 flex-col overflow-hidden border-b px-3 py-3 lg:h-full lg:max-h-none lg:w-72 lg:border-b-0 lg:border-r lg:px-4 lg:pb-4 lg:pt-5"
       style={{
         backgroundColor: palette.panelBg,
         borderColor: palette.chromeBorder,
         color: palette.chromeText
       }}
     >
-      <div className="mb-8 space-y-2 px-2">
+      <div className="mb-3 flex shrink-0 items-center gap-3 px-1 lg:mb-8 lg:block lg:space-y-2 lg:px-2">
         <div
           className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border shadow-sm"
           style={{
@@ -51,7 +51,7 @@ export function Sidebar({ currentView, onViewChange }: Props) {
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5" aria-label={t.sidebar.navigationLabel}>
+      <nav className="flex min-h-0 flex-1 gap-1.5 overflow-x-auto overflow-y-hidden pb-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto lg:pb-0" aria-label={t.sidebar.navigationLabel}>
         {navItems.map((item) => {
           const isActive = item.view === currentView;
           const Icon = item.icon;
@@ -60,7 +60,7 @@ export function Sidebar({ currentView, onViewChange }: Props) {
               key={item.view}
               type="button"
               onClick={() => onViewChange(item.view)}
-              className="surface-hover group relative flex min-h-[50px] items-center gap-3 rounded-2xl border px-3.5 py-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="surface-hover group relative flex min-h-[50px] min-w-[11rem] items-center gap-3 rounded-2xl border px-3.5 py-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-w-0"
               style={
                 isActive
                   ? {

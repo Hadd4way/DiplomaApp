@@ -153,8 +153,8 @@ export function NotesScreen({ books, onOpenNote }: Props) {
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-4 overflow-hidden">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">{t.notes.title}</h2>
         <Button type="button" variant="outline" size="sm" onClick={() => void loadNotes()} disabled={loading}>
           {t.notes.refresh}
@@ -193,12 +193,12 @@ export function NotesScreen({ books, onOpenNote }: Props) {
             onClick={() => onOpenNote(note)}
             className="w-full rounded-lg border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
                 <p className="text-sm font-semibold">{titleByBookId.get(note.bookId) ?? t.notes.unknownBook}</p>
                 <p className="text-xs text-muted-foreground">{t.notes.page} {note.page}</p>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex shrink-0 flex-wrap items-center gap-1">
                 <Button
                   type="button"
                   variant="outline"

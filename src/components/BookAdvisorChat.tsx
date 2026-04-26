@@ -51,6 +51,7 @@ const copy = {
     assistantLabel: 'Советник',
     userLabel: 'Вы',
     chipsLabel: 'Быстрые вопросы',
+    aiDisclaimer: 'ИИ может давать неточные или неполные ответы. Проверяйте важную информацию самостоятельно.',
     contextNote: 'Чат может учитывать вашу локальную библиотеку.',
     sourceOpenrouter: 'AI',
     sourceFallback: 'Резервный ответ'
@@ -69,6 +70,7 @@ const copy = {
     assistantLabel: 'Advisor',
     userLabel: 'You',
     chipsLabel: 'Prompt ideas',
+    aiDisclaimer: 'AI can give inaccurate or incomplete answers. Please verify important information yourself.',
     contextNote: 'Chat can use your local library context.',
     sourceOpenrouter: 'AI',
     sourceFallback: 'Fallback reply'
@@ -220,8 +222,8 @@ export function BookAdvisorChat({ libraryContext }: Props) {
   const sourceLabel = lastSource === 'fallback' ? localizedCopy.sourceFallback : localizedCopy.sourceOpenrouter;
 
   return (
-    <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-      <div className="min-h-0 overflow-y-auto pb-2">
+    <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)] xl:gap-6 xl:overflow-hidden">
+      <div className="min-h-0 pb-2 xl:overflow-y-auto">
         <Card className="border-white/60 bg-card/95">
           <CardContent className="space-y-6 p-6">
             <div className="space-y-2">
@@ -235,6 +237,10 @@ export function BookAdvisorChat({ libraryContext }: Props) {
                 ) : null}
               </div>
               <p className="text-sm text-muted-foreground">{localizedCopy.description}</p>
+            </div>
+
+            <div className="rounded-[1.4rem] border border-dashed border-border bg-muted/25 p-4 text-sm text-muted-foreground">
+              {localizedCopy.aiDisclaimer}
             </div>
 
             <div className="space-y-3">
@@ -262,7 +268,7 @@ export function BookAdvisorChat({ libraryContext }: Props) {
         </Card>
       </div>
 
-      <div className="flex min-h-0 flex-col gap-4 overflow-hidden pb-2">
+      <div className="flex min-h-[32rem] flex-col gap-4 overflow-hidden pb-2 xl:min-h-0">
         {error ? (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />

@@ -38,7 +38,8 @@ function getCopy(language: 'ru' | 'en') {
         close: 'Закрыть',
         empty: 'Пока пусто.',
         sourceAi: 'Источник: OpenRouter',
-        sourceFallback: 'Источник: local fallback'
+        sourceFallback: 'Источник: local fallback',
+        aiDisclaimer: 'ИИ может давать неточные или неполные ответы. Проверяйте важную информацию самостоятельно.'
       }
     : {
         title: 'AI Summary',
@@ -51,7 +52,8 @@ function getCopy(language: 'ru' | 'en') {
         close: 'Close',
         empty: 'Nothing here yet.',
         sourceAi: 'Source: OpenRouter',
-        sourceFallback: 'Source: local fallback'
+        sourceFallback: 'Source: local fallback',
+        aiDisclaimer: 'AI can give inaccurate or incomplete answers. Please verify important information yourself.'
       };
 }
 
@@ -169,6 +171,7 @@ export function AiSummaryDialog({
               >
                 {source === 'fallback' ? copy.sourceFallback : copy.sourceAi}
               </span>
+              <span>{copy.aiDisclaimer}</span>
             </div>
 
             <Tabs defaultValue="summary" className="w-full">
