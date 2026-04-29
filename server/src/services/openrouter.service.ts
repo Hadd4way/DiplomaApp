@@ -12,6 +12,7 @@ import {
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const MAX_RECOMMENDATIONS = 5;
+const OPENROUTER_RETRY_DELAYS_MS = [700, 1600];
 
 interface OpenRouterMessage {
   role: "system" | "user" | "assistant";
@@ -31,6 +32,7 @@ interface OpenRouterResponse {
 interface ParsedRecommendationPayload {
   advisorComment?: unknown;
   recommendations?: unknown;
+  books?: unknown;
 }
 
 interface BookRecommendationResult {
@@ -149,6 +151,87 @@ const clampConfidence = (value: number): number => {
   return Math.min(1, Math.max(0, value));
 };
 
+const sleep = (milliseconds: number): Promise<void> => {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+};
+
+const parseJson = (content: string): unknown => {
+  return JSON.parse(content) as unknown;
+};
+
+const stripMarkdownJsonFence = (content: string): string => {
+  const trimmed = content.trim();
+  const fencedMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fencedMatch ? fencedMatch[1].trim() : trimmed;
+};
+
+const findBalancedJson = (content: string): string | null => {
+  const startIndex = content.search(/[\[{]/);
+
+  if (startIndex < 0) {
+    return null;
+  }
+
+  const opening = content[startIndex];
+  const closing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < content.length; index += 1) {
+    const character = content[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === "\"") {
+        inString = false;
+      }
+
+      continue;
+    }
+
+    if (character === "\"") {
+      inString = true;
+      continue;
+    }
+
+    if (character === opening) {
+      depth += 1;
+    } else if (character === closing) {
+      depth -= 1;
+
+      if (depth === 0) {
+        return content.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+};
+
+const parseJsonFromModelContent = (content: string): unknown => {
+  const candidates = [
+    content.trim(),
+    stripMarkdownJsonFence(content),
+    findBalancedJson(content) ?? ""
+  ].filter((candidate) => candidate.length > 0);
+
+  for (const candidate of candidates) {
+    try {
+      return parseJson(candidate);
+    } catch {
+      // Try the next recoverable shape before giving up.
+    }
+  }
+
+  throw new Error("OpenRouter returned invalid JSON content.");
+};
+
 const toRecommendation = (item: unknown): BookRecommendation | null => {
   if (!item || typeof item !== "object") {
     return null;
@@ -181,17 +264,34 @@ const toRecommendation = (item: unknown): BookRecommendation | null => {
   };
 };
 
+const normalizeRecommendationPayload = (
+  parsed: unknown
+): ParsedRecommendationPayload => {
+  if (Array.isArray(parsed)) {
+    return { recommendations: parsed };
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return {};
+  }
+
+  const payload = parsed as ParsedRecommendationPayload;
+
+  if (!Array.isArray(payload.recommendations) && Array.isArray(payload.books)) {
+    return {
+      ...payload,
+      recommendations: payload.books
+    };
+  }
+
+  return payload;
+};
+
 const parseRecommendations = (
   content: string,
   fallbackComment: string
 ): BookRecommendationResult => {
-  let parsed: ParsedRecommendationPayload;
-
-  try {
-    parsed = JSON.parse(content) as ParsedRecommendationPayload;
-  } catch {
-    throw new Error("OpenRouter returned invalid JSON content.");
-  }
+  const parsed = normalizeRecommendationPayload(parseJsonFromModelContent(content));
 
   if (!Array.isArray(parsed.recommendations)) {
     throw new Error("OpenRouter response is missing a recommendations array.");
@@ -262,10 +362,11 @@ const requestOpenRouterTextCompletion = async ({
       );
     }
 
+    const responseText = await response.text();
     let data: OpenRouterResponse;
 
     try {
-      data = (await response.json()) as OpenRouterResponse;
+      data = JSON.parse(responseText) as OpenRouterResponse;
     } catch {
       throw new Error("OpenRouter returned invalid JSON.");
     }
@@ -316,6 +417,50 @@ const requestOpenRouterJsonCompletion = async ({
     throw new Error("OPENROUTER_API_KEY is missing.");
   }
 
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= OPENROUTER_RETRY_DELAYS_MS.length; attempt += 1) {
+    const retryMessages =
+      attempt === 0
+        ? messages
+        : [
+            ...messages,
+            {
+              role: "user" as const,
+              content:
+                "Retry the previous task. Return one valid JSON object only. Do not wrap it in markdown, comments, or prose."
+            }
+          ];
+
+    try {
+      return await requestOpenRouterJsonCompletionOnce({
+        messages: retryMessages,
+        temperature: attempt === 0 ? temperature : Math.min(temperature, 0.2)
+      });
+    } catch (error: unknown) {
+      lastError =
+        error instanceof Error
+          ? error
+          : new Error("OpenRouter request failed unexpectedly.");
+
+      if (attempt >= OPENROUTER_RETRY_DELAYS_MS.length) {
+        break;
+      }
+
+      await sleep(OPENROUTER_RETRY_DELAYS_MS[attempt]);
+    }
+  }
+
+  throw lastError ?? new Error("OpenRouter request failed unexpectedly.");
+};
+
+const requestOpenRouterJsonCompletionOnce = async ({
+  messages,
+  temperature
+}: {
+  messages: OpenRouterMessage[];
+  temperature: number;
+}): Promise<string> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -346,10 +491,11 @@ const requestOpenRouterJsonCompletion = async ({
       );
     }
 
+    const responseText = await response.text();
     let data: OpenRouterResponse;
 
     try {
-      data = (await response.json()) as OpenRouterResponse;
+      data = JSON.parse(responseText) as OpenRouterResponse;
     } catch {
       throw new Error("OpenRouter returned invalid JSON.");
     }
@@ -391,13 +537,7 @@ const toStringArray = (value: unknown): string[] => {
 };
 
 const parseSummary = (content: string): BookNotesSummary => {
-  let parsed: ParsedSummaryPayload;
-
-  try {
-    parsed = JSON.parse(content) as ParsedSummaryPayload;
-  } catch {
-    throw new Error("OpenRouter returned invalid JSON content.");
-  }
+  const parsed = parseJsonFromModelContent(content) as ParsedSummaryPayload;
 
   const summary = cleanString(parsed.summary);
   const keyIdeas = toStringArray(parsed.keyIdeas);
@@ -502,18 +642,37 @@ const buildBookChatMessages = (
 export const requestBookRecommendations = async (
   payload: RecommendBooksRequestBody
 ): Promise<BookRecommendationResult> => {
-  const content = await requestOpenRouterJsonCompletion({
-    systemPrompt,
-    userPrompt: buildUserPrompt(payload),
-    temperature: 0.7
-  });
-
+  const userPrompt = buildUserPrompt(payload);
   const fallbackComment =
     payload.responseLanguage === "ru"
       ? "Подборка собрана вокруг ваших текущих предпочтений, чтобы сохранить единое настроение и тип чтения."
       : "This selection is built around your current preferences so the books feel consistent in tone and reading style.";
 
-  return parseRecommendations(content, fallbackComment);
+  const content = await requestOpenRouterJsonCompletion({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.7
+  });
+
+  try {
+    return parseRecommendations(content, fallbackComment);
+  } catch (error: unknown) {
+    const retryContent = await requestOpenRouterJsonCompletion({
+      systemPrompt,
+      userPrompt: `${userPrompt}\n\nThe previous response could not be parsed. Return exactly one JSON object with advisorComment and recommendations. Every recommendation must include title, author, reason, and confidence.`,
+      temperature: 0.2
+    });
+
+    try {
+      return parseRecommendations(retryContent, fallbackComment);
+    } catch {
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error("OpenRouter returned invalid recommendations.");
+    }
+  }
 };
 
 export const requestBookNotesSummary = async (
